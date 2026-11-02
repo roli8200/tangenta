@@ -1,0 +1,1 @@
+LibRaw 0.22.2 (https://github.com/LibRaw/LibRaw, Tag 0.22.2), nur src/libraw/internal und Lizenzen; *_ph.cpp entfernt (Sammeldateien).

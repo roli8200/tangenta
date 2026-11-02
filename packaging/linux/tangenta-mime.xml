@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="application/x-tangenta">
+    <comment>TANGENTA drawing</comment>
+    <comment xml:lang="de">TANGENTA-Zeichnung</comment>
+    <icon name="tangenta"/>
+    <glob pattern="*.vek"/>
+  </mime-type>
+</mime-info>

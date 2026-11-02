@@ -1,0 +1,4 @@
+Potrace 1.16 (Peter Selinger, https://potrace.sourceforge.net), GPL 2 oder neuer (COPYING).
+Unverändert übernommen: trace.c, trace.h, curve.c, curve.h, auxiliary.h, lists.h,
+potracelib.h, progress.h. TANGENTA nutzt über die eigene Brücke vek_fit.c nur process_path() für die Kurvenanpassung
+der Umrisse aus src/core/Vectorizer.cpp.

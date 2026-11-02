@@ -1,0 +1,12 @@
+[Desktop Entry]
+Type=Application
+Name=TANGENTA
+GenericName=Vector Graphics Editor
+GenericName[de]=Vektorgrafik-Editor
+Comment=Draw and edit vector graphics
+Comment[de]=Vektorgrafiken zeichnen und bearbeiten
+Exec=tangenta %f
+Icon=tangenta
+Terminal=false
+Categories=Graphics;VectorGraphics;Qt;
+MimeType=application/x-tangenta;
