@@ -2,6 +2,7 @@
 // Mit VEK_SCREENSHOT_DIR=<Ordner> legen die Tests Bildschirmfotos der Zwischenstände ab.
 
 #include "Canvas.h"
+#include "CdrImport.h"
 #include "ColorDialog.h"
 #include "ColorPalette.h"
 #include "GradientDialog.h"
@@ -5618,6 +5619,59 @@ private slots:
             QTest::qWait(5000);
             if (dialog.viewer())
                 dialog.viewer()->grab().save(dir + QStringLiteral("/56-bildersuche-betrachter-live.png"));
+        }
+    }
+
+    // CDR-Import: beschädigte und ungewöhnliche Dateien (Testdateien aus LibreOffice, MPL-2.0) dürfen
+    // nicht abstürzen; Ergebnis ist entweder eine Zeichnung oder eine Fehlermeldung
+    void cdrImportIsRobust()
+    {
+        for (const char* name : {"EDB-35217-2.cdr", "fdo65220-2.cdr"}) {
+            QFile file(QStringLiteral(VEK_SOURCE_DIR "/tests/data/") + QLatin1String(name));
+            QVERIFY(file.open(QIODevice::ReadOnly));
+            const QByteArray data = file.readAll();
+            QString error;
+            const std::vector<svg::Import> pages = cdr::read(data, &error);
+            QVERIFY2(!pages.empty() || !error.isEmpty(), name);
+        }
+        QVERIFY(!cdr::isSupported(QByteArray("kein CDR")));
+        QString error;
+        QVERIFY(cdr::read(QByteArray::fromHex("524946460000000043445239"), &error).empty());
+        QVERIFY(!error.isEmpty());
+    }
+
+    // Echte Zeichnungen (nur lokal, VEK_CDR_DIR): jede Datei öffnet sich mit Objekten; mit
+    // VEK_SCREENSHOT_DIR wird die erste Seite als Bild abgelegt
+    void cdrImportLocalFiles()
+    {
+        const QString dir = qEnvironmentVariable("VEK_CDR_DIR");
+        if (dir.isEmpty())
+            QSKIP("CDR-Dateien: VEK_CDR_DIR setzen");
+        const QString shots = qEnvironmentVariable("VEK_SCREENSHOT_DIR");
+        const QFileInfoList files = QDir(dir).entryInfoList({QStringLiteral("*.cdr"), QStringLiteral("*.cmx")}, QDir::Files, QDir::Name);
+        QVERIFY(!files.isEmpty());
+        for (const QFileInfo& info : files) {
+            QFile file(info.absoluteFilePath());
+            QVERIFY(file.open(QIODevice::ReadOnly));
+            QElapsedTimer timer;
+            timer.start();
+            QString error;
+            std::vector<svg::Import> pages = cdr::read(file.readAll(), &error);
+            QVERIFY2(!pages.empty(), qPrintable(info.fileName() + QStringLiteral(": ") + error));
+            int objects = 0;
+            for (const svg::Import& page : pages)
+                objects += page.group ? page.group->childCount() : 0;
+            qInfo().noquote() << info.fileName() << pages.size() << "Seite(n)," << objects << "Objekte," << pages.front().fonts.size()
+                              << "Schriften," << timer.elapsed() << "ms," << pages.front().size.width() << "x" << pages.front().size.height() << "mm";
+            QVERIFY2(objects > 0, qPrintable(info.fileName()));
+            if (shots.isEmpty())
+                continue;
+            m_editor->setDocument(std::make_unique<Document>(), QString());
+            m_editor->setPageSize(pages.front().size, true);
+            m_editor->importGroup(std::move(pages.front().group), false, QStringLiteral("CDR"));
+            output::ExportOptions o;
+            o.dpi = 50;
+            output::renderImage(*m_canvas, o).save(shots + QStringLiteral("/cdr-") + info.completeBaseName() + QStringLiteral(".png"));
         }
     }
 

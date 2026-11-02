@@ -27,6 +27,7 @@
 #include "ExportDialog.h"
 #include "SvgImport.h"
 #include "PdfImport.h"
+#include "CdrImport.h"
 #include "DxfImport.h"
 #include "FontFile.h"
 #include "FontMatchDialog.h"
@@ -1948,7 +1949,8 @@ void MainWindow::open()
 
 QStringList MainWindow::vectorImportSuffixes()
 {
-    return {QStringLiteral("svg"), QStringLiteral("pdf"), QStringLiteral("ai"), QStringLiteral("eps"), QStringLiteral("ps"), QStringLiteral("dxf")};
+    return {QStringLiteral("svg"), QStringLiteral("pdf"), QStringLiteral("ai"), QStringLiteral("eps"), QStringLiteral("ps"), QStringLiteral("dxf"),
+            QStringLiteral("cdr"), QStringLiteral("cmx")};
 }
 
 bool MainWindow::importVectorFile(const QString& path, bool asNewDocument)
@@ -1965,6 +1967,8 @@ bool MainWindow::importVectorFile(const QString& path, bool asNewDocument)
         pages.push_back(svg::read(data, &error));
     } else if (suffix == QLatin1String("dxf")) {
         pages.push_back(dxf::read(data, &error, QFileInfo(path).absolutePath()));
+    } else if (suffix == QLatin1String("cdr") || suffix == QLatin1String("cmx")) {
+        pages = cdr::read(data, &error);
     } else {
         // PDF und PDF-kompatibles AI direkt; EPS, PostScript und altes AI über Ghostscript
         if (!data.left(1024).contains("%PDF"))

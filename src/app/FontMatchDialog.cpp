@@ -111,7 +111,7 @@ void FontMatchDialog::buildRow(int index, Row& row)
     if (f.embedded)
         original->setPixmap(previewFromOutlines(f, sampleText(f), kPreviewHeight));
     else
-        original->setText(tr("(Umrisse nicht im PDF)"));
+        original->setText(tr("(Umrisse nicht in der Datei)"));
     m_grid->addWidget(original, r, 1);
 
     row.choice = new QComboBox(inner);

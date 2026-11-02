@@ -64,6 +64,9 @@ set_target_properties(hunspell PROPERTIES CXX_STANDARD 11 POSITION_INDEPENDENT_C
 if(NOT MSVC)
     target_compile_options(hunspell PRIVATE -w)
 endif()
+# --- CDR-Import: libcdr, librevenge, Little CMS (beim Konfigurieren geladen) -----------
+include(third_party/cdr-support/cdr.cmake)
+
 # Wörterbücher: neben das Programm (Windows), nach share/tangenta (Linux); Entwicklungs-
 # fassungen finden sie zusätzlich im Quellbaum
 set(VEK_DICTIONARY_SOURCE ${CMAKE_CURRENT_SOURCE_DIR}/resources/dictionaries)
@@ -118,9 +121,10 @@ add_library(vekcore STATIC
     src/core/FontMatch.cpp
     src/core/Imposition.cpp
     src/core/DocumentIO.cpp
+    src/core/CdrImport.cpp
 )
 target_include_directories(vekcore PUBLIC src/core)
-target_link_libraries(vekcore PUBLIC Qt6::Core Qt6::Gui PRIVATE miniz libraw hunspell potrace)
+target_link_libraries(vekcore PUBLIC Qt6::Core Qt6::Gui PRIVATE miniz libraw hunspell potrace vek_cdr)
 target_compile_definitions(vekcore PUBLIC VEK_DICTIONARY_SOURCE="${VEK_DICTIONARY_SOURCE}")
 # Deutsche Trennmuster (hyph-utf8, MIT) für die Silbentrennung im Mengentext
 qt_add_resources(vekcore "hyphenation" PREFIX "/hyphenation" BASE resources/hyphenation

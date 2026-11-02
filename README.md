@@ -149,6 +149,8 @@ Mitgebaut werden:
 - [Potrace](https://potrace.sourceforge.net/) (GPL)
 - [LibRaw](https://www.libraw.org/) (LGPL/CDDL)
 - [Hunspell](https://hunspell.github.io/) (LGPL/MPL)
+- [libcdr](https://wiki.documentfoundation.org/DLP/Libraries/libcdr) und librevenge (MPL 2.0) für CDR- und CMX-Dateien
+- [Little CMS](https://www.littlecms.com/) (MIT)
 
 Für den EPS/PS-Import nutzt TANGENTA [Ghostscript](https://www.ghostscript.com/) (AGPL).
 

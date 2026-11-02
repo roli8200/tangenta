@@ -1393,7 +1393,7 @@ void Canvas::paintObjectSharp(QPainter& p, const DrawObject& o) const
     } else if (auto* text = node_cast<TextObject>(&o)) {
         // Text: Bereiche mit eigener Farbe zuerst, der Rest in der Objektfüllung
         const QTransform toScreen = o.transform() * viewTransform();
-        if (text->kind() == TextObject::Kind::Paragraph && !text->hasEnvelope()
+        if (!m_output && text->kind() == TextObject::Kind::Paragraph && !text->hasEnvelope()
             && Options::instance().flag(QStringLiteral("ws/text/frames/showFrames"))) {
             // Mengentextrahmen gestrichelt (nur am Bildschirm); rot, wenn hier
             // Text abgeschnitten wird

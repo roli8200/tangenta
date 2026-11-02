@@ -102,9 +102,13 @@ std::vector<Rgb> quantize(const std::vector<QRgba64>& pixels, const std::vector<
     return centers;
 }
 
+// Farbabstand (gewichtet, Quadrat), ab dem ein kleiner Fleck als eigene Form gilt: etwa 60 Stufen Helligkeit
+constexpr float kKeepContrast = 3600.0f;
+
 // Flecken (4-zusammenhängend) unter minArea dem farblich ähnlichsten Nachbarn zuschlagen.
 // So bleiben dunkle Kantenpixel bei der Schrift statt im hellen Hintergrund zu verschwinden.
-bool removeSpecklesOnce(std::vector<int>& labels, int w, int h, int minArea, const std::vector<Rgb>& centers)
+// Kontrastreiche Flecken (Schrift, feine Linien) bleiben schon ab minContrastArea erhalten.
+bool removeSpecklesOnce(std::vector<int>& labels, int w, int h, int minArea, int minContrastArea, const std::vector<Rgb>& centers)
 {
     bool changed = false;
     std::vector<int> component(labels.size(), -1);
@@ -151,6 +155,10 @@ bool removeSpecklesOnce(std::vector<int>& labels, int w, int h, int minArea, con
                     target = other;
                 }
             }
+            // Deutlich andere Farbe als die Umgebung: eigene Form (kleine Schrift), kein Rauschen
+            if (label >= 0 && target >= 0 && int(members.size()) >= minContrastArea
+                && distance2(centers[std::size_t(label)], centers[std::size_t(target)]) > kKeepContrast)
+                continue;
             for (int i : members)
                 labels[std::size_t(i)] = target;
             changed = true;
@@ -161,11 +169,11 @@ bool removeSpecklesOnce(std::vector<int>& labels, int w, int h, int minArea, con
 
 // Mehrere Durchgänge: ein Fleck kann in einen anderen kleinen Fleck übergehen, der erst im
 // nächsten Durchgang als Ganzes erkannt wird
-void removeSpeckles(std::vector<int>& labels, int w, int h, int minArea, const std::vector<Rgb>& centers)
+void removeSpeckles(std::vector<int>& labels, int w, int h, int minArea, int minContrastArea, const std::vector<Rgb>& centers)
 {
     if (minArea <= 1)
         return;
-    for (int pass = 0; pass < 6 && removeSpecklesOnce(labels, w, h, minArea, centers); ++pass) {
+    for (int pass = 0; pass < 6 && removeSpecklesOnce(labels, w, h, minArea, minContrastArea, centers); ++pass) {
     }
 }
 
@@ -406,7 +414,7 @@ QRectF pathBounds(const QList<SubPath>& paths)
 
 // Kantenglättung im Bild: Mischfarben-Cluster ohne eigene Fläche (kaum Pixel, deren vier
 // Nachbarn dieselbe Farbe haben) auf die farblich nächste echte Farbe der Umgebung verteilen
-void absorbEdgeColors(std::vector<int>& labels, int w, int h, const std::vector<Rgb>& centers)
+void absorbEdgeColors(std::vector<int>& labels, int w, int h, const std::vector<Rgb>& centers, int radius, int depth)
 {
     const int k = int(centers.size());
     std::vector<int> count(std::size_t(k), 0), interior(std::size_t(k), 0);
@@ -419,7 +427,9 @@ void absorbEdgeColors(std::vector<int>& labels, int w, int h, const std::vector<
             auto same = [&](int xx, int yy) {
                 return xx < 0 || yy < 0 || xx >= w || yy >= h || labels[std::size_t(yy * w + xx)] == l;
             };
-            if (same(x - 1, y) && same(x + 1, y) && same(x, y - 1) && same(x, y + 1))
+            // Innen = auch "depth" Pixel weiter in alle Richtungen dieselbe Farbe: nach dem Vergrössern
+            // zählen so dünne Striche (kleine Schrift) nicht als eigene Fläche
+            if (same(x - depth, y) && same(x + depth, y) && same(x, y - depth) && same(x, y + depth))
                 ++interior[std::size_t(l)];
         }
     }
@@ -456,26 +466,147 @@ void absorbEdgeColors(std::vector<int>& labels, int w, int h, const std::vector<
     }
     if (std::none_of(absorb.begin(), absorb.end(), [](bool b) { return b; }))
         return;
+    // Vollfarbe auf der Linie vom Hintergrund bg durch die Mischfarbe mix, mindestens so weit weg wie
+    // mix (die eigentliche Farbe einer dünnen Form). Liefert sie und den Anteil des Wegs, den mix
+    // vom Hintergrund zu ihr schon zurückgelegt hat; -1, wenn die Linie keine Farbe trifft.
+    auto alongLine = [&](int bgLabel, int mixLabel) {
+        const Rgb& bg = centers[std::size_t(bgLabel)];
+        const Rgb& mix = centers[std::size_t(mixLabel)];
+        const float ux = mix.r - bg.r, uy = mix.g - bg.g, uz = mix.b - bg.b;
+        const float len2 = ux * ux + uy * uy + uz * uz;
+        int target = -1;
+        float bestD = std::numeric_limits<float>::max(), bestT = 1.0f;
+        for (int o = 0; o < k && len2 > 0; ++o) {
+            if (o == bgLabel || absorb[std::size_t(o)] || !solid[std::size_t(o)])
+                continue;
+            const Rgb& c = centers[std::size_t(o)];
+            const float t = ((c.r - bg.r) * ux + (c.g - bg.g) * uy + (c.b - bg.b) * uz) / len2;
+            if (t < 0.9f)
+                continue;
+            const float d = distance2(c, Rgb{bg.r + t * ux, bg.g + t * uy, bg.b + t * uz}) / (t * t);
+            if (d < bestD) {
+                bestD = d;
+                bestT = t;
+                target = o;
+            }
+        }
+        if (target < 0 || bestD >= 0.25f * distance2(mix, bg))
+            return std::pair{-1, 0.0f};
+        return std::pair{target, 1.0f / bestT};
+    };
+
+    // Ein Saum liegt zwischen zwei Farben. Grenzt eine Mischfarben-Fläche fast nur an eine Farbe,
+    // ist sie eine eigene Form (dünne Schrift auf einem Hintergrund): als Ganzes zur ähnlichsten
+    // Vollfarbe, damit Buchstaben nicht stückweise im Hintergrund verschwinden
+    {
+        std::vector<char> seen(labels.size(), 0);
+        std::vector<int> stack, members;
+        for (int start = 0; start < w * h; ++start) {
+            const int l = labels[std::size_t(start)];
+            if (l < 0 || !absorb[std::size_t(l)] || seen[std::size_t(start)])
+                continue;
+            members.clear();
+            stack.assign(1, start);
+            seen[std::size_t(start)] = 1;
+            std::map<int, int> touch;
+            std::map<int, int> parts; // Mischfarben dieser Form (Ring und Kern eines dünnen Buchstabens)
+            int contacts = 0;
+            while (!stack.empty()) {
+                const int i = stack.back();
+                stack.pop_back();
+                members.push_back(i);
+                ++parts[labels[std::size_t(i)]];
+                const int x = i % w, y = i / w;
+                const int around[4] = {x > 0 ? i - 1 : -1, x + 1 < w ? i + 1 : -1, y > 0 ? i - w : -1, y + 1 < h ? i + w : -1};
+                for (int j : around) {
+                    if (j < 0)
+                        continue;
+                    const int o = labels[std::size_t(j)];
+                    if (o >= 0 && absorb[std::size_t(o)]) {
+                        if (!seen[std::size_t(j)]) {
+                            seen[std::size_t(j)] = 1;
+                            stack.push_back(j);
+                        }
+                    } else if (o >= 0 && !absorb[std::size_t(o)]) {
+                        ++touch[o];
+                        ++contacts;
+                    }
+                }
+            }
+            if (contacts == 0)
+                continue;
+            const auto main = std::max_element(touch.begin(), touch.end(), [](const auto& a, const auto& b) { return a.second < b.second; });
+            // Saum: Die Mischfarbe liegt zwischen zwei Farben, an die die Form grenzt (z.B. der Ring
+            // zwischen Hintergrund und Buchstabenkern). Dann Pixel für Pixel unten aufteilen.
+            bool seam = false;
+            for (auto a = touch.begin(); a != touch.end() && !seam; ++a) {
+                for (auto b = std::next(a); b != touch.end() && !seam; ++b) {
+                    if (a->second * 10 < contacts || b->second * 10 < contacts)
+                        continue;
+                    const Rgb& A = centers[std::size_t(a->first)];
+                    const Rgb& B = centers[std::size_t(b->first)];
+                    for (const auto& [part, n] : parts) {
+                        const Rgb& m = centers[std::size_t(part)];
+                        const float ux = B.r - A.r, uy = B.g - A.g, uz = B.b - A.b;
+                        const float len2 = ux * ux + uy * uy + uz * uz;
+                        if (len2 <= 0)
+                            continue;
+                        const float t = ((m.r - A.r) * ux + (m.g - A.g) * uy + (m.b - A.b) * uz) / len2;
+                        if (t > 0.1f && t < 0.9f && distance2(m, Rgb{A.r + t * ux, A.g + t * uy, A.b + t * uz}) < 400.0f) {
+                            seam = true;
+                            break;
+                        }
+                    }
+                }
+            }
+            if (seam)
+                continue;
+            // Kräftigste Mischfarbe der Form: am weitesten vom Hintergrund weg
+            const Rgb& bg = centers[std::size_t(main->first)];
+            int strongest = l;
+            for (const auto& [part, n] : parts) {
+                if (distance2(centers[std::size_t(part)], bg) > distance2(centers[std::size_t(strongest)], bg))
+                    strongest = part;
+            }
+            const int target = alongLine(main->first, strongest).first;
+            // Nur wenn die Linie wirklich eine Farbe trifft; sonst Pixel für Pixel unten
+            if (target >= 0) {
+                for (int i : members)
+                    labels[std::size_t(i)] = target;
+            }
+        }
+    }
     const std::vector<int> before = labels;
     for (int y = 0; y < h; ++y) {
         for (int x = 0; x < w; ++x) {
             const int l = before[std::size_t(y * w + x)];
             if (l < 0 || !absorb[std::size_t(l)])
                 continue;
-            // Echte Farben in der Umgebung (5x5) bevorzugen, sonst die farblich nächste überhaupt
+            // Wie eine adaptive Schwelle: Hintergrund ist die häufigste Vollfarbe in der Umgebung,
+            // Vordergrund die Vollfarbe auf der Linie vom Hintergrund durch die Mischfarbe. Das Pixel
+            // gehört zum Vordergrund, wenn es mindestens halb dorthin reicht; so verliert dünne Schrift
+            // keine Striche, auch wenn ringsum kein Pixel ganz in ihrer Farbe liegt
             int best = -1;
             float bestD = std::numeric_limits<float>::max();
-            for (int yy = std::max(0, y - 2); yy <= std::min(h - 1, y + 2); ++yy) {
-                for (int xx = std::max(0, x - 2); xx <= std::min(w - 1, x + 2); ++xx) {
+            std::map<int, int> around;
+            for (int yy = std::max(0, y - radius); yy <= std::min(h - 1, y + radius); ++yy) {
+                for (int xx = std::max(0, x - radius); xx <= std::min(w - 1, x + radius); ++xx) {
                     const int o = before[std::size_t(yy * w + xx)];
                     if (o < 0 || absorb[std::size_t(o)])
                         continue;
+                    ++around[o];
                     const float d = distance2(centers[std::size_t(l)], centers[std::size_t(o)]);
                     if (d < bestD) {
                         bestD = d;
                         best = o;
                     }
                 }
+            }
+            if (!around.empty()) {
+                const int bgLabel = std::max_element(around.begin(), around.end(), [](const auto& a, const auto& b) { return a.second < b.second; })->first;
+                const auto [fg, reach] = alongLine(bgLabel, l);
+                if (fg >= 0)
+                    best = reach >= 0.5f ? fg : bgLabel;
             }
             if (best < 0) {
                 for (int o = 0; o < k; ++o) {
@@ -550,6 +681,9 @@ Settings presetSettings(Preset preset)
     return s;
 }
 
+// Kleinere Bilder werden für die Farbtrennung auf etwa diese Seitenlänge vergrössert
+constexpr int kWorkingSide = 1600;
+
 Result run(const QImage& source, const Settings& s)
 {
     Result result;
@@ -560,17 +694,34 @@ Result run(const QImage& source, const Settings& s)
     QImage img = source.convertToFormat(QImage::Format_RGBA64);
     double scale = 1.0;
     const int side = std::max(img.width(), img.height());
+    // Nachgezeichnet wird kleiner Bilder in doppelter Grösse (wie mkbitmap zu Potrace: Graustufen der
+    // Kantenglättung werden Form statt Treppe), die Farben aber in bis zu vierfacher entschieden
+    const int traceFactor = side * 2 <= s.maxSide ? 2 : 1;
     if (side > s.maxSide) {
         img = img.scaled(s.maxSide, s.maxSide, Qt::KeepAspectRatio, Qt::SmoothTransformation);
         scale = double(source.width()) / img.width();
-    } else if (side * 2 <= s.maxSide) {
-        // Kleine Bilder weich vergrössern (wie mkbitmap zu Potrace): die Graustufen der
-        // Kantenglättung werden so zu Form statt zu Treppen, kleine Rundungen bleiben rund
-        img = img.scaled(img.width() * 2, img.height() * 2, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
-        scale = 0.5;
     }
-    const double unit = std::max(1.0, 1.0 / scale); // Rechenpixel je Bildpixel
-    const int w = img.width(), h = img.height();
+    // Farben je zur Hälfte am Bild in seiner Grösse (kräftige Farben dünner Linien) und am vergrösserten
+    // Bild (Mischfarben der Kantenglättung, die der Saum-Schritt unten braucht) bestimmen
+    std::vector<QRgba64> samplePixels;
+    std::vector<bool> sampleOpaque;
+    for (int y = 0; y < img.height(); ++y) {
+        const auto* line = reinterpret_cast<const QRgba64*>(img.constScanLine(y));
+        for (int x = 0; x < img.width(); ++x) {
+            samplePixels.push_back(line[x]);
+            sampleOpaque.push_back(line[x].alpha() >= 32768);
+        }
+    }
+    if (side <= s.maxSide && side * 2 <= kWorkingSide && (s.colors > 2 || traceFactor > 1)) {
+        // Kleine Bilder weich vergrössern: dünne Striche (kleine Schrift) bekommen Pixel, die ganz
+        // in ihrer Farbe liegen
+        // Mit nur zwei Farben gibt es keine Mischfarben zu entscheiden: dann wie bisher doppelt
+        const int factor = s.colors > 2 && side * 4 <= kWorkingSide ? 4 : 2;
+        img = img.scaled(img.width() * factor, img.height() * factor, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+        scale = 1.0 / factor;
+    }
+    double unit = std::max(1.0, 1.0 / scale); // Rechenpixel je Bildpixel
+    int w = img.width(), h = img.height();
     std::vector<QRgba64> pixels(std::size_t(w) * h);
     std::vector<bool> opaque(pixels.size());
     for (int y = 0; y < h; ++y) {
@@ -580,7 +731,17 @@ Result run(const QImage& source, const Settings& s)
             opaque[std::size_t(y * w + x)] = line[x].alpha() >= 32768;
         }
     }
-    std::vector<Rgb> centers = quantize(pixels, opaque, std::clamp(s.colors, 2, 64));
+    if (scale < 1.0) {
+        const std::size_t original = samplePixels.size();
+        const int copies = int(std::lround(unit * unit)) - 1;
+        for (int c = 0; c < copies; ++c) {
+            samplePixels.insert(samplePixels.end(), samplePixels.begin(), samplePixels.begin() + std::ptrdiff_t(original));
+            sampleOpaque.insert(sampleOpaque.end(), sampleOpaque.begin(), sampleOpaque.begin() + std::ptrdiff_t(original));
+        }
+        samplePixels.insert(samplePixels.end(), pixels.begin(), pixels.end());
+        sampleOpaque.insert(sampleOpaque.end(), opaque.begin(), opaque.end());
+    }
+    std::vector<Rgb> centers = quantize(samplePixels, sampleOpaque, std::clamp(s.colors, 2, 64));
     if (centers.empty())
         return result;
 
@@ -638,11 +799,12 @@ Result run(const QImage& source, const Settings& s)
                 l = target[std::size_t(l)];
         }
     }
-    absorbEdgeColors(labels, w, h, centers);
+    absorbEdgeColors(labels, w, h, centers, 2 * int(std::ceil(unit)), int(std::ceil(unit)));
 
     // Kleinste Fleckgrösse aus "Detail": 100 = alles bleibt, 0 = grobe Flächen
     const double coarse = (100.0 - std::clamp(s.detail, 0, 100)) / 100.0;
-    removeSpeckles(labels, w, h, 1 + int(coarse * coarse * 0.002 * w * h), centers);
+    const int minArea = 1 + int(coarse * coarse * 0.002 * w * h);
+    removeSpeckles(labels, w, h, minArea, std::max(int(6 * unit * unit), minArea / 4), centers);
     // Glättung über 25 rundet die Flächen selbst (bis 5 Bildpixel bei 100), darunter nur die Kurven
     smoothLabels(labels, w, h, int((std::clamp(s.smoothing, 0, 100) - 25) * unit / 15.0), int(centers.size()));
 
@@ -759,6 +921,38 @@ Result run(const QImage& source, const Settings& s)
     }
 
     // Pixel links der ersten Kante eines Umrisses (bei Löchern: im Loch)
+    // Zurück auf die Auflösung zum Nachzeichnen, sonst bekämen glatte Formen unnötig viele Knoten.
+    // Je Block zählt die Mehrheit, bei Gleichstand die häufigere Farbe (sonst wird Schrift zu fett).
+    if (const int r = int(std::lround(unit)) / traceFactor; scale < 1.0 && r >= 2) {
+        std::map<int, int> total;
+        for (int l : labels)
+            ++total[l];
+        const int w2 = w / r, h2 = h / r;
+        std::vector<int> reduced(std::size_t(w2) * h2);
+        std::map<int, int> votes;
+        for (int y = 0; y < h2; ++y) {
+            for (int x = 0; x < w2; ++x) {
+                votes.clear();
+                for (int dy = 0; dy < r; ++dy)
+                    for (int dx = 0; dx < r; ++dx)
+                        ++votes[labels[std::size_t((y * r + dy) * w + x * r + dx)]];
+                int best = votes.begin()->first, bestCount = 0;
+                for (const auto& [l, n] : votes) {
+                    if (n > bestCount || (n == bestCount && total[l] > total[best])) {
+                        best = l;
+                        bestCount = n;
+                    }
+                }
+                reduced[std::size_t(y * w2 + x)] = best;
+            }
+        }
+        labels = std::move(reduced);
+        w = w2;
+        h = h2;
+        scale *= r;
+        unit /= r;
+    }
+
     auto leftPixel = [&](const std::vector<QPoint>& loop) {
         const QPoint a = loop[0];
         const QPoint d = loop[1] - a;

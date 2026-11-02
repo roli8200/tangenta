@@ -94,7 +94,7 @@ flowchart TD
 | Betriebssystem | Windows 10 (64 Bit), Debian 12, Ubuntu 24.04 | Windows 11, Debian 13, Ubuntu 26.04 |
 | Arbeitsspeicher | 8 GB | 16 GB |
 | Freier Speicher | 6 GB | 10 GB (mit Paketbau) |
-| Internet | für die Downloads (rund 1,5 GB) | |
+| Internet | für die Downloads (rund 1,5 GB); beim ersten Einrichten lädt CMake zudem libcdr, librevenge und Little CMS (zusammen 2 MB, Prüfsumme fest) | |
 
 Der erste Bau dauert je nach Rechner 5 bis 20 Minuten, jeder weitere nur Sekunden bis wenige Minuten,
 weil nur Geändertes neu übersetzt wird.

@@ -1038,6 +1038,91 @@ private slots:
     }
 
     // Wie das Monitor-Symbol im SuperTrace-Video: schwarz auf weiss, geglättete Kanten
+    // Schrift auf einem Farbverlauf (wie ein Plakat in kleiner Auflösung): Titel, Untertitel und
+    // Kleingedrucktes müssen als Flächen in Textfarbe erhalten bleiben
+    void vectorizerKeepsSmallText()
+    {
+        const QSize size(520, 360);
+        QImage source(size, QImage::Format_RGB32);
+        QImage mask(size, QImage::Format_Grayscale8);
+        mask.fill(0);
+        {
+            QPainter p(&source);
+            QLinearGradient sky(0, 0, 0, size.height());
+            sky.setColorAt(0, QColor(0x2a, 0x1f, 0x55));
+            sky.setColorAt(0.6, QColor(0x8a, 0x3f, 0x7a));
+            sky.setColorAt(1, QColor(0xf0, 0x8a, 0x4b));
+            p.fillRect(source.rect(), sky);
+        }
+        auto write = [&](const QString& text, int px, bool bold, int y) {
+            QFont f(QStringLiteral("Arial"));
+            f.setPixelSize(px);
+            f.setBold(bold);
+            QPainter p(&source);
+            p.setRenderHint(QPainter::TextAntialiasing);
+            p.setFont(f);
+            p.setPen(QColor(0xff, 0xf3, 0xe0));
+            p.drawText(QPoint(24, y), text);
+            QPainter m(&mask);
+            QFont plain = f;
+            plain.setStyleStrategy(QFont::NoAntialias);
+            m.setFont(plain);
+            m.setPen(Qt::white);
+            m.drawText(QPoint(24, y), text);
+        };
+        write(QStringLiteral("SOMMERNACHT"), 44, true, 80);
+        write(QStringLiteral("Open Air am See · 21. Juni 2027"), 16, false, 120);
+        write(QStringLiteral("Tickets ab 29 CHF, Vorverkauf ab 1. Mai"), 12, false, 300);
+
+        auto score = [&](trace::Preset preset) {
+            const trace::Result r = trace::run(source, trace::presetSettings(preset));
+            QImage out(size, QImage::Format_RGB32);
+            out.fill(Qt::black);
+            QPainter p(&out);
+            p.setRenderHint(QPainter::Antialiasing, false);
+            for (const trace::Shape& s : r.shapes)
+                p.fillPath(CurveObject::toPainterPath(s.paths), s.color);
+            p.end();
+            if (const QString dir = qEnvironmentVariable("VEK_SCREENSHOT_DIR"); !dir.isEmpty()) {
+                source.save(dir + QStringLiteral("/trace-text-original.png"));
+                out.save(dir + QStringLiteral("/trace-text-%1.png").arg(int(preset)));
+            }
+            const auto cream = [](QRgb c) { return qRed(c) > 200 && qGreen(c) > 185 && qBlue(c) > 160; };
+            int hit = 0, total = 0, wrong = 0, background = 0;
+            int lineHit[3] = {0, 0, 0}, lineTotal[3] = {0, 0, 0};
+            for (int y = 0; y < size.height(); ++y) {
+                const int line = y < 90 ? 0 : y < 200 ? 1 : 2;
+                for (int x = 0; x < size.width(); ++x) {
+                    const bool text = qGray(mask.pixel(x, y)) > 128;
+                    const bool shown = cream(out.pixel(x, y));
+                    (text ? total : background)++;
+                    if (text) {
+                        ++lineTotal[line];
+                        if (shown)
+                            ++lineHit[line];
+                    }
+                    if (text && shown)
+                        ++hit;
+                    if (!text && shown)
+                        ++wrong;
+                }
+            }
+            qInfo().noquote() << "  Titel" << double(lineHit[0]) / lineTotal[0] << "Untertitel" << double(lineHit[1]) / lineTotal[1]
+                              << "Kleingedrucktes" << double(lineHit[2]) / lineTotal[2] << "Knoten" << r.nodes;
+            return std::pair{double(hit) / total, double(wrong) / std::max(1, total)};
+        };
+        QList<std::tuple<trace::Preset, double, double>> results;
+        for (const trace::Preset preset : {trace::Preset::Clipart, trace::Preset::Logo, trace::Preset::DetailedLogo, trace::Preset::HighQuality}) {
+            const auto [recall, extra] = score(preset);
+            qInfo().noquote() << trace::presetName(preset) << "Text erhalten" << recall << "zu viel" << extra;
+            results << std::tuple{preset, recall, extra};
+        }
+        for (const auto& [preset, recall, extra] : std::as_const(results)) {
+            QVERIFY2(recall > 0.85, qPrintable(trace::presetName(preset) + QStringLiteral(": nur %1 der Schrift erhalten").arg(recall)));
+            QVERIFY2(extra < 0.45, qPrintable(trace::presetName(preset) + QStringLiteral(": %1 zu viel Schriftfarbe").arg(extra)));
+        }
+    }
+
     void vectorizerClassicOnLineArt()
     {
         QImage source(640, 640, QImage::Format_RGB32);
