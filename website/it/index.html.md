@@ -192,7 +192,9 @@ Inviti, etichette e loghi per associazioni, gratis e senza abbonamento.
 
 Setup con procedura guidata o MSI per la distribuzione in rete, entrambi installabili in modo silenzioso.
 
-[Scarica il setup](https://github.com/roli8200/tangenta/releases/latest)
+[Scarica il setup](https://github.com/roli8200/tangenta/releases/download/v0.86/TANGENTA-0.86-x64-setup.exe)
+
+[MSI per la distribuzione →](https://github.com/roli8200/tangenta/releases/download/v0.86/TANGENTA-0.86-x64.msi)
 
 ```
 TANGENTA-0.86-x64-setup.exe /quiet
@@ -203,10 +205,38 @@ msiexec /i TANGENTA-0.86-x64.msi /qn
 
 Pacchetti per Debian 12, Debian 13, Ubuntu 24.04 e 26.04, con il proprio Qt 6.10.
 
-[Scarica il .deb](https://github.com/roli8200/tangenta/releases/latest)
+[Scarica il .deb (Debian 13)](https://github.com/roli8200/tangenta/releases/download/v0.86/tangenta_0.86-1.debian13_amd64.deb)
+
+Pacchetti per sistema:
+
+- [Debian 12](https://github.com/roli8200/tangenta/releases/download/v0.86/tangenta_0.86-1.debian12_amd64.deb)
+- [Debian 13](https://github.com/roli8200/tangenta/releases/download/v0.86/tangenta_0.86-1.debian13_amd64.deb)
+- [Ubuntu 24.04](https://github.com/roli8200/tangenta/releases/download/v0.86/tangenta_0.86-1.ubuntu24.04_amd64.deb)
+- [Ubuntu 26.04](https://github.com/roli8200/tangenta/releases/download/v0.86/tangenta_0.86-1.ubuntu26.04_amd64.deb)
 
 ```
-sudo apt install ./tangenta_0.86-1~debian12_amd64.deb
+sudo apt install ./tangenta_0.86-1.debian13_amd64.deb
+```
+
+### Altri sistemi Linux
+
+Flatpak per Fedora, openSUSE, Arch, Mint e ogni sistema con Flatpak. Il runtime arriva da Flathub.
+
+[Scarica il Flatpak](https://github.com/roli8200/tangenta/releases/download/v0.86/TANGENTA-0.86-x86_64.flatpak)
+
+```
+flatpak install --user TANGENTA-0.86-x86_64.flatpak
+flatpak run ch.tangenta.Tangenta
+```
+
+### GitHub
+
+[Tutti i file e i checksum →](https://github.com/roli8200/tangenta/releases/tag/v0.86)
+
+[SHA256SUMS-0.86.txt](https://github.com/roli8200/tangenta/releases/download/v0.86/SHA256SUMS-0.86.txt)
+
+```
+sha256sum --ignore-missing -c SHA256SUMS-0.86.txt
 ```
 
 [Tutti i pacchetti, i requisiti di sistema e l’installazione silenziosa →](https://tangenta.ch/it/download.html)

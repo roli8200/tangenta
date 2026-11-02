@@ -72,7 +72,7 @@
    "softwareVersion": "0.86",
    "license": "https://www.gnu.org/licenses/gpl-3.0.html",
    "isAccessibleForFree": true,
-   "downloadUrl": "https://github.com/roli8200/tangenta/releases/latest",
+   "downloadUrl": "https://github.com/roli8200/tangenta/releases/tag/v0.86",
    "codeRepository": "https://github.com/roli8200/tangenta",
    "screenshot": [
     "https://tangenta.ch/img/01-hauptfenster.png",
@@ -121,15 +121,31 @@
       <article class="card">
         <h3>Windows 10 / 11</h3>
         <p>Setup with a wizard, or an MSI for network deployment. Both install silently.</p>
-        <a class="btn btn-primary" href="https://github.com/roli8200/tangenta/releases/latest">Download setup</a>
+        <a class="btn btn-primary" href="https://github.com/roli8200/tangenta/releases/download/v0.86/TANGENTA-0.86-x64-setup.exe">Download setup</a>
+        <p><a class="more" href="https://github.com/roli8200/tangenta/releases/download/v0.86/TANGENTA-0.86-x64.msi">MSI for deployment →</a></p>
         <pre><code>TANGENTA-0.86-x64-setup.exe /quiet
 msiexec /i TANGENTA-0.86-x64.msi /qn</code></pre>
       </article>
       <article class="card">
         <h3>Debian and Ubuntu</h3>
         <p>Packages for Debian 12, Debian 13, Ubuntu 24.04 and 26.04, with their own Qt 6.10.</p>
-        <a class="btn btn-primary" href="https://github.com/roli8200/tangenta/releases/latest">Download .deb</a>
-        <pre><code>sudo apt install ./tangenta_0.86-1~debian12_amd64.deb</code></pre>
+        <a class="btn btn-primary" href="https://github.com/roli8200/tangenta/releases/download/v0.86/tangenta_0.86-1.debian13_amd64.deb">Download .deb (Debian 13)</a>
+        <p>Packages per system:</p>
+        <ul class="dl-list"><li><a class="more" href="https://github.com/roli8200/tangenta/releases/download/v0.86/tangenta_0.86-1.debian12_amd64.deb">Debian 12</a></li><li><a class="more" href="https://github.com/roli8200/tangenta/releases/download/v0.86/tangenta_0.86-1.debian13_amd64.deb">Debian 13</a></li><li><a class="more" href="https://github.com/roli8200/tangenta/releases/download/v0.86/tangenta_0.86-1.ubuntu24.04_amd64.deb">Ubuntu 24.04</a></li><li><a class="more" href="https://github.com/roli8200/tangenta/releases/download/v0.86/tangenta_0.86-1.ubuntu26.04_amd64.deb">Ubuntu 26.04</a></li></ul>
+        <pre><code>sudo apt install ./tangenta_0.86-1.debian13_amd64.deb</code></pre>
+      </article>
+      <article class="card">
+        <h3>Other Linux systems</h3>
+        <p>Flatpak for Fedora, openSUSE, Arch, Mint and every system with Flatpak. The runtime comes from Flathub.</p>
+        <a class="btn btn-primary" href="https://github.com/roli8200/tangenta/releases/download/v0.86/TANGENTA-0.86-x86_64.flatpak">Download Flatpak</a>
+        <pre><code>flatpak install --user TANGENTA-0.86-x86_64.flatpak
+flatpak run ch.tangenta.Tangenta</code></pre>
+      </article>
+      <article class="card">
+        <h3>GitHub</h3>
+        <p><a class="more" href="https://github.com/roli8200/tangenta/releases/tag/v0.86">All files and checksums →</a></p>
+        <a class="btn btn-primary" href="https://github.com/roli8200/tangenta/releases/download/v0.86/SHA256SUMS-0.86.txt">SHA256SUMS-0.86.txt</a>
+        <pre><code>sha256sum --ignore-missing -c SHA256SUMS-0.86.txt</code></pre>
       </article>
     </div>
   </section>
@@ -144,11 +160,11 @@ msiexec /i TANGENTA-0.86-x64.msi /qn</code></pre>
     <div class="split-text">
       <p class="label"><b>02</b> / Linux</p>
       <h2>Installing on Linux</h2>
-      <ol class="steps"><li>Download the package for your system:</li><li>Install it in a terminal: <code>sudo apt install ./tangenta_0.86-1~debian12_amd64.deb</code> (adjust the file name).</li><li>Open TANGENTA from the application menu or type <code>tangenta</code>. Remove it with <code>sudo apt remove tangenta</code>.</li></ol>
-      <pre><code>tangenta_0.86-1~debian12_amd64.deb
-tangenta_0.86-1~debian13_amd64.deb
-tangenta_0.86-1~ubuntu24.04_amd64.deb
-tangenta_0.86-1~ubuntu26.04_amd64.deb</code></pre>
+      <ol class="steps"><li>Download the package for your system:</li><li>Install it in a terminal: <code>sudo apt install ./tangenta_0.86-1.debian12_amd64.deb</code> (adjust the file name).</li><li>Open TANGENTA from the application menu or type <code>tangenta</code>. Remove it with <code>sudo apt remove tangenta</code>.</li></ol>
+      <pre><code>tangenta_0.86-1.debian12_amd64.deb
+tangenta_0.86-1.debian13_amd64.deb
+tangenta_0.86-1.ubuntu24.04_amd64.deb
+tangenta_0.86-1.ubuntu26.04_amd64.deb</code></pre>
     </div>
   </section>
 

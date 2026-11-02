@@ -23,6 +23,10 @@ T = {
         'win_btn': 'Setup herunterladen',
         'lin_h': 'Debian und Ubuntu', 'lin_p': 'Pakete für Debian 12, Debian 13, Ubuntu 24.04 und 26.04, mit eigenem Qt 6.10.',
         'lin_btn': '.deb herunterladen',
+        'msi': 'MSI für die Verteilung', 'all': 'Alle Dateien und Prüfsummen',
+        'debs_h': 'Pakete je System:',
+        'flat_h': 'Andere Linux-Systeme', 'flat_p': 'Flatpak für Fedora, openSUSE, Arch, Mint und alle Systeme mit Flatpak. Die Laufzeit kommt von Flathub.',
+        'flat_btn': 'Flatpak herunterladen',
     },
 
     # ------------------------------------------------------------ Startseite
@@ -234,7 +238,7 @@ T = {
             'note': 'Zeigt Windows „Der Computer wurde durch Windows geschützt“, klicken Sie auf <b>Weitere Informationen</b> und dann <b>Trotzdem ausführen</b>. Die Pakete sind noch nicht digital signiert.'},
         'lin': {'h2': 'Installieren unter Linux', 'steps': [
             'Das Paket für Ihr System herunterladen:',
-            'Im Terminal installieren: <code>sudo apt install ./tangenta_0.86-1~debian12_amd64.deb</code> (Dateiname anpassen).',
+            'Im Terminal installieren: <code>sudo apt install ./tangenta_0.86-1.debian12_amd64.deb</code> (Dateiname anpassen).',
             'TANGENTA im Startmenü öffnen oder <code>tangenta</code> eingeben. Entfernen mit <code>sudo apt remove tangenta</code>.']},
         'req': {'label': 'Systemanforderungen', 'h2': 'Was Ihr Rechner braucht.', 'th': ['', 'Mindestens', 'Empfohlen'],
                 'rows': [('System', 'Windows 10 (64 Bit), Debian 12, Ubuntu 24.04', 'Windows 11, Debian 13, Ubuntu 26.04'),

@@ -22,8 +22,11 @@ PAGES = ['index', 'features', 'ai', 'download']
 DOMAIN = 'https://tangenta.ch'
 GITHUB = 'https://github.com/roli8200/tangenta'
 RELEASES = GITHUB + '/releases/latest'
+# Direkte Links auf die Dateien der aktuellen Version (GitHub ersetzt ~ im Namen durch .)
+ASSETS = GITHUB + '/releases/download/v{}/'
 VERSION = '0.86'
 DEBS = ['debian12', 'debian13', 'ubuntu24.04', 'ubuntu26.04']
+DEB_NAMES = {'debian12': 'Debian 12', 'debian13': 'Debian 13', 'ubuntu24.04': 'Ubuntu 24.04', 'ubuntu26.04': 'Ubuntu 26.04'}
 PUBLISHER = {'@type': 'Organization', 'name': 'Intersoft Networks', 'url': 'https://intersoft-networks.ch'}
 # Vorschaubild je Seite (Open Graph, Twitter, JSON-LD)
 OG_IMAGE = {'index': '01-hauptfenster.png', 'features': '06-andockfenster.png', 'ai': '02-ki-assistent.png',
@@ -80,7 +83,7 @@ def json_ld(t, lang, page, title, description):
             'applicationSubCategory': 'Vector graphics editor',
             'operatingSystem': 'Windows 10, Windows 11, Debian 12, Debian 13, Ubuntu 24.04, Ubuntu 26.04',
             'softwareVersion': VERSION, 'license': 'https://www.gnu.org/licenses/gpl-3.0.html',
-            'isAccessibleForFree': True, 'downloadUrl': RELEASES, 'codeRepository': GITHUB,
+            'isAccessibleForFree': True, 'downloadUrl': GITHUB + f'/releases/tag/v{VERSION}', 'codeRepository': GITHUB,
             'screenshot': [f'{DOMAIN}/img/{n}' for n in ('01-hauptfenster.png', '02-ki-assistent.png', '03-supertrace.png')],
             'image': f'{DOMAIN}/img/tangenta-256.png', 'inLanguage': LANGS, 'url': page_url(lang, 'index'),
             'offers': {'@type': 'Offer', 'price': '0', 'priceCurrency': 'CHF'},
@@ -184,21 +187,46 @@ def faq(items):
     return ''.join(f'<details><summary>{q}</summary><p>{a}</p></details>' for q, a in items)
 
 
+def asset(name):
+    return ASSETS.format(VERSION) + name
+
+
+def deb_file(target):
+    return f'tangenta_{VERSION}-1.{target}_amd64.deb'
+
+
 def downloads_cards(t, lang):
     d = t['download_cards']
+    debs = ''.join(f'<li><a class="more" href="{asset(deb_file(x))}">{DEB_NAMES[x]}</a></li>' for x in DEBS)
     return f'''<div class="downloads">
       <article class="card">
         <h3>{d['win_h']}</h3>
         <p>{d['win_p']}</p>
-        <a class="btn btn-primary" href="{RELEASES}">{d['win_btn']}</a>
+        <a class="btn btn-primary" href="{asset(f'TANGENTA-{VERSION}-x64-setup.exe')}">{d['win_btn']}</a>
+        <p><a class="more" href="{asset(f'TANGENTA-{VERSION}-x64.msi')}">{d['msi']} →</a></p>
         <pre><code>TANGENTA-{VERSION}-x64-setup.exe /quiet
 msiexec /i TANGENTA-{VERSION}-x64.msi /qn</code></pre>
       </article>
       <article class="card">
         <h3>{d['lin_h']}</h3>
         <p>{d['lin_p']}</p>
-        <a class="btn btn-primary" href="{RELEASES}">{d['lin_btn']}</a>
-        <pre><code>sudo apt install ./tangenta_{VERSION}-1~debian12_amd64.deb</code></pre>
+        <a class="btn btn-primary" href="{asset(deb_file('debian13'))}">{d['lin_btn']} (Debian 13)</a>
+        <p>{d['debs_h']}</p>
+        <ul class="dl-list">{debs}</ul>
+        <pre><code>sudo apt install ./{deb_file('debian13')}</code></pre>
+      </article>
+      <article class="card">
+        <h3>{d['flat_h']}</h3>
+        <p>{d['flat_p']}</p>
+        <a class="btn btn-primary" href="{asset(f'TANGENTA-{VERSION}-x86_64.flatpak')}">{d['flat_btn']}</a>
+        <pre><code>flatpak install --user TANGENTA-{VERSION}-x86_64.flatpak
+flatpak run ch.tangenta.Tangenta</code></pre>
+      </article>
+      <article class="card">
+        <h3>GitHub</h3>
+        <p><a class="more" href="{GITHUB}/releases/tag/v{VERSION}">{d['all']} →</a></p>
+        <a class="btn btn-primary" href="{asset(f'SHA256SUMS-{VERSION}.txt')}">SHA256SUMS-{VERSION}.txt</a>
+        <pre><code>sha256sum --ignore-missing -c SHA256SUMS-{VERSION}.txt</code></pre>
       </article>
     </div>'''
 
@@ -465,7 +493,7 @@ def download_page(t, lang):
     req = ''.join(f'<tr><td>{a}</td><td>{b}</td><td>{c}</td></tr>' for a, b, c in d['req']['rows'])
     win = ''.join(f'<li>{s}</li>' for s in d['win']['steps'])
     lin = ''.join(f'<li>{s}</li>' for s in d['lin']['steps'])
-    debs = '\n'.join(f'tangenta_{VERSION}-1~{x}_amd64.deb' for x in DEBS)
+    debs = '\n'.join(deb_file(x) for x in DEBS)
     silent = ''.join(f'<tr><td>{label_}</td><td><code>{cmd.replace("{v}", VERSION)}</code></td></tr>' for label_, cmd in d['silent']['rows'])
     notes = ''.join(f'<li>{n}</li>' for n in d['notes']['items'])
     return f'''<main id="top">
@@ -690,7 +718,7 @@ def llms_txt(texts):
     lines += ['## Optional', '',
               f'- [Quellcode auf GitHub]({GITHUB}): Programm, Tests und Bauanleitung',
               f'- [Bauanleitung]({GITHUB}/blob/main/BUILD.md): eigene Build-Umgebung für Windows und Linux',
-              f'- [Neueste Version]({RELEASES}): Setup, MSI und .deb-Pakete', '']
+              f'- [Neueste Version]({RELEASES}): Setup, MSI, .deb-Pakete und Flatpak', '']
     return '\n'.join(lines)
 
 

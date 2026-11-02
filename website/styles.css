@@ -146,6 +146,7 @@ kbd { background: #262d36; border: 1px solid #3a424d; border-bottom-width: 3px; 
 /* Download */
 .downloads { display: grid; grid-template-columns: 1fr 1fr; gap: 22px; margin-top: 30px; }
 .downloads .btn { margin: 20px 0 16px; }
+.dl-list { list-style: none; padding: 0; margin: 8px 0 16px; display: flex; flex-wrap: wrap; gap: 6px 18px; }
 pre { margin: 0; background: #0b0d10; border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; overflow-x: auto; font-size: 13.5px; color: #ffcf9f; }
 
 /* Fragen */

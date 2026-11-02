@@ -14,7 +14,9 @@ Kostenlos für Windows und Linux. Alle Pakete liegen auf GitHub bei der aktuelle
 
 Setup mit Assistent oder MSI für die Verteilung im Netzwerk, still installierbar.
 
-[Setup herunterladen](https://github.com/roli8200/tangenta/releases/latest)
+[Setup herunterladen](https://github.com/roli8200/tangenta/releases/download/v0.86/TANGENTA-0.86-x64-setup.exe)
+
+[MSI für die Verteilung →](https://github.com/roli8200/tangenta/releases/download/v0.86/TANGENTA-0.86-x64.msi)
 
 ```
 TANGENTA-0.86-x64-setup.exe /quiet
@@ -25,10 +27,38 @@ msiexec /i TANGENTA-0.86-x64.msi /qn
 
 Pakete für Debian 12, Debian 13, Ubuntu 24.04 und 26.04, mit eigenem Qt 6.10.
 
-[.deb herunterladen](https://github.com/roli8200/tangenta/releases/latest)
+[.deb herunterladen (Debian 13)](https://github.com/roli8200/tangenta/releases/download/v0.86/tangenta_0.86-1.debian13_amd64.deb)
+
+Pakete je System:
+
+- [Debian 12](https://github.com/roli8200/tangenta/releases/download/v0.86/tangenta_0.86-1.debian12_amd64.deb)
+- [Debian 13](https://github.com/roli8200/tangenta/releases/download/v0.86/tangenta_0.86-1.debian13_amd64.deb)
+- [Ubuntu 24.04](https://github.com/roli8200/tangenta/releases/download/v0.86/tangenta_0.86-1.ubuntu24.04_amd64.deb)
+- [Ubuntu 26.04](https://github.com/roli8200/tangenta/releases/download/v0.86/tangenta_0.86-1.ubuntu26.04_amd64.deb)
 
 ```
-sudo apt install ./tangenta_0.86-1~debian12_amd64.deb
+sudo apt install ./tangenta_0.86-1.debian13_amd64.deb
+```
+
+### Andere Linux-Systeme
+
+Flatpak für Fedora, openSUSE, Arch, Mint und alle Systeme mit Flatpak. Die Laufzeit kommt von Flathub.
+
+[Flatpak herunterladen](https://github.com/roli8200/tangenta/releases/download/v0.86/TANGENTA-0.86-x86_64.flatpak)
+
+```
+flatpak install --user TANGENTA-0.86-x86_64.flatpak
+flatpak run ch.tangenta.Tangenta
+```
+
+### GitHub
+
+[Alle Dateien und Prüfsummen →](https://github.com/roli8200/tangenta/releases/tag/v0.86)
+
+[SHA256SUMS-0.86.txt](https://github.com/roli8200/tangenta/releases/download/v0.86/SHA256SUMS-0.86.txt)
+
+```
+sha256sum --ignore-missing -c SHA256SUMS-0.86.txt
 ```
 
 **01** / Windows
@@ -46,14 +76,14 @@ Zeigt Windows „Der Computer wurde durch Windows geschützt“, klicken Sie auf
 ## Installieren unter Linux
 
 1. Das Paket für Ihr System herunterladen:
-2. Im Terminal installieren: `sudo apt install ./tangenta_0.86-1~debian12_amd64.deb` (Dateiname anpassen).
+2. Im Terminal installieren: `sudo apt install ./tangenta_0.86-1.debian12_amd64.deb` (Dateiname anpassen).
 3. TANGENTA im Startmenü öffnen oder `tangenta` eingeben. Entfernen mit `sudo apt remove tangenta`.
 
 ```
-tangenta_0.86-1~debian12_amd64.deb
-tangenta_0.86-1~debian13_amd64.deb
-tangenta_0.86-1~ubuntu24.04_amd64.deb
-tangenta_0.86-1~ubuntu26.04_amd64.deb
+tangenta_0.86-1.debian12_amd64.deb
+tangenta_0.86-1.debian13_amd64.deb
+tangenta_0.86-1.ubuntu24.04_amd64.deb
+tangenta_0.86-1.ubuntu26.04_amd64.deb
 ```
 
 **03** / Systemanforderungen

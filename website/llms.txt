@@ -36,4 +36,4 @@ TANGENTA ist freie Software (GPLv3) von Intersoft Networks, Version 0.86, für W
 
 - [Quellcode auf GitHub](https://github.com/roli8200/tangenta): Programm, Tests und Bauanleitung
 - [Bauanleitung](https://github.com/roli8200/tangenta/blob/main/BUILD.md): eigene Build-Umgebung für Windows und Linux
-- [Neueste Version](https://github.com/roli8200/tangenta/releases/latest): Setup, MSI und .deb-Pakete
+- [Neueste Version](https://github.com/roli8200/tangenta/releases/latest): Setup, MSI, .deb-Pakete und Flatpak
