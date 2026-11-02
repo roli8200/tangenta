@@ -3767,8 +3767,19 @@ private slots:
         output::ExportOptions o = dialog.options();
         QCOMPARE(o.only, QList<NodeId>{red});
         QVERIFY(near(output::exportArea(*m_canvas, o), QRectF(20, 20, 40, 20), 0.01));
-        // Jedes Format schreiben und wieder lesen: 400 x 200 Pixel, rot
-        for (const QString& suffix : output::imageExportSuffixes()) {
+        // Jedes Format schreiben und wieder lesen: 400 x 200 Pixel, rot. Angeboten wird nur, was Qt
+        // wirklich schreiben kann; PNG und JPEG gibt es immer, TIFF mit den Plugins, die TANGENTA mitliefert.
+        const QStringList suffixes = output::imageExportSuffixes();
+        QVERIFY(suffixes.contains(QStringLiteral("png")) && suffixes.contains(QStringLiteral("jpg")));
+#ifdef Q_OS_WIN
+        QVERIFY(suffixes.contains(QStringLiteral("tif")));
+#endif
+        // Die .deb-Pakete bauen ihr TIFF-Plugin selbst und verlangen es (packaging/linux/build-deb.sh)
+        if (qEnvironmentVariable("VEK_REQUIRE_TIFF") == QLatin1String("1"))
+            QVERIFY(suffixes.contains(QStringLiteral("tif")));
+        if (!suffixes.contains(QStringLiteral("tif")))
+            qInfo("TIFF-Export nicht verfügbar: Qt kann sein TIFF-Plugin nicht laden");
+        for (const QString& suffix : suffixes) {
             const QString path = dir.filePath(QStringLiteral("rot.") + suffix);
             QString error;
             QVERIFY2(output::exportImage(*m_canvas, path, o, &error), qPrintable(suffix + QLatin1Char(' ') + error));

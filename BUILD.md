@@ -285,7 +285,7 @@ mingw32-make test
 Das richtet beim ersten Mal CMake ein, übersetzt alles nach `build\release` und lässt danach alle
 Tests laufen. Während des Übersetzens zählt Ninja mit (`[123/265] Building CXX object …`).
 
-Richtig ist am Ende:
+Richtig ist am Ende eine Zeile wie diese (ältere CMake-Versionen schreiben noch `, 0 tests failed` dazu):
 
 ```
 100% tests passed out of 2
@@ -405,7 +405,7 @@ make test
 make run
 ```
 
-Richtig ist am Ende von `make test`: `100% tests passed out of 2`.
+Richtig ist am Ende von `make test` eine Zeile wie `100% tests passed, 0 tests failed out of 2`.
 
 **Schritt 4 (freiwillig): fest installieren**
 
@@ -461,6 +461,10 @@ Bei jedem `make`-Befehl geben Sie an, wo Qt liegt:
 make test QT_DIR=~/Qt/6.10.3/gcc_64
 make run  QT_DIR=~/Qt/6.10.3/gcc_64
 ```
+
+> **TIFF fehlt beim Export:** Das TIFF-Plugin des offiziellen Qt braucht `libtiff.so.5`, und das
+> gibt es auf Debian 12 und Ubuntu 24.04 nicht mehr. TANGENTA bietet TIFF dann beim Export einfach nicht
+> an; alles andere funktioniert. Die fertigen .deb-Pakete bringen ein passendes Plugin mit.
 
 Wer das nicht jedes Mal tippen will, legt es einmal fest:
 

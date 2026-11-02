@@ -407,8 +407,20 @@ QImage renderImage(const Canvas& canvas, const ExportOptions& options, QString* 
 
 QStringList imageExportSuffixes()
 {
-    return {QStringLiteral("png"), QStringLiteral("jpg"), QStringLiteral("tif"), QStringLiteral("webp"), QStringLiteral("bmp"),
-            QStringLiteral("gif"), QStringLiteral("ico"), QStringLiteral("psd"), QStringLiteral("pcx")};
+    // Nur Formate, die Qt wirklich schreiben kann: Ein Plugin kann vorhanden sein, aber nicht laden
+    // (z.B. TIFF aus dem offiziellen Qt, das libtiff.so.5 verlangt). PSD und PCX schreibt TANGENTA selbst.
+    static const QStringList suffixes = [] {
+        QStringList result;
+        for (const char* format : {"png", "jpg", "tif", "webp", "bmp", "gif", "ico"}) {
+            QBuffer buffer;
+            buffer.open(QIODevice::WriteOnly);
+            QImageWriter writer(&buffer, format);
+            if (writer.canWrite())
+                result << QString::fromLatin1(format);
+        }
+        return result << QStringLiteral("psd") << QStringLiteral("pcx");
+    }();
+    return suffixes;
 }
 
 bool exportImage(const Canvas& canvas, const QString& path, const ExportOptions& options, QString* error)

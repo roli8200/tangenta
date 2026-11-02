@@ -65,7 +65,7 @@ cmake -S /src -B /build -G Ninja -DCMAKE_BUILD_TYPE=Release \
     -DCMAKE_PREFIX_PATH="$QT_DIR" -DCMAKE_INSTALL_PREFIX="$PREFIX" \
     -DCMAKE_INSTALL_RPATH='$ORIGIN/../lib' -DCMAKE_BUILD_WITH_INSTALL_RPATH=OFF
 cmake --build /build -j"$(nproc)"
-(cd /build && QT_QPA_PLATFORM=offscreen LD_LIBRARY_PATH="$QT_DIR/lib" ctest --output-on-failure)
+(cd /build && QT_QPA_PLATFORM=offscreen VEK_REQUIRE_TIFF=1 LD_LIBRARY_PATH="$QT_DIR/lib" ctest --output-on-failure)
 
 log "Paketinhalt"
 STAGE=/tmp/stage
