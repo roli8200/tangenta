@@ -3,6 +3,7 @@
 #include <QByteArray>
 #include <QHash>
 #include <QMap>
+#include <QNetworkReply> // vollständig: QPointer<QNetworkReply> vergleicht mit nullptr (Qt 6.8)
 #include <QPair>
 #include <QJsonArray>
 #include <QJsonObject>
@@ -16,7 +17,6 @@
 #include <functional>
 
 class QNetworkAccessManager;
-class QNetworkReply;
 class QTimer;
 
 namespace vek {

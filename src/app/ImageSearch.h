@@ -5,6 +5,7 @@
 #include <QByteArray>
 #include <QHash>
 #include <QList>
+#include <QNetworkReply> // vollständig für QPointer<QNetworkReply> (Qt 6.8)
 #include <QObject>
 #include <QPair>
 #include <QPointer>
@@ -16,7 +17,6 @@
 #include <functional>
 
 class QNetworkAccessManager;
-class QNetworkReply;
 
 namespace vek {
 
