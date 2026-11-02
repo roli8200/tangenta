@@ -50,7 +50,7 @@ const QHash<QString, QVariant>& defaults()
         {QStringLiteral("ws/edit/saveFacet"), false},
         {QStringLiteral("ws/edit/dblClickBitmap"), true},
         {QStringLiteral("ws/edit/curveDirection"), true},
-        {QStringLiteral("ws/edit/powerclipCenter"), 0},
+        {QStringLiteral("ws/edit/superclipCenter"), 0},
         // --- An Objekten ausrichten
         {QStringLiteral("ws/snap/enabled"), true},
         {QStringLiteral("ws/snap/radius"), 10},
@@ -89,7 +89,7 @@ const QHash<QString, QVariant>& defaults()
         {QStringLiteral("ws/save/textMode"), 0},
         {QStringLiteral("ws/save/askBeforeSave"), true},
         {QStringLiteral("ws/save/backupOnSave"), true},
-        // --- PowerTRACE
+        // --- SuperTrace
         {QStringLiteral("ws/trace/quick"), 0},
         {QStringLiteral("ws/trace/performance"), 50},
         {QStringLiteral("ws/trace/mergeMode"), 0},

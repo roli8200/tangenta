@@ -2,7 +2,7 @@
 
 Dialog "Optionen": links Baum, rechts Seite mit blauem Titel; unten OK / Abbrechen / Hilfe.
 Baum: Arbeitsbereich (Allgemein, Anzeige, Bearbeiten, An Objekten ausrichten, Dynamische Hilfslinien,
-Ausrichtungshilfslinien, Warnungen, VBA, Speichern, PowerTRACE, Plugins, Text[Mengentextrahmen, Schriften,
+Ausrichtungshilfslinien, Warnungen, VBA, Speichern, SuperTrace, Plugins, Text[Mengentextrahmen, Schriften,
 Rechtschreibprüfung, Blitzkorrektur], Hilfsmittelpalette[+], Anpassung[+]),
 Dokument (Allgemein, Seitengrösse, Layout, Etikett, Hintergrund, Hilfslinien[Horizontal, Vertikal,
 Hilfslinien, Voreinstellungen], Gitter, Lineale, Speichern, HTML exportieren), Global[+].
@@ -21,7 +21,7 @@ Hilfslinien, Voreinstellungen], Gitter, Lineale, Speichern, HTML exportieren), G
 - Bearbeiten: Allgemein: Winkelschrittweite 15.0 Grad; Zeichenpräzision 3 Dezimalstellen; Min.
   Extrusionsfacettengrösse 1.0 mm; Knotengrösse: Klein (Combo). [ ] Facettengrösse mit Dokument speichern,
   [ ] Doppelklicken, um Bitmaps in PHOTO-PAINT zu bearbeiten, [x] Kurvenrichtung beim Bearbeiten anzeigen.
-  PowerClip-Rahmen: Neuen PowerClip-Rahmeninhalt automatisch zentrieren: (•) Wenn Inhalt ganz ausserhalb des
+  SuperClip-Rahmen: Neuen SuperClip-Rahmeninhalt automatisch zentrieren: (•) Wenn Inhalt ganz ausserhalb des
   Rahmens liegt / ( ) Immer / ( ) Nie. Info-Hinweis.
 - An Objekten ausrichten: [x] An Objekten ausrichten aktivieren, Ausrichtungsradius 10 Pixel; [x]
   Ausrichtungs-Positionsmarkierungen anzeigen, [x] Bildschirmtipp; [ ] An Seite ausrichten. Modi (Liste mit
@@ -45,7 +45,7 @@ Hilfslinien, Voreinstellungen], Gitter, Lineale, Speichern, HTML exportieren), G
   (•) Temporärer Benutzerordner / ( ) Bestimmter Ordner [Pfad] Durchsuchen…. Text in vorheriger Version
   speichern: (•) Textdarstellung beibehalten / ( ) Text bearbeitbar lassen; [x] Vor Speichern fragen.
   [x] Sicherungskopie beim Speichern.
-- PowerTRACE: Blitzvektorisierung: Combo (Zuletzt benutzt); Leistung: Schieber Bessere Leistung … Höhere
+- SuperTrace: Blitzvektorisierung: Combo (Zuletzt benutzt); Leistung: Schieber Bessere Leistung … Höhere
   Qualität; Farben mischen: (•) Durchschnittliche Farbmischung / ( ) Mit zuerst ausgewählter Farbe mischen.
 - Plugins: Liste Plugin-Ordner mit Häkchen; Hinzufügen… / Entfernen.
 - Text > Mengentextrahmen: [x] Textrahmenverknüpfung anzeigen, [x] Textrahmen anzeigen, [ ] Mengentextrahmen

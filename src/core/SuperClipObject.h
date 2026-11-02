@@ -4,13 +4,13 @@
 
 namespace vek {
 
-// PowerClip: ein Rahmen (erstes Kind, beliebiges Objekt) zeigt Inhalte
+// SuperClip: ein Rahmen (erstes Kind, beliebiges Objekt) zeigt Inhalte
 // (weitere Kinder) nur innerhalb seiner Form. Wie eine Gruppe ohne eigene Transformation; die
 // Kinder liegen in Seitenkoordinaten. Mit "Inhalt sperren" (Vorgabe) bewegen sich die Inhalte
 // mit dem Rahmen, sonst bleiben sie stehen.
-class PowerClipObject final : public DrawObject {
+class SuperClipObject final : public DrawObject {
 public:
-    QString typeName() const override { return QStringLiteral("powerclip"); }
+    QString typeName() const override { return QStringLiteral("superclip"); }
     bool canContain(const Node& child) const override { return node_cast<DrawObject>(&child) != nullptr; }
 
     const DrawObject* frame() const;

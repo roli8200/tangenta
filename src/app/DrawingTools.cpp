@@ -7,7 +7,7 @@
 #include "RectangleObject.h"
 #include "GroupObject.h"
 #include "ImageObject.h"
-#include "PowerClipObject.h"
+#include "SuperClipObject.h"
 
 #include <QKeyEvent>
 #include <QMouseEvent>
@@ -495,7 +495,7 @@ void VirtualDeleteTool::activate()
 bool VirtualDeleteTool::prepare(const DrawObject& o, QList<SubPath>* paths, QList<QPolygonF>* others) const
 {
     // Nur Linien und Flächen aus Knoten (keine Gruppen, Bilder, Text)
-    if (node_cast<GroupObject>(&o) || node_cast<PowerClipObject>(&o) || node_cast<ImageObject>(&o) || node_cast<TextObject>(&o))
+    if (node_cast<GroupObject>(&o) || node_cast<SuperClipObject>(&o) || node_cast<ImageObject>(&o) || node_cast<TextObject>(&o))
         return false;
     *paths = CurveObject::fromPath(o.path())->subPaths();
     if (paths->isEmpty())

@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="it">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Download – TANGENTA</title>
+  <meta name="description" content="Scaricare TANGENTA: setup e MSI per Windows 10/11, .deb per Debian 12/13 e Ubuntu 24.04/26.04. Gratuito, con installazione silenziosa.">
+  <link rel="canonical" href="https://tangenta.ch/it/download.html">
+  <link rel="alternate" hreflang="de" href="https://tangenta.ch/download.html">
+  <link rel="alternate" hreflang="en" href="https://tangenta.ch/en/download.html">
+  <link rel="alternate" hreflang="fr" href="https://tangenta.ch/fr/download.html">
+  <link rel="alternate" hreflang="it" href="https://tangenta.ch/it/download.html">
+  <link rel="alternate" hreflang="x-default" href="https://tangenta.ch/download.html">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="Download – TANGENTA">
+  <meta property="og:description" content="Scaricare TANGENTA: setup e MSI per Windows 10/11, .deb per Debian 12/13 e Ubuntu 24.04/26.04. Gratuito, con installazione silenziosa.">
+  <meta property="og:image" content="https://tangenta.ch/img/01-hauptfenster.png">
+  <meta property="og:locale" content="it_CH">
+  <link rel="icon" href="../img/favicon.png">
+  <link rel="stylesheet" href="../styles.css">
+</head>
+<body>
+<header class="nav">
+  <a class="brand" href="../it/index.html"><img src="../img/tangenta.svg" alt="" width="32" height="32"><span>TANGENTA</span></a>
+  <nav class="links"><a href="../it/features.html">Funzioni</a><a href="../it/ai.html">Assistente IA</a><a href="../it/download.html" aria-current="page">Download</a><a href="https://github.com/roli8200/tangenta">GitHub</a></nav>
+  <details class="lang"><summary aria-label="Lingua">IT</summary><div class="lang-menu"><a href="../download.html" hreflang="de" lang="de"><b>DE</b> Deutsch</a><a href="../en/download.html" hreflang="en" lang="en"><b>EN</b> English</a><a href="../fr/download.html" hreflang="fr" lang="fr"><b>FR</b> Français</a><a href="../it/download.html" hreflang="it" lang="it" aria-current="true"><b>IT</b> Italiano</a></div></details>
+  <a class="btn btn-primary btn-small" href="../it/download.html">Scarica</a>
+  <details class="menu"><summary aria-label="Menu"><span></span><span></span><span></span></summary><div class="menu-panel"><a href="../it/features.html">Funzioni</a><a href="../it/ai.html">Assistente IA</a><a href="../it/download.html" aria-current="page">Download</a><a href="https://github.com/roli8200/tangenta">GitHub</a></div></details>
+</header>
+
+<main id="top">
+  <section class="hero page-hero">
+    <p class="eyebrow">Download · versione 0.85</p>
+    <h1>Scaricare<br><span class="grad">TANGENTA.</span></h1>
+    <p class="lead">Gratuito per Windows e Linux. Tutti i pacchetti si trovano su GitHub con la versione attuale.</p>
+  </section>
+
+  <section class="section">
+    <div class="downloads">
+      <article class="card">
+        <h3>Windows 10 / 11</h3>
+        <p>Setup con procedura guidata o MSI per la distribuzione in rete, entrambi installabili in modo silenzioso.</p>
+        <a class="btn btn-primary" href="https://github.com/roli8200/tangenta/releases/latest">Scarica il setup</a>
+        <pre><code>TANGENTA-0.85-x64-setup.exe /quiet
+msiexec /i TANGENTA-0.85-x64.msi /qn</code></pre>
+      </article>
+      <article class="card">
+        <h3>Debian e Ubuntu</h3>
+        <p>Pacchetti per Debian 12, Debian 13, Ubuntu 24.04 e 26.04, con il proprio Qt 6.10.</p>
+        <a class="btn btn-primary" href="https://github.com/roli8200/tangenta/releases/latest">Scarica il .deb</a>
+        <pre><code>sudo apt install ./tangenta_0.85-1~debian12_amd64.deb</code></pre>
+      </article>
+    </div>
+  </section>
+
+  <section class="section split">
+    <div class="split-text">
+      <p class="label"><b>01</b> / Windows</p>
+      <h2>Installare su Windows</h2>
+      <ol class="steps"><li>Scaricare <b>TANGENTA-0.85-x64-setup.exe</b> e avviarlo.</li><li>Accettare la licenza e scegliere <b>Install</b>. Il setup richiede i diritti di amministratore e installa per tutti gli utenti.</li><li>Aprire TANGENTA dal menu Start. I file <code>.vek</code> si aprono poi con un doppio clic.</li></ol>
+      <p class="sub small">Se Windows mostra «PC protetto da Windows», faccia clic su <b>Ulteriori informazioni</b> e poi su <b>Esegui comunque</b>. I pacchetti non sono ancora firmati digitalmente.</p>
+    </div>
+    <div class="split-text">
+      <p class="label"><b>02</b> / Linux</p>
+      <h2>Installare su Linux</h2>
+      <ol class="steps"><li>Scaricare il pacchetto per il proprio sistema:</li><li>Installarlo in un terminale: <code>sudo apt install ./tangenta_0.85-1~debian12_amd64.deb</code> (adattare il nome del file).</li><li>Aprire TANGENTA dal menu delle applicazioni o digitare <code>tangenta</code>. Rimuoverlo con <code>sudo apt remove tangenta</code>.</li></ol>
+      <pre><code>tangenta_0.85-1~debian12_amd64.deb
+tangenta_0.85-1~debian13_amd64.deb
+tangenta_0.85-1~ubuntu24.04_amd64.deb
+tangenta_0.85-1~ubuntu26.04_amd64.deb</code></pre>
+    </div>
+  </section>
+
+  <section class="section narrow">
+    <p class="label"><b>03</b> / Requisiti di sistema</p>
+    <h2>Cosa serve al suo computer.</h2>
+    <table class="table"><thead><tr><th></th><th>Minimo</th><th>Consigliato</th></tr></thead><tbody><tr><td>Sistema</td><td>Windows 10 (64 bit), Debian 12, Ubuntu 24.04</td><td>Windows 11, Debian 13, Ubuntu 26.04</td></tr><tr><td>Processore</td><td>x86-64 con 2 core</td><td>4 core o più</td></tr><tr><td>Memoria</td><td>4 GB</td><td>8 GB</td></tr><tr><td>Spazio su disco</td><td>300 MB</td><td>1 GB per immagini e salvataggi</td></tr><tr><td>Schermo</td><td>1366 × 768</td><td>Full HD o superiore</td></tr></tbody></table>
+  </section>
+
+  <section class="section narrow">
+    <p class="label"><b>04</b> / Per l’informatica</p>
+    <h2>Installazione silenziosa.</h2>
+    <p class="sub">Per GPO, Intune, SCCM o script propri. Entrambi i pacchetti si installano in <code>C:\Program Files\TANGENTA</code>; una versione più recente sostituisce quella precedente.</p>
+    <div class="table-wrap"><table class="table"><tbody><tr><td>Setup silenzioso</td><td><code>TANGENTA-0.85-x64-setup.exe /quiet</code></td></tr><tr><td>Setup con avanzamento</td><td><code>TANGENTA-0.85-x64-setup.exe /passive</code></td></tr><tr><td>Cartella e collegamento sul desktop</td><td><code>TANGENTA-0.85-x64-setup.exe /quiet InstallFolder="D:\Programmi\TANGENTA" DesktopShortcut=1</code></td></tr><tr><td>MSI silenzioso</td><td><code>msiexec /i TANGENTA-0.85-x64.msi /qn</code></td></tr><tr><td>MSI con registro</td><td><code>msiexec /i TANGENTA-0.85-x64.msi /qn /l*v C:\Temp\tangenta.log</code></td></tr><tr><td>Disinstallare</td><td><code>msiexec /x TANGENTA-0.85-x64.msi /qn</code></td></tr></tbody></table></div>
+  </section>
+
+  <section class="section narrow">
+    <p class="label"><b>05</b> / Novità della 0.85</p>
+    <h2>La prima versione pubblica.</h2>
+    <ul class="dots"><li>Assistente IA con sette fornitori, Claude anche tramite il proprio abbonamento</li><li>Ricerca di immagini in otto archivi, con risoluzione fino all’originale e visualizzatore</li><li>SuperTrace con prima/dopo, controllo dei colori e vettorizzazione rapida</li><li>Imposizione per opuscoli, segnature e più copie</li><li>Setup, MSI e pacchetti .deb per quattro sistemi Linux</li></ul>
+  </section>
+
+  <section class="section narrow">
+    <p class="label"><b>06</b> / Codice sorgente</p>
+    <h2>Preferisce compilare da sé?</h2>
+    <p class="sub">La guida alla compilazione porta passo dopo passo da un computer vuoto alla propria build, su Windows e Linux. È scritta in tedesco.</p>
+    <pre><code>git clone https://github.com/roli8200/tangenta.git
+cd tangenta
+make test &amp;&amp; make run</code></pre>
+    <p><a class="more" href="https://github.com/roli8200/tangenta/blob/main/BUILD.md">Alla guida alla compilazione →</a></p>
+  </section>
+
+  <section class="final">
+    <h2>Inizi a disegnare.</h2>
+    <p>Gratuito, per Windows e Linux, con IA.</p>
+    <div class="ctas">
+      <a class="btn btn-primary" href="../it/download.html">Scarica</a>
+      <a class="btn btn-ghost" href="https://github.com/roli8200/tangenta">Vedere su GitHub</a>
+    </div>
+  </section>
+</main>
+
+<footer class="footer">
+  <div class="footer-cols">
+    <div>
+      <a class="brand" href="../it/index.html"><img src="../img/tangenta.svg" alt="" width="28" height="28"><span>TANGENTA</span></a>
+      <p>Grafica vettoriale libera per Windows e Linux.</p>
+    </div>
+    <div><h4>Programma</h4><a href="../it/features.html">Funzioni</a><a href="../it/ai.html">Assistente IA</a><a href="../it/download.html">Download</a></div>
+    <div><h4>Progetto</h4><a href="https://github.com/roli8200/tangenta">GitHub</a><a href="https://github.com/roli8200/tangenta/blob/main/BUILD.md">Compilare da sé</a><a href="https://github.com/roli8200/tangenta/issues">Segnalare un errore</a></div>
+    <div><h4>Editore</h4><a href="https://intersoft-networks.ch">Intersoft Networks</a><a href="https://github.com/roli8200/tangenta/blob/main/LICENSE">Licenza GPLv3</a></div>
+  </div>
+  <p class="fine">© 2026 Intersoft Networks · TANGENTA è software libero sotto licenza GPLv3. Foto nella ricerca di immagini: Wikimedia Commons, licenze indicate su ogni riquadro.</p>
+</footer>
+
+</body>
+</html>

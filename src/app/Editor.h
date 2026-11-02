@@ -197,13 +197,13 @@ public:
     void applyAttributes(const DrawObject& source, NodeId target, int what);
 
     // Effekte-Menü
-    // PowerClip: Auswahl in den Rahmen frame setzen (frame darf schon ein PowerClip sein)
+    // SuperClip: Auswahl in den Rahmen frame setzen (frame darf schon ein SuperClip sein)
     NodeId placeInsideFrame(NodeId frame);
     void extractContents();          // Inhalt extrahieren
-    void createEmptyPowerClipFrame();
+    void createEmptySuperClipFrame();
     enum class ClipFit { Center, FitProportional, FillProportional, Stretch };
-    void fitPowerClipContents(ClipFit fit);
-    void setPowerClipContentsLocked(bool locked);
+    void fitSuperClipContents(ClipFit fit);
+    void setSuperClipContentsLocked(bool locked);
     void setSelectionLens(const Lens& lens);
     void setSelectionBevel(const Bevel& bevel);
     void setSelectionShadow(const DropShadow& shadow, const QString& label);
@@ -231,19 +231,19 @@ public:
     bool applyEnvelopeShape(const QPainterPath& shape, bool pageCoordinates, Envelope::Mode mode, bool addNew);
     void setSelectionEnvelopeMode(Envelope::Mode mode);
     void clearSelectionEnvelopes();
-    // Linse "Fixiert": was die Linse gerade zeigt, wird zu eigenen Objekten (PowerClip in der
-    // Form der Linse, Inhalt mit der Linse verändert); ersetzt die Linse, liefert den PowerClip
+    // Linse "Fixiert": was die Linse gerade zeigt, wird zu eigenen Objekten (SuperClip in der
+    // Form der Linse, Inhalt mit der Linse verändert); ersetzt die Linse, liefert den SuperClip
     NodeId freezeLens(NodeId lens);
     // Objekte unter stop in Zeichenreihenfolge (Masterseite, dann Seite), oberste Ebene
     QList<const DrawObject*> objectsBelow(const DrawObject& stop) const;
 
-    // PowerClip-Inhalt bearbeiten (wie "PowerClip bearbeiten"): solange er läuft,
-    // wählt und ändert man nur die Inhalte dieses PowerClips
-    NodeId editedPowerClip() const;
-    bool beginPowerClipEdit(NodeId clip);
-    void endPowerClipEdit();
-    // Inhalte des ausgewählten PowerClips auswählen (beginnt die Bearbeitung)
-    bool selectPowerClipContents();
+    // SuperClip-Inhalt bearbeiten (wie "SuperClip bearbeiten"): solange er läuft,
+    // wählt und ändert man nur die Inhalte dieses SuperClips
+    NodeId editedSuperClip() const;
+    bool beginSuperClipEdit(NodeId clip);
+    void endSuperClipEdit();
+    // Inhalte des ausgewählten SuperClips auswählen (beginnt die Bearbeitung)
+    bool selectSuperClipContents();
     // Eigenschaften von source auf target (Rechts ziehen: Füllung/Kontur hierher kopieren)
     void copyPropertiesTo(NodeId source, NodeId target, int what);
 
@@ -272,7 +272,7 @@ public:
     void setImageFrame(NodeId id, const QList<SubPath>& frame, const QString& label);
     // Ausgewähltes Bild (genau eines), sonst nullptr
     const ImageObject* selectedImage() const;
-    // Vektorisieren wie PowerTRACE: Gruppe aus Kurven je Farbe deckungsgleich über dem Bild;
+    // Vektorisieren wie SuperTrace: Gruppe aus Kurven je Farbe deckungsgleich über dem Bild;
     // liefert die Gruppe (ausgewählt) oder InvalidNodeId
     NodeId vectorizeImage(NodeId id, const trace::Result& result, bool deleteOriginal);
     // Bearbeitete Pixel übernehmen (Bildanpassung, Effekte); Grösse und Rahmen bleiben
@@ -362,7 +362,7 @@ public:
                         const QString& label);
 
 signals:
-    void powerClipEditChanged(NodeId clip);
+    void superClipEditChanged(NodeId clip);
     void documentReplaced();
     void documentChanged();
     void selectionChanged();

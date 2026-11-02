@@ -160,11 +160,11 @@ private:
     void paintLens(QPainter& p, const DrawObject& o) const;
     void paintBelow(QPainter& p, const DrawObject& stop) const;
     void paintBevel(QPainter& p, const DrawObject& o) const;
-    void paintPowerClipEdit(QPainter& p) const;
-    // Kleine Leiste unter einem ausgewählten PowerClip (Bearbeiten, Auswählen, Extrahieren,
+    void paintSuperClipEdit(QPainter& p) const;
+    // Kleine Leiste unter einem ausgewählten SuperClip (Bearbeiten, Auswählen, Extrahieren,
     // Sperren, Einpassen) bzw. "Fertig" während der Bearbeitung
     void updateClipBar();
-    class PowerClipBar* m_clipBar = nullptr;
+    class SuperClipBar* m_clipBar = nullptr;
     struct ClipBarState {
         bool show = false;
         QPoint pos;
@@ -174,7 +174,7 @@ private:
     };
     ClipBarState m_clipBarState;
 public:
-    PowerClipBar* powerClipBar() const { return m_clipBar; }
+    SuperClipBar* superClipBar() const { return m_clipBar; }
 private:
     // Drahtmodell-Linse: Objekte darunter in Kontur- und Füllfarbe der Linse
     mutable std::optional<std::pair<QColor, QColor>> m_wireLens;

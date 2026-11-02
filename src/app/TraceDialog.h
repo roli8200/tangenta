@@ -23,7 +23,7 @@ namespace vek {
 class TracePreview;
 struct TraceView;
 
-// "PowerTRACE": Vorschau (Vorher und Nachher, grosse Vorschau,
+// "SuperTrace": Vorschau (Vorher und Nachher, grosse Vorschau,
 // Drahtmodell-Überlagerung mit Transparenz; zoomen, verschieben), Bildtyp als Voreinstellung,
 // Register "Einstellungen" (Detail, Glättung, Kantenglättung, Optionen, Hintergrund) und
 // "Farben" (Anzahl, Liste, zusammenführen, bearbeiten); Rückgängig/Wiederholen der
@@ -55,7 +55,7 @@ public:
     void setPreviewMode(int mode);
 
 signals:
-    // Knopf "Optionen": Seite PowerTRACE im Dialog Optionen
+    // Knopf "Optionen": Seite SuperTrace im Dialog Optionen
     void optionsRequested();
 
 private:

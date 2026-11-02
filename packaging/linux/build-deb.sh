@@ -160,7 +160,7 @@ Priority: optional
 Homepage: https://tangenta.ch
 Description: Vektorgrafik-Editor im klassischen Stil
  TANGENTA ist ein freier Vektorgrafik-Editor (GPLv3) für Linux und Windows mit
- Seiten und Ebenen, Kurvenwerkzeugen, Text, Tabellen, Effekten, PowerTRACE
+ Seiten und Ebenen, Kurvenwerkzeugen, Text, Tabellen, Effekten, SuperTrace
  (Bitmaps nachzeichnen), Bildersuche, KI-Assistent, PDF-, SVG- und Bildexport.
  Bringt ein eigenes Qt 6 mit (unter /opt/tangenta).
 EOF

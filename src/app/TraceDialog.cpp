@@ -191,7 +191,7 @@ private:
 TraceDialog::TraceDialog(const QImage& image, trace::Preset preset, QWidget* parent)
     : QDialog(parent), m_image(image.convertToFormat(QImage::Format_ARGB32)), m_view(std::make_unique<TraceView>())
 {
-    setWindowTitle(tr("PowerTRACE"));
+    setWindowTitle(tr("SuperTrace"));
     m_timer = new QTimer(this);
     m_timer->setSingleShot(true);
     m_timer->setInterval(200);
@@ -564,7 +564,7 @@ trace::Settings TraceDialog::settings() const
     s.mergeAdjacent = m_mergeAdjacent->isChecked();
     s.groupByColor = m_groupByColor->isChecked();
     s.recolor = m_recolor;
-    // Optionen > PowerTRACE > Leistung: 0 = schnell (kleineres Rechenbild) .. 100 = genau
+    // Optionen > SuperTrace > Leistung: 0 = schnell (kleineres Rechenbild) .. 100 = genau
     s.maxSide = 400 + 12 * std::clamp(Options::instance().integer(QStringLiteral("ws/trace/performance")), 0, 100);
     return s;
 }
@@ -619,7 +619,7 @@ void TraceDialog::mergeColors(const QList<QRgb>& sources)
 {
     if (sources.size() < 2)
         return;
-    // Optionen > PowerTRACE > Farben mischen: Durchschnitt (nach Pixeln) oder zuerst gewählte
+    // Optionen > SuperTrace > Farben mischen: Durchschnitt (nach Pixeln) oder zuerst gewählte
     QColor target;
     if (Options::instance().integer(QStringLiteral("ws/trace/mergeMode")) == 1) {
         target = QColor::fromRgb(m_recolor.value(sources.first(), sources.first()));
@@ -746,7 +746,7 @@ void TraceDialog::updateColors()
 void TraceDialog::showHelp()
 {
     QMessageBox::information(
-        this, tr("PowerTRACE"),
+        this, tr("SuperTrace"),
         tr("<p><b>Bildtyp</b> wählt passende Voreinstellungen: Strichgrafik (schwarz auf weiss), Logo, "
            "Detailliertes Logo, Clipart, Bild niedriger oder hoher Qualität.</p>"
            "<p><b>Detail</b> bestimmt, wie kleine Flecken erhalten bleiben; <b>Glättung</b> glättet die Umrisse und "

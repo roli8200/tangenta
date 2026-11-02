@@ -19,7 +19,7 @@
 #include "SmartDrawingTool.h"
 #include "TableObject.h"
 #include "CloneObject.h"
-#include "PowerClipObject.h"
+#include "SuperClipObject.h"
 #include "BlendObject.h"
 #include "TableTool.h"
 #include "MeshTool.h"
@@ -28,7 +28,7 @@
 #include "ShadowTool.h"
 #include "InteractiveTools.h"
 #include "Options.h"
-#include "PowerClipBar.h"
+#include "SuperClipBar.h"
 #include "EffectTool.h"
 #include "FreehandTool.h"
 #include "Outline.h"
@@ -149,8 +149,8 @@ Canvas::Canvas(Editor& editor, QWidget* parent)
     connect(&m_editor, &Editor::guideSelectionChanged, this, refresh);
     connect(&m_editor, &Editor::selectionChanged, this, refresh);
     connect(&m_editor, &Editor::currentPageChanged, this, refresh);
-    connect(&m_editor, &Editor::powerClipEditChanged, this, refresh);
-    m_clipBar = new PowerClipBar(*this);
+    connect(&m_editor, &Editor::superClipEditChanged, this, refresh);
+    m_clipBar = new SuperClipBar(*this);
     connect(&m_editor, &Editor::documentReplaced, this, [this] {
         m_fitPending = true;
         update();
@@ -399,7 +399,7 @@ void Canvas::paintEvent(QPaintEvent*)
         p.drawRect(pageRect);
     }
 
-    paintPowerClipEdit(p);
+    paintSuperClipEdit(p);
     paintGuides(p);
     p.setRenderHint(QPainter::Antialiasing);
     tool()->paintOverlay(p);
@@ -408,12 +408,12 @@ void Canvas::paintEvent(QPaintEvent*)
 
 void Canvas::updateClipBar()
 {
-    // Ausgewählter PowerClip (Auswahlwerkzeug) bzw. der, dessen Inhalt man gerade bearbeitet
-    const NodeId editing = m_editor.editedPowerClip();
-    const PowerClipObject* clip = m_editor.document().findAs<PowerClipObject>(editing);
+    // Ausgewählter SuperClip (Auswahlwerkzeug) bzw. der, dessen Inhalt man gerade bearbeitet
+    const NodeId editing = m_editor.editedSuperClip();
+    const SuperClipObject* clip = m_editor.document().findAs<SuperClipObject>(editing);
     if (!clip && m_toolId == ToolId::Pick) {
         const QList<const DrawObject*> sel = m_editor.selectedObjects();
-        clip = sel.size() == 1 ? node_cast<PowerClipObject>(sel.first()) : nullptr;
+        clip = sel.size() == 1 ? node_cast<SuperClipObject>(sel.first()) : nullptr;
     }
     const bool show = clip != nullptr;
     const bool locked = clip && clip->contentsLocked();
@@ -440,10 +440,10 @@ void Canvas::updateClipBar()
         Qt::QueuedConnection);
 }
 
-void Canvas::paintPowerClipEdit(QPainter& p) const
+void Canvas::paintSuperClipEdit(QPainter& p) const
 {
-    // PowerClip bearbeiten: ganzer Inhalt blass (auch ausserhalb), Rahmen gestrichelt blau
-    const auto* clip = m_editor.document().findAs<PowerClipObject>(m_editor.editedPowerClip());
+    // SuperClip bearbeiten: ganzer Inhalt blass (auch ausserhalb), Rahmen gestrichelt blau
+    const auto* clip = m_editor.document().findAs<SuperClipObject>(m_editor.editedSuperClip());
     if (!clip || !clip->frame())
         return;
     p.save();
@@ -716,7 +716,7 @@ void Canvas::paintWireframe(QPainter& p, const DrawObject& o, bool simple) const
                 paintWireframe(p, *c, simple);
         return;
     }
-    if (const auto* clip = node_cast<PowerClipObject>(&o)) {
+    if (const auto* clip = node_cast<SuperClipObject>(&o)) {
         for (int i = 0; i < clip->childCount(); ++i)
             if (const auto* c = node_cast<DrawObject>(clip->child(i)))
                 paintWireframe(p, *c, simple);
@@ -779,7 +779,7 @@ void Canvas::paintObject(QPainter& p, const DrawObject& o) const
     }
     if (m_wireLens) {
         // Unter einer Drahtmodell-Linse: Flächen und Umrisse in den Farben der Linse
-        if (node_cast<GroupObject>(&o) || node_cast<PowerClipObject>(&o) || node_cast<BlendObject>(&o)) {
+        if (node_cast<GroupObject>(&o) || node_cast<SuperClipObject>(&o) || node_cast<BlendObject>(&o)) {
             paintObjectSharp(p, o);
             return;
         }
@@ -1303,7 +1303,7 @@ void Canvas::paintObjectSharp(QPainter& p, const DrawObject& o) const
             paintObject(p, *b);
         return;
     }
-    if (auto* clip = node_cast<PowerClipObject>(&o)) {
+    if (auto* clip = node_cast<SuperClipObject>(&o)) {
         // Rahmen, Inhalte nur in seiner Form, Kontur des Rahmens obenauf
         const DrawObject* frame = clip->frame();
         if (!frame)

@@ -83,7 +83,7 @@ add_library(vekcore STATIC
     src/core/CloneObject.cpp
     src/core/Effects.cpp
     src/core/BitmapFilters.cpp
-    src/core/PowerClipObject.cpp
+    src/core/SuperClipObject.cpp
     src/core/BlendObject.cpp
     src/core/SpellChecker.cpp
     src/core/ConnectorObject.cpp
@@ -136,7 +136,7 @@ if(VEK_BUILD_APP)
         src/app/EditorShaping.cpp
         src/app/EditorEffects.cpp
         src/app/EffectDockers.cpp
-        src/app/PowerClipBar.cpp
+        src/app/SuperClipBar.cpp
         src/app/DrawingTools.cpp
         src/app/OutlineDialog.cpp
         src/app/ShapingTools.cpp

@@ -1221,7 +1221,7 @@ QByteArray areaDxf(const Canvas& canvas, const ExportOptions& options, QList<std
             if (item.kind == RecordedItem::Kind::Image && !blend) {
                 QImage img = item.image.convertToFormat(QImage::Format_ARGB32);
                 if (item.clip) {
-                    // Beschneidung (PowerClip) in den Alphakanal
+                    // Beschneidung (SuperClip) in den Alphakanal
                     QImage mask(img.size(), QImage::Format_ARGB32_Premultiplied);
                     mask.fill(Qt::transparent);
                     QPainter mp(&mask);

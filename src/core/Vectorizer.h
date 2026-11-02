@@ -12,7 +12,7 @@
 
 namespace vek::trace {
 
-// Bitmap vektorisieren wie PowerTRACE (Umrissvektorisierung):
+// Bitmap vektorisieren wie SuperTrace (Umrissvektorisierung):
 //  1. Farben auf höchstens `colors` reduzieren (k-Means), fast gleiche Farben zusammenlegen
 //     und Kantenglättungs-Pixel (Mischfarben ohne eigene Fläche) der Nachbarfarbe zuschlagen,
 //  2. Flecken unter einer Mindestgrösse dem Nachbarn zuschlagen (Detail),

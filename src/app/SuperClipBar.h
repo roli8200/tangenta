@@ -8,14 +8,14 @@ namespace vek {
 
 class Canvas;
 
-// Schwebende Leiste unter einem ausgewählten PowerClip: PowerClip bearbeiten,
+// Schwebende Leiste unter einem ausgewählten SuperClip: SuperClip bearbeiten,
 // Inhalt auswählen, Inhalt extrahieren, Inhalt sperren, Inhalt einpassen. Während der
 // Bearbeitung zeigt sie nur "Fertig".
-class PowerClipBar final : public QFrame {
+class SuperClipBar final : public QFrame {
     Q_OBJECT
 
 public:
-    explicit PowerClipBar(Canvas& canvas);
+    explicit SuperClipBar(Canvas& canvas);
     // Knöpfe an den Zustand anpassen (Bearbeitung läuft, Inhalt gesperrt)
     void sync(bool editing, bool locked);
 

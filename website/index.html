@@ -4,26 +4,28 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>TANGENTA – freie Vektorgrafik mit KI für Windows und Linux</title>
-  <meta name="description" content="TANGENTA: Vektorgrafik, frei unter der GPL, für Windows und Linux. Mit KI-Assistent, der wirklich zeichnet, PowerTRACE und Bildersuche.">
-  <meta property="og:title" content="TANGENTA – Zeichnen wie gewohnt. Frei wie nie.">
-  <meta property="og:description" content="Freie Vektorgrafik für Windows und Linux, mit KI-Assistent, PowerTRACE und Bildersuche.">
-  <meta property="og:image" content="img/01-hauptfenster.png">
+  <meta name="description" content="TANGENTA: Vektorgrafik, frei unter der GPL, für Windows und Linux. Mit KI-Assistent, der wirklich zeichnet, SuperTrace und Bildersuche.">
+  <link rel="canonical" href="https://tangenta.ch/">
+  <link rel="alternate" hreflang="de" href="https://tangenta.ch/">
+  <link rel="alternate" hreflang="en" href="https://tangenta.ch/en/">
+  <link rel="alternate" hreflang="fr" href="https://tangenta.ch/fr/">
+  <link rel="alternate" hreflang="it" href="https://tangenta.ch/it/">
+  <link rel="alternate" hreflang="x-default" href="https://tangenta.ch/">
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="TANGENTA – freie Vektorgrafik mit KI für Windows und Linux">
+  <meta property="og:description" content="TANGENTA: Vektorgrafik, frei unter der GPL, für Windows und Linux. Mit KI-Assistent, der wirklich zeichnet, SuperTrace und Bildersuche.">
+  <meta property="og:image" content="https://tangenta.ch/img/01-hauptfenster.png">
+  <meta property="og:locale" content="de_CH">
   <link rel="icon" href="img/favicon.png">
   <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-
 <header class="nav">
-  <a class="brand" href="#top"><img src="img/tangenta.svg" alt="" width="32" height="32"><span>TANGENTA</span></a>
-  <nav>
-    <a href="#vertraut">Vertraut</a>
-    <a href="#ki">KI</a>
-    <a href="#werkzeuge">Werkzeuge</a>
-    <a href="#frei">Frei</a>
-    <a href="#faq">Fragen</a>
-    <a href="https://github.com/roli8200/tangenta">GitHub</a>
-  </nav>
-  <a class="btn btn-primary btn-small" href="#download">Herunterladen</a>
+  <a class="brand" href="index.html"><img src="img/tangenta.svg" alt="" width="32" height="32"><span>TANGENTA</span></a>
+  <nav class="links"><a href="features.html">Funktionen</a><a href="ai.html">KI-Assistent</a><a href="download.html">Download</a><a href="https://github.com/roli8200/tangenta">GitHub</a></nav>
+  <details class="lang"><summary aria-label="Sprache">DE</summary><div class="lang-menu"><a href="index.html" hreflang="de" lang="de" aria-current="true"><b>DE</b> Deutsch</a><a href="en/index.html" hreflang="en" lang="en"><b>EN</b> English</a><a href="fr/index.html" hreflang="fr" lang="fr"><b>FR</b> Français</a><a href="it/index.html" hreflang="it" lang="it"><b>IT</b> Italiano</a></div></details>
+  <a class="btn btn-primary btn-small" href="download.html">Herunterladen</a>
+  <details class="menu"><summary aria-label="Menü"><span></span><span></span><span></span></summary><div class="menu-panel"><a href="features.html">Funktionen</a><a href="ai.html">KI-Assistent</a><a href="download.html">Download</a><a href="https://github.com/roli8200/tangenta">GitHub</a></div></details>
 </header>
 
 <main id="top">
@@ -31,10 +33,9 @@
   <section class="hero">
     <p class="eyebrow">Freie Vektorgrafik für Windows und Linux</p>
     <h1>Zeichnen wie gewohnt.<br><span class="grad">Frei wie nie.</span></h1>
-    <p class="lead">TANGENTA bringt die Werkzeuge, die Sie kennen, als freie Software.
-      Dazu kommt ein KI-Assistent, der nicht nur redet, sondern zeichnet.</p>
+    <p class="lead">TANGENTA bringt die Werkzeuge, die Sie kennen, als freie Software. Dazu kommt ein KI-Assistent, der nicht nur redet, sondern zeichnet.</p>
     <div class="ctas">
-      <a class="btn btn-primary" href="#download">Herunterladen</a>
+      <a class="btn btn-primary" href="download.html">Herunterladen</a>
       <a class="btn btn-ghost" href="https://github.com/roli8200/tangenta">Quellcode auf GitHub</a>
     </div>
     <p class="platforms">Windows 10 / 11 · Debian 12 / 13 · Ubuntu 24.04 / 26.04</p>
@@ -45,103 +46,79 @@
     </figure>
   </section>
 
-  <div class="ticker" aria-hidden="true">
-    <div class="ticker-track">
-      <span>Bézier</span><span>PowerTRACE</span><span>Überblendung</span><span>Extrusion</span><span>Hülle</span><span>PowerClip</span>
-      <span>Text an Pfad</span><span>Maschenfüllung</span><span>Ausschiessen</span><span>Kamera-Rohdaten</span><span>KI-Assistent</span>
-      <span>Bildersuche</span><span>PDF · SVG · EPS · DXF</span><span>JavaScript</span>
-      <span>Bézier</span><span>PowerTRACE</span><span>Überblendung</span><span>Extrusion</span><span>Hülle</span><span>PowerClip</span>
-      <span>Text an Pfad</span><span>Maschenfüllung</span><span>Ausschiessen</span><span>Kamera-Rohdaten</span><span>KI-Assistent</span>
-      <span>Bildersuche</span><span>PDF · SVG · EPS · DXF</span><span>JavaScript</span>
-    </div>
-  </div>
+  <div class="ticker" aria-hidden="true"><div class="ticker-track"><span>Bézier</span><span>SuperTrace</span><span>Überblendung</span><span>Extrusion</span><span>Hülle</span><span>SuperClip</span><span>Text an Pfad</span><span>Maschenfüllung</span><span>Ausschiessen</span><span>Kamera-Rohdaten</span><span>KI-Assistent</span><span>Bildersuche</span><span>PDF · SVG · EPS · DXF</span><span>JavaScript</span><span>Bézier</span><span>SuperTrace</span><span>Überblendung</span><span>Extrusion</span><span>Hülle</span><span>SuperClip</span><span>Text an Pfad</span><span>Maschenfüllung</span><span>Ausschiessen</span><span>Kamera-Rohdaten</span><span>KI-Assistent</span><span>Bildersuche</span><span>PDF · SVG · EPS · DXF</span><span>JavaScript</span></div></div>
 
-  <section id="vertraut" class="section">
+  <section class="section stats"><div><b>0 CHF</b><span>Lizenzkosten, auch in der Firma</span></div><div><b>7</b><span>KI-Anbieter zur Wahl</span></div><div><b>8</b><span>Bildarchive in einer Suche</span></div><div><b>160+</b><span>automatische Tests bei jedem Bau</span></div></section>
+
+  <section class="section">
     <p class="label"><b>01</b> / Vertraut</p>
     <h2>Ihre Hände kennen es schon.</h2>
-    <p class="sub">Menüs, Kürzel, Andockfenster und Werkzeuge sitzen dort, wo Sie sie aus Jahren mit
-      klassischer Vektorgrafik suchen. Kein Umlernen, keine Einarbeitungswoche.</p>
-    <div class="keys">
-      <span><kbd>F6</kbd> Rechteck</span><span><kbd>F7</kbd> Ellipse</span><span><kbd>Y</kbd> Polygon</span>
-      <span><kbd>F10</kbd> Form</span><span><kbd>Strg</kbd>+<kbd>Q</kbd> In Kurven</span><span><kbd>G</kbd> Interaktive Füllung</span>
-      <span><kbd>Strg</kbd>+<kbd>L</kbd> Kombinieren</span><span><kbd>Strg</kbd>+<kbd>J</kbd> Optionen</span>
-    </div>
-    <div class="cols3">
-      <div><h3>Präzise</h3><p>Masse in mm, Zahlenfelder rechnen (<code>297/2</code>), Einrasten an Knoten, Hilfslinien und Seite.</p></div>
-      <div><h3>Schnell</h3><p>Ein natives Programm in C++ und Qt 6. Es startet in Sekunden und reagiert ohne Verzögerung, auch bei grossen Dokumenten.</p></div>
-      <div><h3>Offen</h3><p>PDF, SVG, EPS, DXF und alle gängigen Bildformate rein und raus. Skripte in JavaScript.</p></div>
-    </div>
+    <p class="sub">Menüs, Kürzel, Andockfenster und Werkzeuge sitzen dort, wo Sie sie aus Jahren mit klassischer Vektorgrafik suchen. Kein Umlernen, keine Einarbeitungswoche.</p>
+    <div class="keys"><span><kbd>F6</kbd> Rechteck</span><span><kbd>F7</kbd> Ellipse</span><span><kbd>Y</kbd> Polygon</span><span><kbd>F10</kbd> Form</span><span><kbd>Strg</kbd>+<kbd>Q</kbd> In Kurven</span><span><kbd>G</kbd> Interaktive Füllung</span><span><kbd>Strg</kbd>+<kbd>L</kbd> Kombinieren</span><span><kbd>Strg</kbd>+<kbd>J</kbd> Optionen</span></div>
+    <div class="cols3"><div><h3>Präzise</h3><p>Masse in mm, Zahlenfelder rechnen (<code>297/2</code>), Einrasten an Knoten, Hilfslinien und Seite.</p></div><div><h3>Schnell</h3><p>Ein natives Programm in C++ und Qt 6. Es startet in Sekunden und reagiert ohne Verzögerung, auch bei grossen Dokumenten.</p></div><div><h3>Offen</h3><p>PDF, SVG, EPS, DXF und alle gängigen Bildformate rein und raus. Skripte in JavaScript.</p></div></div>
   </section>
 
-  <section id="ki" class="section split">
+  <section class="section split">
     <div class="split-text">
       <p class="label"><b>02</b> / KI-Assistent</p>
       <h2>Sagen Sie es.<br>Er zeichnet es.</h2>
-      <p class="sub">Der Assistent arbeitet direkt in Ihrem Dokument. Auf dem Bild bekam er einen einzigen
-        Satz: <em>„Setz drei leuchtende Sterne in den Himmel und einen dezenten Mond neben den Titel.“</em>
-        Er hat das Plakat angesehen, gezeichnet, die Sichel mit „Hinten minus vorn“ ausgeschnitten und sein
-        Ergebnis selbst geprüft.</p>
-      <ul class="ticks">
-        <li>Zeichnet echte, bearbeitbare Vektoren</li>
-        <li>Bedient TANGENTA: Gruppieren, Ausrichten, Formen, Nachzeichnen, Export</li>
-        <li>Schaut sich die Seite an und korrigiert sich</li>
-        <li>Sucht Bilder und im Web, mit Urheber und Lizenz</li>
-        <li>Ein Strg+Z nimmt die ganze Antwort zurück</li>
-      </ul>
+      <p class="sub">Der Assistent arbeitet direkt in Ihrem Dokument. Auf dem Bild bekam er einen einzigen Satz: <em>„Setz drei kleine leuchtende Sterne in den Himmel und einen dezenten Mond links oben neben den Titel.“</em> Er hat das Plakat angesehen, gezeichnet und sein Ergebnis selbst geprüft.</p>
+      <ul class="ticks"><li>Zeichnet echte, bearbeitbare Vektoren</li><li>Bedient TANGENTA: Gruppieren, Ausrichten, Formen, Nachzeichnen, Export</li><li>Schaut sich die Seite an und korrigiert sich</li><li>Sucht Bilder und im Web, mit Urheber und Lizenz</li><li>Ein Strg+Z nimmt die ganze Antwort zurück</li></ul>
       <div class="chips"><span>Claude über Ihr Abo</span><span>Claude API</span><span>OpenAI</span><span>Gemini</span><span>DeepSeek</span><span>Ollama</span><span>LiteLLM</span></div>
+      <p><a class="more" href="ai.html">Alles zum KI-Assistenten →</a></p>
     </div>
     <figure class="shot"><img src="img/02-ki-assistent.png" alt="Der KI-Assistent hat Sterne und Mond ins Plakat gezeichnet" loading="lazy"></figure>
   </section>
 
-  <section id="werkzeuge" class="section">
+  <section class="section">
     <p class="label"><b>03</b> / Werkzeuge</p>
     <h2>Alles, was eine Grafik braucht.</h2>
-    <div class="bento">
-      <article class="card wide"><span class="num">01</span><h3>Zeichnen</h3><p>Rechteck, Ellipse und Bogen, Polygon und Stern, Spirale, Freihand, Bézier, künstlerische Medien, perfekte Formen, Tabellen, Bemassung, Verbindungen.</p></article>
-      <article class="card"><span class="num">02</span><h3>Formen</h3><p>Knoten aller Art, Messer, Radierer, Verschmelzen, Schnittmenge, Zuschneiden.</p></article>
-      <article class="card"><span class="num">03</span><h3>Füllungen</h3><p>Verlauf, Muster, Textur, Maschenfüllung und die interaktive Füllung direkt am Objekt.</p></article>
-      <article class="card"><span class="num">04</span><h3>Effekte</h3><p>Überblendung, Kontur, Extrusion, Hülle, Perspektive, Schatten, Linse, Abschrägung, PowerClip.</p></article>
-      <article class="card"><span class="num">05</span><h3>Text</h3><p>Grafik- und Mengentext, verknüpfte Rahmen, Text an Pfad, Silbentrennung, Rechtschreibprüfung.</p></article>
-      <article class="card"><span class="num">06</span><h3>Bilder</h3><p>Bis zu Kamera-Rohdaten (NEF, CR3, DNG …), Tonkurve, Farbbalance, Filter.</p></article>
-      <article class="card wide"><span class="num">07</span><h3>Dokument und Druck</h3><p>Seiten mit Masterseite, Ebenen, Symbole und Klone, Rückgängig ohne Grenze, Druckvorschau und Ausschiessen für Broschüren und Nutzen.</p></article>
-      <article class="card accent full"><span class="num">08</span><h3>Automatisieren</h3><p>Skripte in JavaScript mit Editor – oder einfach den KI-Assistenten fragen.</p><a href="#download">Jetzt ausprobieren →</a></article>
+    <div class="bento"><article class="card wide"><span class="num">01</span><h3>Zeichnen</h3><p>Rechteck, Ellipse und Bogen, Polygon und Stern, Spirale, Freihand, Bézier, künstlerische Medien, perfekte Formen, Tabellen, Bemassung, Verbindungen.</p></article><article class="card "><span class="num">02</span><h3>Formen</h3><p>Knoten aller Art, Messer, Radierer, Verschmelzen, Schnittmenge, Zuschneiden.</p></article><article class="card "><span class="num">03</span><h3>Füllungen</h3><p>Verlauf, Muster, Textur, Maschenfüllung und die interaktive Füllung direkt am Objekt.</p></article><article class="card "><span class="num">04</span><h3>Effekte</h3><p>Überblendung, Kontur, Extrusion, Hülle, Perspektive, Schatten, Linse, Abschrägung, SuperClip.</p></article><article class="card "><span class="num">05</span><h3>Text</h3><p>Grafik- und Mengentext, verknüpfte Rahmen, Text an Pfad, Silbentrennung, Rechtschreibprüfung.</p></article><article class="card "><span class="num">06</span><h3>Bilder</h3><p>Bis zu Kamera-Rohdaten (NEF, CR3, DNG …), Tonkurve, Farbbalance, Filter.</p></article><article class="card wide"><span class="num">07</span><h3>Dokument und Druck</h3><p>Seiten mit Masterseite, Ebenen, Symbole und Klone, Rückgängig ohne Grenze, Druckvorschau und Ausschiessen für Broschüren und Nutzen.</p></article>
+      <article class="card accent full"><span class="num">08</span><h3>Automatisieren</h3><p>Skripte in JavaScript mit Editor – oder einfach den KI-Assistenten fragen.</p><a href="features.html">Alle Funktionen ansehen →</a></article>
     </div>
   </section>
 
   <section class="section split reverse">
     <div class="split-text">
-      <p class="label"><b>04</b> / PowerTRACE</p>
+      <p class="label"><b>04</b> / SuperTrace</p>
       <h2>Aus Pixeln<br>werden Kurven.</h2>
-      <p class="sub">Logos, Strichgrafiken, Cliparts und Fotos nachzeichnen. Vorher und Nachher sehen Sie
-        nebeneinander. Detail, Glättung, Farben und Hintergrund regeln Sie live; die Blitzvektorisierung
-        erledigt das Ganze mit einem Klick.</p>
+      <p class="sub">Logos, Strichgrafiken, Cliparts und Fotos nachzeichnen. Vorher und Nachher sehen Sie nebeneinander. Detail, Glättung, Farben und Hintergrund regeln Sie live; die Blitzvektorisierung erledigt das Ganze mit einem Klick.</p>
     </div>
-    <figure class="shot"><img src="img/03-powertrace.png" alt="PowerTRACE zeigt das Plakat als Bitmap und als Vektoren" loading="lazy"></figure>
+    <figure class="shot"><img src="img/03-supertrace.png" alt="SuperTrace zeigt das Plakat als Bitmap und als Vektoren" loading="lazy"></figure>
   </section>
 
   <section class="section split">
     <div class="split-text">
       <p class="label"><b>05</b> / Bildersuche</p>
       <h2>Millionen Bilder.<br>Ein Suchfeld.</h2>
-      <p class="sub">Wikimedia Commons, Openverse und Icons8 ohne Schlüssel; dazu Flaticon, Magnific,
-        Pixabay, Unsplash und Pexels mit eigenem Konto. Lizenz auf jeder Kachel, Auflösung bis zum Original,
-        Nachweis im Objektnamen.</p>
+      <p class="sub">Wikimedia Commons, Openverse und Icons8 ohne Schlüssel; dazu Flaticon, Magnific, Pixabay, Unsplash und Pexels mit eigenem Konto. Lizenz auf jeder Kachel, Auflösung bis zum Original, Nachweis im Objektnamen.</p>
     </div>
     <figure class="shot"><img src="img/04-bildersuche.png" alt="Bildersuche mit Fotos vom Matterhorn aus Wikimedia Commons" loading="lazy"></figure>
   </section>
 
-  <section id="frei" class="section">
-    <p class="label"><b>06</b> / Frei</p>
-    <h2>Hören Sie auf zu mieten.</h2>
-    <div class="cols3 lettered">
-      <div><span class="letter">A</span><h3>Keine Lizenzkosten</h3><p>Installieren Sie TANGENTA auf so vielen Rechnern, wie Sie wollen. Auch in der Firma, auch im Unterricht.</p></div>
-      <div><span class="letter">B</span><h3>Ihre Dateien</h3><p>Kein Konto, keine Cloud-Pflicht. Ihre Zeichnungen liegen bei Ihnen, und offene Formate halten sie lesbar.</p></div>
-      <div><span class="letter">C</span><h3>Offener Quellcode</h3><p>GPLv3 auf GitHub. Jede Funktion hat einen automatischen Test, Beiträge sind willkommen.</p></div>
+  <section class="section split reverse">
+    <div class="split-text">
+      <p class="label"><b>06</b> / Druck</p>
+      <h2>Druckfertig<br>ohne Umweg.</h2>
+      <p class="sub">Ausschiessen für Broschüren, Falzbogen und Nutzen mit Schnitt- und Falzmarken, Anschnitt und Vorschau jedes Bogens. Als PDF mit Voreinstellungen für Druckerei und Web, oder direkt auf den Drucker.</p>
     </div>
+    <figure class="shot"><img src="img/07-ausschiessen.png" alt="Ausschiessen: das Plakat auf einem A3-Bogen mit Schnittmarken" loading="lazy"></figure>
+  </section>
+
+  <section class="section">
+    <p class="label"><b>07</b> / Frei</p>
+    <h2>Hören Sie auf zu mieten.</h2>
+    <div class="cols3 lettered"><div><span class="letter">A</span><h3>Keine Lizenzkosten</h3><p>Installieren Sie TANGENTA auf so vielen Rechnern, wie Sie wollen. Auch in der Firma, auch im Unterricht.</p></div><div><span class="letter">B</span><h3>Ihre Dateien</h3><p>Kein Konto, keine Cloud-Pflicht. Ihre Zeichnungen liegen bei Ihnen, und offene Formate halten sie lesbar.</p></div><div><span class="letter">C</span><h3>Offener Quellcode</h3><p>GPLv3 auf GitHub. Jede Funktion hat einen automatischen Test, Beiträge sind willkommen.</p></div></div>
+  </section>
+
+  <section class="section">
+    <p class="label"><b>08</b> / Für wen</p>
+    <h2>Gemacht für die Arbeit.</h2>
+    <div class="cols4"><div class="card"><h3>Grafik und Werbung</h3><p>Plakate, Flyer, Logos und Schilder mit den Werkzeugen, die Sie seit Jahren nutzen.</p></div><div class="card"><h3>Firmen und Verwaltung</h3><p>Still installieren per GPO oder Intune, ohne Lizenzserver und ohne Zählerei.</p></div><div class="card"><h3>Schulen</h3><p>Freie Software für jeden Schulrechner und für zu Hause, ohne Lizenzfragen.</p></div><div class="card"><h3>Vereine und Private</h3><p>Einladungen, Etiketten und Vereinslogos, kostenlos und ohne Abo.</p></div></div>
   </section>
 
   <section id="download" class="section">
-    <p class="label"><b>07</b> / Download</p>
+    <p class="label"><b>09</b> / Download</p>
     <h2>Loslegen.</h2>
     <div class="downloads">
       <article class="card">
@@ -158,28 +135,20 @@ msiexec /i TANGENTA-0.85-x64.msi /qn</code></pre>
         <pre><code>sudo apt install ./tangenta_0.85-1~debian12_amd64.deb</code></pre>
       </article>
     </div>
+    <p class="center"><a class="more" href="download.html">Alle Pakete, Systemanforderungen und stille Installation →</a></p>
   </section>
 
   <section id="faq" class="section narrow">
-    <p class="label"><b>08</b> / Fragen</p>
+    <p class="label"><b>10</b> / Fragen</p>
     <h2>Gut zu wissen.</h2>
-    <details><summary>Öffnet TANGENTA .cdr-Dateien?</summary>
-      <p>Noch nicht direkt. Speichern Sie als PDF, SVG oder EPS; diese Formate liest TANGENTA als bearbeitbare Kurven ein.</p></details>
-    <details><summary>Was kostet der KI-Assistent?</summary>
-      <p>TANGENTA selbst nichts. Mit einem Claude-Abo (Pro oder Max) und installiertem Claude Code läuft er über Ihr Abo, ohne Zusatzkosten. Alternativ nutzen Sie einen eigenen API-Schlüssel (Claude, OpenAI, Gemini, DeepSeek) oder einen eigenen Ollama-Server.</p></details>
-    <details><summary>Muss der Assistent mein Dokument ändern dürfen?</summary>
-      <p>Nein. Ohne Häkchen bei „darf ändern“ liest er nur. Und was er in einer Antwort ändert, nimmt ein einziges Strg+Z zurück.</p></details>
-    <details><summary>Läuft TANGENTA auf dem Mac?</summary>
-      <p>Heute für Windows und Linux. Qt macht eine Mac-Fassung möglich; sie steht auf der Wunschliste.</p></details>
-    <details><summary>Darf ich TANGENTA in der Firma einsetzen?</summary>
-      <p>Ja, ohne Einschränkung. Die GPLv3 regelt nur die Weitergabe veränderter Fassungen, nicht die Nutzung.</p></details>
+    <details><summary>Öffnet TANGENTA .cdr-Dateien?</summary><p>Noch nicht direkt. Speichern Sie als PDF, SVG oder EPS; diese Formate liest TANGENTA als bearbeitbare Kurven ein.</p></details><details><summary>Was kostet der KI-Assistent?</summary><p>TANGENTA selbst nichts. Mit einem Claude-Abo (Pro oder Max) und installiertem Claude Code läuft er über Ihr Abo, ohne Zusatzkosten. Alternativ nutzen Sie einen eigenen API-Schlüssel (Claude, OpenAI, Gemini, DeepSeek) oder einen eigenen Ollama-Server.</p></details><details><summary>Muss der Assistent mein Dokument ändern dürfen?</summary><p>Nein. Ohne Häkchen bei „darf ändern“ liest er nur. Und was er in einer Antwort ändert, nimmt ein einziges Strg+Z zurück.</p></details><details><summary>In welcher Sprache ist die Oberfläche?</summary><p>Heute auf Deutsch. Die Rechtschreibprüfung kennt Deutsch (Schweiz und Deutschland), Englisch und Französisch.</p></details><details><summary>Läuft TANGENTA auf dem Mac?</summary><p>Heute für Windows und Linux. Qt macht eine Mac-Fassung möglich; sie steht auf der Wunschliste.</p></details><details><summary>Darf ich TANGENTA in der Firma einsetzen?</summary><p>Ja, ohne Einschränkung. Die GPLv3 regelt nur die Weitergabe veränderter Fassungen, nicht die Nutzung.</p></details>
   </section>
 
   <section class="final">
     <h2>Zeichnen Sie los.</h2>
     <p>Kostenlos, für Windows und Linux, mit KI.</p>
     <div class="ctas">
-      <a class="btn btn-primary" href="#download">Herunterladen</a>
+      <a class="btn btn-primary" href="download.html">Herunterladen</a>
       <a class="btn btn-ghost" href="https://github.com/roli8200/tangenta">Auf GitHub ansehen</a>
     </div>
   </section>
@@ -189,10 +158,10 @@ msiexec /i TANGENTA-0.85-x64.msi /qn</code></pre>
 <footer class="footer">
   <div class="footer-cols">
     <div>
-      <a class="brand" href="#top"><img src="img/tangenta.svg" alt="" width="28" height="28"><span>TANGENTA</span></a>
+      <a class="brand" href="index.html"><img src="img/tangenta.svg" alt="" width="28" height="28"><span>TANGENTA</span></a>
       <p>Freie Vektorgrafik für Windows und Linux.</p>
     </div>
-    <div><h4>Programm</h4><a href="#vertraut">Funktionen</a><a href="#ki">KI-Assistent</a><a href="#download">Download</a></div>
+    <div><h4>Programm</h4><a href="features.html">Funktionen</a><a href="ai.html">KI-Assistent</a><a href="download.html">Download</a></div>
     <div><h4>Projekt</h4><a href="https://github.com/roli8200/tangenta">GitHub</a><a href="https://github.com/roli8200/tangenta/blob/main/BUILD.md">Selbst bauen</a><a href="https://github.com/roli8200/tangenta/issues">Fehler melden</a></div>
     <div><h4>Herausgeber</h4><a href="https://intersoft-networks.ch">Intersoft Networks</a><a href="https://github.com/roli8200/tangenta/blob/main/LICENSE">Lizenz GPLv3</a></div>
   </div>

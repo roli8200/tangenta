@@ -199,7 +199,7 @@ QList<ai::Tool> AiTools::tools(bool mayWrite) const
                 {QStringLiteral("url")}),
          true},
         {QStringLiteral("nachzeichnen"),
-         QStringLiteral("Ein Bitmap in Vektoren umwandeln (PowerTRACE). art: strichgrafik, logo, logo_detailliert, clipart, "
+         QStringLiteral("Ein Bitmap in Vektoren umwandeln (SuperTrace). art: strichgrafik, logo, logo_detailliert, clipart, "
                         "foto_gering, foto_hoch."),
          schema({{QStringLiteral("id"), prop(QStringLiteral("integer"), QStringLiteral("Bild-Objekt; leer = ausgewähltes Bild"))},
                  {QStringLiteral("art"), prop(QStringLiteral("string"), QStringLiteral("Bildtyp, Vorgabe logo"))},

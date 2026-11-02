@@ -1,4 +1,4 @@
-// Editor-Befehle für Hülle, fixierte Linse und PowerClip-Bearbeitung
+// Editor-Befehle für Hülle, fixierte Linse und SuperClip-Bearbeitung
 #include "Editor.h"
 
 #include "BlendObject.h"
@@ -7,7 +7,7 @@
 #include "ImageObject.h"
 #include "PathOps.h"
 #include "PerfectShape.h"
-#include "PowerClipObject.h"
+#include "SuperClipObject.h"
 #include "RectangleObject.h"
 #include "Serialization.h"
 #include "Transaction.h"
@@ -180,10 +180,10 @@ std::unique_ptr<DrawObject> frozenCopy(const DrawObject& o, const Freeze& fz)
         const std::shared_ptr<const DrawObject> shown = clone->rendered();
         return shown ? frozenCopy(*shown, fz) : nullptr;
     }
-    if (const auto* clip = node_cast<PowerClipObject>(&o)) {
+    if (const auto* clip = node_cast<SuperClipObject>(&o)) {
         if (!clip->frame())
             return nullptr;
-        auto out = std::make_unique<PowerClipObject>();
+        auto out = std::make_unique<SuperClipObject>();
         out->setContentsLocked(clip->contentsLocked());
         std::unique_ptr<DrawObject> frame = frozenCopy(*clip->frame(), fz);
         if (!frame)
@@ -288,7 +288,7 @@ NodeId Editor::freezeLens(NodeId lensId)
         fz.warp = [lens, move, c, radius](const QPointF& p) { return lens.fishEye(move.map(p), c, radius, true); };
     }
 
-    auto clip = std::make_unique<PowerClipObject>();
+    auto clip = std::make_unique<SuperClipObject>();
     clip->setName(lensObj->name());
     // Rahmen: die Linsenform ohne Linse; Farblinsen färben auch das (weisse) Papier
     std::unique_ptr<DrawObject> frame = copyOf(*lensObj);
@@ -432,18 +432,18 @@ void Editor::setTextDropCap(int lines)
         tx.commit();
 }
 
-NodeId Editor::editedPowerClip() const
+NodeId Editor::editedSuperClip() const
 {
-    return m_doc->findAs<PowerClipObject>(m_clipEdit) ? m_clipEdit : InvalidNodeId;
+    return m_doc->findAs<SuperClipObject>(m_clipEdit) ? m_clipEdit : InvalidNodeId;
 }
 
-bool Editor::beginPowerClipEdit(NodeId clip)
+bool Editor::beginSuperClipEdit(NodeId clip)
 {
-    const auto* c = m_doc->findAs<PowerClipObject>(clip);
+    const auto* c = m_doc->findAs<SuperClipObject>(clip);
     if (!c || isLocked(clip))
         return false;
     m_clipEdit = clip;
-    emit powerClipEditChanged(clip);
+    emit superClipEditChanged(clip);
     QList<NodeId> ids;
     for (const DrawObject* o : c->contents())
         ids << o->id();
@@ -451,18 +451,18 @@ bool Editor::beginPowerClipEdit(NodeId clip)
     return true;
 }
 
-void Editor::endPowerClipEdit()
+void Editor::endSuperClipEdit()
 {
-    const NodeId clip = editedPowerClip();
+    const NodeId clip = editedSuperClip();
     m_clipEdit = InvalidNodeId;
-    emit powerClipEditChanged(InvalidNodeId);
+    emit superClipEditChanged(InvalidNodeId);
     setSelection(clip != InvalidNodeId ? QList<NodeId>{clip} : QList<NodeId>());
 }
 
-bool Editor::selectPowerClipContents()
+bool Editor::selectSuperClipContents()
 {
     const QList<NodeId> ids = topLevelSelection();
-    return ids.size() == 1 && beginPowerClipEdit(ids.first());
+    return ids.size() == 1 && beginSuperClipEdit(ids.first());
 }
 
 } // namespace vek

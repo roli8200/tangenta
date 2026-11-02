@@ -8,7 +8,7 @@
 #include <QTextDocument>
 #include <QTextCursor>
 #include "CloneObject.h"
-#include "PowerClipObject.h"
+#include "SuperClipObject.h"
 #include "BlendObject.h"
 #include "Canvas.h"
 #include <functional>
@@ -103,9 +103,9 @@ void Editor::onDocumentChanged()
     }
     const bool selectionChangedNow = kept != m_selection;
     m_selection = kept;
-    if (m_clipEdit != InvalidNodeId && !m_doc->findAs<PowerClipObject>(m_clipEdit)) {
+    if (m_clipEdit != InvalidNodeId && !m_doc->findAs<SuperClipObject>(m_clipEdit)) {
         m_clipEdit = InvalidNodeId;
-        emit powerClipEditChanged(InvalidNodeId);
+        emit superClipEditChanged(InvalidNodeId);
     }
     emit documentChanged();
     if (selectionChangedNow)
@@ -277,8 +277,8 @@ void Editor::selectAll()
 QList<const DrawObject*> Editor::pickableObjects() const
 {
     QList<const DrawObject*> result;
-    // PowerClip bearbeiten: nur seine Inhalte
-    if (const auto* clip = m_doc->findAs<PowerClipObject>(m_clipEdit))
+    // SuperClip bearbeiten: nur seine Inhalte
+    if (const auto* clip = m_doc->findAs<SuperClipObject>(m_clipEdit))
         return clip->contents();
     for (const Page* page : {&m_doc->masterPage(), &currentPage()}) {
         for (int l = 0; l < page->childCount(); ++l) {
@@ -1228,15 +1228,15 @@ NodeId Editor::placeInsideFrame(NodeId frameId)
         return InvalidNodeId;
     Transaction tx(*m_doc, tr("In Rahmen platzieren"));
     NodeId clip = frameId;
-    if (!node_cast<PowerClipObject>(frameObj)) {
+    if (!node_cast<SuperClipObject>(frameObj)) {
         const NodeId parent = frameObj->parent()->id();
         const int index = frameObj->indexInParent();
-        clip = tx.insert(parent, index, std::make_unique<PowerClipObject>());
+        clip = tx.insert(parent, index, std::make_unique<SuperClipObject>());
         tx.move(frameId, clip, 0);
     }
-    // Inhalt automatisch zentrieren (Optionen > Bearbeiten > PowerClip-Rahmen): 0 = wenn ganz
+    // Inhalt automatisch zentrieren (Optionen > Bearbeiten > SuperClip-Rahmen): 0 = wenn ganz
     // ausserhalb, 1 = immer, 2 = nie
-    const int center = Options::instance().integer(QStringLiteral("ws/edit/powerclipCenter"));
+    const int center = Options::instance().integer(QStringLiteral("ws/edit/superclipCenter"));
     const QRectF f = m_doc->findAs<DrawObject>(clip)->boundingRect();
     for (NodeId id : contents) {
         const QRectF r = m_doc->findAs<DrawObject>(id)->boundingRect();
@@ -1258,12 +1258,12 @@ void Editor::extractContents()
     QList<NodeId> result;
     Transaction tx(*m_doc, tr("Inhalt extrahieren"));
     for (NodeId id : topLevelSelection()) {
-        const auto* clip = m_doc->findAs<PowerClipObject>(id);
+        const auto* clip = m_doc->findAs<SuperClipObject>(id);
         if (!clip)
             continue;
         const NodeId parent = clip->parent()->id();
         int index = clip->indexInParent();
-        // Rahmen an die Stelle des PowerClips, Inhalte darüber
+        // Rahmen an die Stelle des SuperClips, Inhalte darüber
         const NodeId frameId = clip->frame() ? clip->frame()->id() : InvalidNodeId;
         while (clip->childCount() > 0) {
             const NodeId c = clip->child(0)->id();
@@ -1279,15 +1279,15 @@ void Editor::extractContents()
     setSelection(result);
 }
 
-void Editor::createEmptyPowerClipFrame()
+void Editor::createEmptySuperClipFrame()
 {
     QList<NodeId> result;
-    Transaction tx(*m_doc, tr("Leeren PowerClip-Rahmen erstellen"));
+    Transaction tx(*m_doc, tr("Leeren SuperClip-Rahmen erstellen"));
     for (NodeId id : topLevelSelection()) {
         const DrawObject* o = m_doc->findAs<DrawObject>(id);
-        if (!o || node_cast<PowerClipObject>(o))
+        if (!o || node_cast<SuperClipObject>(o))
             continue;
-        const NodeId clip = tx.insert(o->parent()->id(), o->indexInParent(), std::make_unique<PowerClipObject>());
+        const NodeId clip = tx.insert(o->parent()->id(), o->indexInParent(), std::make_unique<SuperClipObject>());
         tx.move(id, clip, 0);
         result << clip;
     }
@@ -1297,11 +1297,11 @@ void Editor::createEmptyPowerClipFrame()
     setSelection(result);
 }
 
-void Editor::fitPowerClipContents(ClipFit fit)
+void Editor::fitSuperClipContents(ClipFit fit)
 {
     Transaction tx(*m_doc, tr("Inhalt anpassen"));
     for (NodeId id : topLevelSelection()) {
-        const auto* clip = m_doc->findAs<PowerClipObject>(id);
+        const auto* clip = m_doc->findAs<SuperClipObject>(id);
         if (!clip || !clip->frame() || clip->contents().isEmpty())
             continue;
         const QRectF f = clip->frame()->boundingRect();
@@ -1329,12 +1329,12 @@ void Editor::fitPowerClipContents(ClipFit fit)
         tx.commit();
 }
 
-void Editor::setPowerClipContentsLocked(bool locked)
+void Editor::setSuperClipContentsLocked(bool locked)
 {
-    Transaction tx(*m_doc, locked ? tr("Inhalt in PowerClip sperren") : tr("Inhalt in PowerClip freigeben"));
+    Transaction tx(*m_doc, locked ? tr("Inhalt in SuperClip sperren") : tr("Inhalt in SuperClip freigeben"));
     for (NodeId id : topLevelSelection())
-        if (const auto* clip = m_doc->findAs<PowerClipObject>(id); clip && clip->contentsLocked() != locked)
-            tx.modify<PowerClipObject>(id, [locked](PowerClipObject& c) { c.setContentsLocked(locked); });
+        if (const auto* clip = m_doc->findAs<SuperClipObject>(id); clip && clip->contentsLocked() != locked)
+            tx.modify<SuperClipObject>(id, [locked](SuperClipObject& c) { c.setContentsLocked(locked); });
     if (!tx.isEmpty())
         tx.commit();
 }

@@ -485,8 +485,8 @@ void OptionsDialog::buildWorkspace()
     check(QStringLiteral("ws/edit/curveDirection"), tr("Kurvenrichtung beim Bearbeiten anzeigen"));
     laterRest();
     endGroup();
-    group(tr("PowerClip-Rahmen"));
-    radios(QStringLiteral("ws/edit/powerclipCenter"), tr("Neuen PowerClip-Rahmeninhalt automatisch zentrieren:"),
+    group(tr("SuperClip-Rahmen"));
+    radios(QStringLiteral("ws/edit/superclipCenter"), tr("Neuen SuperClip-Rahmeninhalt automatisch zentrieren:"),
            {tr("Wenn Inhalt ganz ausserhalb des Rahmens liegt"), tr("Immer"), tr("Nie")});
     endGroup();
 
@@ -619,7 +619,7 @@ void OptionsDialog::buildWorkspace()
     endGroup();
     check(QStringLiteral("ws/save/backupOnSave"), tr("Sicherungskopie beim Speichern erstellen"));
 
-    page(ws + tr("/PowerTRACE"), tr("PowerTRACE"));
+    page(ws + tr("/SuperTrace"), tr("SuperTrace"));
     choice(QStringLiteral("ws/trace/quick"), tr("Blitzvektorisierung:"),
            {tr("Zuletzt benutzt"), tr("Strichgrafik"), tr("Logo"), tr("Detailliertes Logo"), tr("ClipArt"),
             tr("Bild niedriger Qualität"), tr("Bild hoher Qualität")});

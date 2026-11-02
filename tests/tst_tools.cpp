@@ -73,7 +73,7 @@
 #include <QRawFont>
 #include <QButtonGroup>
 #include "EffectDockers.h"
-#include "PowerClipBar.h"
+#include "SuperClipBar.h"
 #include <QLabel>
 #include <QTabBar>
 #include <QHostAddress>
@@ -83,7 +83,7 @@
 #include "ShadowTool.h"
 #include "TableTool.h"
 #include "PerspectiveTool.h"
-#include "PowerClipObject.h"
+#include "SuperClipObject.h"
 #include "PipetteTools.h"
 #include "CloneObject.h"
 #include "TransformDocker.h"
@@ -1079,13 +1079,13 @@ private slots:
         QVERIFY(std::abs(image->size().width() - 50.8) < 0.01); // dpi steht in Punkten je Meter (gerundet)
         QVERIFY(std::abs(image->boundingRect().width() - 2 * image->size().width()) < 1e-6);
 
-        // PowerTRACE: Dialog rechnet, Ergebnis liegt als Gruppe deckungsgleich über dem Bild
+        // SuperTrace: Dialog rechnet, Ergebnis liegt als Gruppe deckungsgleich über dem Bild
         TraceDialog dialog(image->image(), trace::Preset::Logo);
         dialog.resize(900, 600);
         dialog.recompute();
         QCOMPARE(dialog.result().colors, 2);
         if (!qEnvironmentVariable("VEK_SCREENSHOT_DIR").isEmpty())
-            dialog.grab().save(qEnvironmentVariable("VEK_SCREENSHOT_DIR") + QStringLiteral("/48-powertrace.png"));
+            dialog.grab().save(qEnvironmentVariable("VEK_SCREENSHOT_DIR") + QStringLiteral("/48-supertrace.png"));
         const NodeId group = m_editor->vectorizeImage(id, dialog.result(), false);
         QVERIFY(group != InvalidNodeId);
         QCOMPARE(m_editor->document().undoText(), QStringLiteral("Bitmap vektorisieren"));
@@ -1437,7 +1437,7 @@ private slots:
         for (const char* path : {"Arbeitsbereich/Allgemein", "Arbeitsbereich/Anzeige", "Arbeitsbereich/Bearbeiten",
                                  "Arbeitsbereich/An Objekten ausrichten", "Arbeitsbereich/Dynamische Hilfslinien",
                                  "Arbeitsbereich/Ausrichtungshilfslinien", "Arbeitsbereich/Warnungen", "Arbeitsbereich/Skripte",
-                                 "Arbeitsbereich/Speichern", "Arbeitsbereich/PowerTRACE", "Arbeitsbereich/Plugins",
+                                 "Arbeitsbereich/Speichern", "Arbeitsbereich/SuperTrace", "Arbeitsbereich/Plugins",
                                  "Arbeitsbereich/Text/Mengentextrahmen", "Arbeitsbereich/Text/Schriften",
                                  "Arbeitsbereich/Text/Rechtschreibprüfung", "Arbeitsbereich/Text/Blitzkorrektur",
                                  "Arbeitsbereich/Hilfsmittelpalette/Bemassung", "Arbeitsbereich/Hilfsmittelpalette/Spirale",
@@ -2463,12 +2463,12 @@ private slots:
             return img.pixelColor(1, 1);
         };
 
-        // PowerClip: grosses Rechteck in kleinen Rahmen, nur im Rahmen sichtbar
+        // SuperClip: grosses Rechteck in kleinen Rahmen, nur im Rahmen sichtbar
         const NodeId frame = add(QRectF(20, 20, 20, 20), Color(255, 255, 255));
         const NodeId content = add(QRectF(10, 10, 60, 60), Color(0, 0, 255));
         m_editor->setSelection({content});
         const NodeId clip = m_editor->placeInsideFrame(frame);
-        QVERIFY(node_cast<PowerClipObject>(obj(clip)));
+        QVERIFY(node_cast<SuperClipObject>(obj(clip)));
         QCOMPARE(pixel(QPointF(30, 30)), QColor(0, 0, 255));
         QCOMPARE(pixel(QPointF(60, 60)), QColor(Qt::white)); // ausserhalb des Rahmens unsichtbar
         QVERIFY(near(obj(clip)->boundingRect(), QRectF(20, 20, 20, 20)));
@@ -2476,7 +2476,7 @@ private slots:
         m_editor->setSelection({clip});
         m_editor->transformSelection(QTransform::fromTranslate(10, 0), QStringLiteral("M"));
         QCOMPARE(obj(content)->boundingRect().left(), 20.0);
-        m_editor->fitPowerClipContents(Editor::ClipFit::FitProportional);
+        m_editor->fitSuperClipContents(Editor::ClipFit::FitProportional);
         QVERIFY(near(obj(content)->boundingRect(), QRectF(30, 20, 20, 20), 0.01));
         auto back = serial::fromJson(serial::toJson(*obj(clip)), serial::Ids::Keep);
         QCOMPARE(back->childCount(), 2);
@@ -2875,8 +2875,8 @@ private slots:
         m_canvas->setTool(ToolId::Pick);
     }
 
-    // Video "PowerClip inside": schwebende Leiste, Inhalt im Rahmen bearbeiten, Fertig
-    void powerClipEditing()
+    // Video "SuperClip inside": schwebende Leiste, Inhalt im Rahmen bearbeiten, Fertig
+    void superClipEditing()
     {
         m_canvas->resize(800, 600);
         auto add = [this](const QRectF& r, const Color& fill) {
@@ -2894,29 +2894,29 @@ private slots:
         const NodeId clip = m_editor->placeInsideFrame(frame);
         m_canvas->setTool(ToolId::Pick);
         m_canvas->update();
-        QTRY_VERIFY(m_canvas->powerClipBar()->isVisible());
-        QVERIFY(m_canvas->powerClipBar()->geometry().top() > m_canvas->toScreen(QPointF(0, 80)).y());
-        screenshot(QStringLiteral("62-powerclip-leiste"));
+        QTRY_VERIFY(m_canvas->superClipBar()->isVisible());
+        QVERIFY(m_canvas->superClipBar()->geometry().top() > m_canvas->toScreen(QPointF(0, 80)).y());
+        screenshot(QStringLiteral("62-superclip-leiste"));
 
         // Bearbeiten: nur noch die Inhalte sind wählbar, Ziehen verschiebt den Inhalt allein
-        QVERIFY(m_editor->selectPowerClipContents());
-        QCOMPARE(m_editor->editedPowerClip(), clip);
+        QVERIFY(m_editor->selectSuperClipContents());
+        QCOMPARE(m_editor->editedSuperClip(), clip);
         QCOMPARE(m_editor->selection(), QList<NodeId>{content});
         QCOMPARE(m_editor->pickableObjects().size(), 1);
         drag(screen(QPointF(60, 60)), screen(QPointF(70, 60)));
         QVERIFY2(std::abs(obj(content)->boundingRect().left() - 30.0) < 0.3, qPrintable(describe(obj(content)->boundingRect())));
         QVERIFY(near(obj(clip)->boundingRect(), QRectF(40, 40, 40, 40)));
-        screenshot(QStringLiteral("63-powerclip-bearbeiten"));
+        screenshot(QStringLiteral("63-superclip-bearbeiten"));
         // Esc = Fertig
         QTest::keyClick(m_canvas.get(), Qt::Key_Escape);
-        QCOMPARE(m_editor->editedPowerClip(), InvalidNodeId);
+        QCOMPARE(m_editor->editedSuperClip(), InvalidNodeId);
         QCOMPARE(m_editor->selection(), QList<NodeId>{clip});
-        // Rückgängig bis vor den PowerClip beendet eine laufende Bearbeitung
-        QVERIFY(m_editor->beginPowerClipEdit(clip));
+        // Rückgängig bis vor den SuperClip beendet eine laufende Bearbeitung
+        QVERIFY(m_editor->beginSuperClipEdit(clip));
         m_editor->document().undo();
         m_editor->document().undo();
         QVERIFY(!obj(clip));
-        QCOMPARE(m_editor->editedPowerClip(), InvalidNodeId);
+        QCOMPARE(m_editor->editedSuperClip(), InvalidNodeId);
         QCOMPARE(m_editor->pickableObjects().size(), 2);
     }
 
@@ -2954,10 +2954,10 @@ private slots:
         // Fischauge wölbt die Mitte: das Quadrat erscheint grösser
         QCOMPARE(pixel(QPointF(133.5, 130)), QColor(Qt::black));
         screenshot(QStringLiteral("64-fischauge"));
-        // Fixiert: Linse wird zu Objekten (PowerClip in Kreisform), die man wegschieben kann
+        // Fixiert: Linse wird zu Objekten (SuperClip in Kreisform), die man wegschieben kann
         docker.frozenBox()->setChecked(true);
         const NodeId frozen = m_editor->selection().value(0);
-        const auto* clip = m_editor->document().findAs<PowerClipObject>(frozen);
+        const auto* clip = m_editor->document().findAs<SuperClipObject>(frozen);
         QVERIFY(clip && !m_editor->document().find(ball));
         QVERIFY(!clip->contents().isEmpty());
         QCOMPARE(pixel(QPointF(133.5, 130)), QColor(Qt::black));
@@ -3006,7 +3006,7 @@ private slots:
         QCOMPARE(json, magnify);
     }
 
-    // Video "Travel flyer": B-Spline, Virtuelles Segment löschen, Rechts ziehen (PowerClip innen)
+    // Video "Travel flyer": B-Spline, Virtuelles Segment löschen, Rechts ziehen (SuperClip innen)
     void travelFlyerTools()
     {
         m_canvas->resize(800, 600);
@@ -3080,7 +3080,7 @@ private slots:
         QVERIFY(opened);
         Q_UNUSED(horizontal);
 
-        // Rechts ziehen: Füllung hierher kopieren, Hierher kopieren, PowerClip innen
+        // Rechts ziehen: Füllung hierher kopieren, Hierher kopieren, SuperClip innen
         m_canvas->setTool(ToolId::Pick);
         auto rect = [this](const QRectF& r, const Color& fill) {
             auto o = std::make_unique<RectangleObject>(r.size());
@@ -3121,13 +3121,13 @@ private slots:
         for (int i = 1; i <= 4; ++i)
             QTest::mouseMove(m_canvas.get(), screen(QPointF(210, 210 + 10 * i)));
         QTest::mouseRelease(m_canvas.get(), Qt::RightButton, {}, screen(QPointF(210, 250)), 10);
-        QVERIFY2(texts.contains(QStringLiteral("&PowerClip innen")), qPrintable(texts.join(QLatin1Char('|'))));
+        QVERIFY2(texts.contains(QStringLiteral("&SuperClip innen")), qPrintable(texts.join(QLatin1Char('|'))));
         QCOMPARE(int(m_editor->pickableObjects().size()), before + 1);
         QVERIFY(near(m_editor->selectionBounds(), QRectF(200, 240, 20, 20), 0.6));
-        // PowerClip innen: die Kopie kommt in das blaue Quadrat
+        // SuperClip innen: die Kopie kommt in das blaue Quadrat
         const NodeId copy = m_editor->selection().value(0);
-        pick.rightDrop(PickTool::DropAction::PowerClipInside, b, QTransform());
-        const auto* clip = m_editor->document().findAs<PowerClipObject>(m_editor->selection().value(0));
+        pick.rightDrop(PickTool::DropAction::SuperClipInside, b, QTransform());
+        const auto* clip = m_editor->document().findAs<SuperClipObject>(m_editor->selection().value(0));
         QVERIFY(clip && clip->contents().size() == 1 && clip->contents().first()->id() == copy);
     }
 
@@ -5188,7 +5188,7 @@ private slots:
         QVERIFY(texts.contains(QStringLiteral("A&nordnung")));
     }
 
-    // PowerTRACE wie im Video: Strichgrafik eines Monitor-Symbols
+    // SuperTrace wie im Video: Strichgrafik eines Monitor-Symbols
     void imageSearchLikeThurWiki()
     {
         using namespace imagesearch;
@@ -5682,7 +5682,7 @@ private slots:
         QTest::qWait(300);
         window.grab().save(dir + QStringLiteral("/02-ki-assistent.png"));
 
-        // 3. PowerTRACE: das Plakat als Bitmap nachzeichnen
+        // 3. SuperTrace: das Plakat als Bitmap nachzeichnen
         output::ExportOptions o;
         o.dpi = 60;
         const QImage bitmap = output::renderImage(*window.canvas(), o);
@@ -5690,7 +5690,7 @@ private slots:
         trace.resize(1300, 820);
         trace.show();
         QTest::qWait(4000);
-        trace.grab().save(dir + QStringLiteral("/03-powertrace.png"));
+        trace.grab().save(dir + QStringLiteral("/03-supertrace.png"));
         trace.close();
 
         // 4. Bildersuche (Wikimedia Commons, Icons8)
@@ -5714,6 +5714,39 @@ private slots:
         options.show();
         QTest::qWait(200);
         options.grab().save(dir + QStringLiteral("/05-ki-zugaenge.png"));
+        options.hide();
+
+        // 6. Andockfenster: Objekt-Manager und Objekteigenschaften, Titel ausgewählt
+        for (QDockWidget* dock : window.findChildren<QDockWidget*>())
+            dock->setVisible(dock->objectName() == QLatin1String("objectManager")
+                             || dock->objectName() == QLatin1String("objectProperties"));
+        if (auto* manager = window.findChild<QDockWidget*>(QStringLiteral("objectManager")))
+            window.resizeDocks({manager}, {380}, Qt::Horizontal);
+        r = run(QStringLiteral("skript"), {{QStringLiteral("code"), QStringLiteral(
+            "tg.select(tg.objects().filter(function (o) { return o.name == 'Titel'; })); tg.selection().length")}});
+        QVERIFY2(!r.error, qPrintable(r.text));
+        window.canvas()->fitPage();
+        QTest::qWait(300);
+        window.grab().save(dir + QStringLiteral("/06-andockfenster.png"));
+        ed.clearSelection();
+
+        // 7. Ausschiessen: das Plakat als Mehrfachnutzen auf einem A3-Bogen
+        {
+            QSettings().remove(QStringLiteral("impose"));
+            ImpositionDialog impose(*window.canvas(), QStringLiteral("Plakat"), &window);
+            impose.layoutBox()->setCurrentIndex(impose.layoutBox()->findData(int(impose::Layout::StepRepeat)));
+            impose.paperBox()->setCurrentIndex(impose.paperBox()->findText(QStringLiteral("A3"), Qt::MatchStartsWith));
+            impose.resize(1300, 700);
+            impose.show();
+            QTest::qWait(500);
+            impose.grab().save(dir + QStringLiteral("/07-ausschiessen.png"));
+        }
+
+        // 8. Optionen: Einrasten an Objekten
+        options.selectPage(QStringLiteral("Arbeitsbereich/An Objekten ausrichten"));
+        options.show();
+        QTest::qWait(200);
+        options.grab().save(dir + QStringLiteral("/08-optionen.png"));
         Options::instance().resetWorkspace();
     }
 
@@ -6356,7 +6389,7 @@ private slots:
         QVERIFY(message.contains(QStringLiteral("bereit"), Qt::CaseInsensitive));
     }
 
-    void powerTraceDialogClassic()
+    void superTraceDialogClassic()
     {
         QImage source(320, 320, QImage::Format_RGB32);
         source.fill(Qt::white);
@@ -6386,7 +6419,7 @@ private slots:
         QVERIFY2(dialog.result().nodes < 50, qPrintable(QString::number(dialog.result().nodes)));
         const QString dir = qEnvironmentVariable("VEK_SCREENSHOT_DIR");
         if (!dir.isEmpty())
-            dialog.grab().save(dir + QStringLiteral("/49-powertrace-strichgrafik.png"));
+            dialog.grab().save(dir + QStringLiteral("/49-supertrace-strichgrafik.png"));
 
         // Regler ändern rechnet die Vorschau kurz danach selbst neu (ohne Bildtyp-Wechsel)
         const int nodesBefore = dialog.result().nodes;
@@ -6434,7 +6467,7 @@ private slots:
         QCOMPARE(logo.result().colors, 2);
         logo.setPreviewMode(2);
         if (!dir.isEmpty())
-            logo.grab().save(dir + QStringLiteral("/50-powertrace-drahtmodell.png"));
+            logo.grab().save(dir + QStringLiteral("/50-supertrace-drahtmodell.png"));
         auto* tabs = logo.findChild<QTabWidget*>();
         QVERIFY(tabs);
         tabs->setCurrentIndex(1);
@@ -6443,7 +6476,7 @@ private slots:
         QCOMPARE(colorList->count(), 2);
         logo.setPreviewMode(0);
         if (!dir.isEmpty())
-            logo.grab().save(dir + QStringLiteral("/51-powertrace-farben.png"));
+            logo.grab().save(dir + QStringLiteral("/51-supertrace-farben.png"));
         trace::Settings grouped = logo.settings();
         grouped.groupByColor = true;
         logo.setSettings(grouped);

@@ -1582,7 +1582,7 @@ void PropertyBar::buildImageSection()
     connect(edit, &QToolButton::clicked, this, &PropertyBar::editBitmapRequested);
 
     QToolButton* traceButton = textButton(QStringLiteral("bitmap-trace"), tr("Bitmap vektorisieren"));
-    traceButton->setToolTip(tr("Bitmap in Kurven umwandeln (PowerTRACE)"));
+    traceButton->setToolTip(tr("Bitmap in Kurven umwandeln (SuperTrace)"));
     auto* menu = new QMenu(traceButton);
     menu->addAction(icon(QStringLiteral("bitmap-trace")), tr("Blitzvektorisierung"), this,
                     [this] { emit traceRequested(int(trace::Preset::Logo), true); });

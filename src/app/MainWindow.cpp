@@ -45,7 +45,7 @@
 #include "EditDockers.h"
 #include "ShapeTool.h"
 #include "CloneObject.h"
-#include "PowerClipObject.h"
+#include "SuperClipObject.h"
 #include "PerspectiveTool.h"
 #include "TableObject.h"
 #include "TableTool.h"
@@ -948,33 +948,33 @@ void MainWindow::createMenusAndToolbars()
     m_selectionActions << lens;
     m_selectionActions << effects->addAction(icon(QStringLiteral("fx-perspective")), tr("&Perspektive hinzufügen"), this,
                                              [this] { m_canvas->setTool(ToolId::Perspective); });
-    QMenu* powerclip = effects->addMenu(icon(QStringLiteral("fx-powerclip")), tr("Po&werClip"));
-    m_selectionActions << powerclip->addAction(tr("In &Rahmen platzieren …"), this, [this] {
+    QMenu* superclip = effects->addMenu(icon(QStringLiteral("fx-superclip")), tr("Po&werClip"));
+    m_selectionActions << superclip->addAction(tr("In &Rahmen platzieren …"), this, [this] {
         m_canvas->setTool(ToolId::Pick);
         m_canvas->pickTool().beginPickTarget([this](NodeId frame) { m_editor.placeInsideFrame(frame); });
         statusBar()->showMessage(tr("Rahmen anklicken, in den die Auswahl kommt"), 8000);
     });
-    m_selectionActions << powerclip->addAction(tr("Inhalt e&xtrahieren"), this, [this] { m_editor.extractContents(); });
-    m_selectionActions << powerclip->addAction(icon(QStringLiteral("clip-edit")), tr("PowerClip &bearbeiten"), this,
-                                               [this] { m_editor.selectPowerClipContents(); });
-    powerclip->addAction(icon(QStringLiteral("clip-finish")), tr("Bearbeitung &beenden"), this, [this] { m_editor.endPowerClipEdit(); });
-    powerclip->addSeparator();
-    m_selectionActions << powerclip->addAction(tr("&Leeren PowerClip-Rahmen erstellen"), this, [this] { m_editor.createEmptyPowerClipFrame(); });
-    QAction* lockClip = powerclip->addAction(tr("Inhalt in PowerClip &sperren"));
+    m_selectionActions << superclip->addAction(tr("Inhalt e&xtrahieren"), this, [this] { m_editor.extractContents(); });
+    m_selectionActions << superclip->addAction(icon(QStringLiteral("clip-edit")), tr("SuperClip &bearbeiten"), this,
+                                               [this] { m_editor.selectSuperClipContents(); });
+    superclip->addAction(icon(QStringLiteral("clip-finish")), tr("Bearbeitung &beenden"), this, [this] { m_editor.endSuperClipEdit(); });
+    superclip->addSeparator();
+    m_selectionActions << superclip->addAction(tr("&Leeren SuperClip-Rahmen erstellen"), this, [this] { m_editor.createEmptySuperClipFrame(); });
+    QAction* lockClip = superclip->addAction(tr("Inhalt in SuperClip &sperren"));
     lockClip->setCheckable(true);
-    connect(lockClip, &QAction::toggled, this, [this](bool on) { m_editor.setPowerClipContentsLocked(on); });
-    connect(powerclip, &QMenu::aboutToShow, this, [this, lockClip] {
+    connect(lockClip, &QAction::toggled, this, [this](bool on) { m_editor.setSuperClipContentsLocked(on); });
+    connect(superclip, &QMenu::aboutToShow, this, [this, lockClip] {
         const QList<const DrawObject*> objects = m_editor.selectedObjects();
-        const auto* clip = objects.size() == 1 ? node_cast<PowerClipObject>(objects.first()) : nullptr;
+        const auto* clip = objects.size() == 1 ? node_cast<SuperClipObject>(objects.first()) : nullptr;
         const QSignalBlocker block(lockClip);
         lockClip->setEnabled(clip);
         lockClip->setChecked(clip && clip->contentsLocked());
     });
-    powerclip->addSeparator();
+    superclip->addSeparator();
     using Fit = Editor::ClipFit;
     for (const auto& [fit, text] : {std::pair{Fit::Center, tr("Inhalt &zentrieren")}, std::pair{Fit::FitProportional, tr("Inhalt proportional &einpassen")},
                                     std::pair{Fit::FillProportional, tr("Rahmen proportional &füllen")}, std::pair{Fit::Stretch, tr("Inhalt auf Rahmengrösse &strecken")}})
-        m_selectionActions << powerclip->addAction(text, this, [this, f = fit] { m_editor.fitPowerClipContents(f); });
+        m_selectionActions << superclip->addAction(text, this, [this, f = fit] { m_editor.fitSuperClipContents(f); });
     effects->addSeparator();
     m_selectionActions << effects->addAction(icon(QStringLiteral("fx-clear")), tr("Effekt l&öschen"), this, [this] { m_editor.clearSelectionEffects(); });
     auto pickEffects = [this](const QString& label) {
@@ -1432,7 +1432,7 @@ void MainWindow::traceImage(int preset, bool quick)
     const NodeId id = image->id();
     Options& options = Options::instance();
     if (quick) {
-        // Blitzvektorisierung ohne Dialog; Bildtyp aus Optionen > PowerTRACE (0 = zuletzt benutzt)
+        // Blitzvektorisierung ohne Dialog; Bildtyp aus Optionen > SuperTrace (0 = zuletzt benutzt)
         const int choice = options.integer(QStringLiteral("ws/trace/quick"));
         const int quickPreset = choice > 0 ? choice - 1 : options.integer(QStringLiteral("ws/trace/lastPreset"));
         trace::Settings settings = trace::presetSettings(trace::Preset(std::clamp(quickPreset, 0, int(trace::presets().size()) - 1)));
@@ -1446,7 +1446,7 @@ void MainWindow::traceImage(int preset, bool quick)
     TraceDialog dialog(image->image(), trace::Preset(preset), this);
     connect(&dialog, &TraceDialog::optionsRequested, this, [this, &dialog] {
         OptionsDialog optionsDialog(m_editor, this, &dialog);
-        optionsDialog.selectPage(tr("Arbeitsbereich/PowerTRACE"));
+        optionsDialog.selectPage(tr("Arbeitsbereich/SuperTrace"));
         optionsDialog.exec();
     });
     if (dialog.exec() == QDialog::Accepted) {

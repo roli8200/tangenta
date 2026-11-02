@@ -20,6 +20,7 @@
 #include <QTemporaryDir>
 #include "SpellChecker.h"
 #include "Serialization.h"
+#include "SuperClipObject.h"
 #include "TextObject.h"
 #include "Transaction.h"
 #include "Vectorizer.h"
@@ -708,6 +709,16 @@ private slots:
         QVERIFY(loaded && loaded->kind() == K::ComplexStar && loaded->points() == 9 && loaded->sharpness() == 2);
     }
 
+    void superClipReadsOldTypeName()
+    {
+        // Neu gespeichert als "superclip"; Dateien aus 0.85 und älter heissen noch "powerclip"
+        QJsonObject json = serial::toJson(SuperClipObject());
+        QCOMPARE(json.value(QStringLiteral("type")).toString(), QStringLiteral("superclip"));
+        json.insert(QStringLiteral("type"), QStringLiteral("powerclip"));
+        auto back = serial::fromJson(json, serial::Ids::Keep);
+        QVERIFY(node_cast<SuperClipObject>(back.get()));
+    }
+
     void textObjectsLayOutAndRoundTrip()
     {
         // Grafiktext: kein Umbruch, Ausdehnung wächst mit dem Text
@@ -1026,7 +1037,7 @@ private slots:
         QCOMPARE(lineArt.colors, 1);
     }
 
-    // Wie das Monitor-Symbol im PowerTRACE-Video: schwarz auf weiss, geglättete Kanten
+    // Wie das Monitor-Symbol im SuperTrace-Video: schwarz auf weiss, geglättete Kanten
     void vectorizerClassicOnLineArt()
     {
         QImage source(640, 640, QImage::Format_RGB32);

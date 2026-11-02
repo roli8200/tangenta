@@ -64,10 +64,10 @@ getan hat.
 ## Bitmaps in Vektoren verwandeln
 
 <p align="center">
-  <img src="docs/screenshots/03-powertrace.png" alt="PowerTRACE: Vorher und Nachher" width="900">
+  <img src="docs/screenshots/03-supertrace.png" alt="SuperTrace: Vorher und Nachher" width="900">
 </p>
 
-**PowerTRACE** zeichnet Logos, Strichgrafiken, Cliparts und Fotos nach. Vorher und Nachher sehen
+**SuperTrace** zeichnet Logos, Strichgrafiken, Cliparts und Fotos nach. Vorher und Nachher sehen
 Sie nebeneinander. Detail, Glättung, Farbzahl und Hintergrund regeln Sie live. Farben lassen sich
 zusammenführen oder ersetzen. Die Blitzvektorisierung erledigt das Ganze mit einem Klick.
 
@@ -91,9 +91,9 @@ Auflösung bis zum Original, und der Nachweis steht nach dem Einfügen im Objekt
 | **Zeichnen** | Rechteck, Ellipse und Bogen, Polygon und Stern, Spirale, Freihand, 2-Punkt-Linie, Bézier, künstlerische Medien, Perfekte Formen, Tabellen, Bemassung, Verbindungslinien |
 | **Formen** | Formwerkzeug mit allen Knotenarten, Messer, Radierer, Beschneiden, Verschmelzen, Schnittmenge, Zuschneiden, Umriss in Objekt, Kurven verbinden |
 | **Füllung und Kontur** | gleichmässig, Verlauf, Muster, Textur, Maschenfüllung, interaktive Füllung, Pfeilspitzen, Linienstile |
-| **Effekte** | Überblendung, Kontur, Extrusion, Hülle, Perspektive, Schatten, Transparenz, Linse, Abschrägung, Unschärfe, PowerClip |
+| **Effekte** | Überblendung, Kontur, Extrusion, Hülle, Perspektive, Schatten, Transparenz, Linse, Abschrägung, Unschärfe, SuperClip |
 | **Text** | Grafik- und Mengentext, verknüpfte Rahmen, Text an Pfad, Aufzählungen, Initialen, Silbentrennung, Rechtschreibprüfung, Blitzkorrektur |
-| **Bilder** | Import bis zu Kamera-Rohdaten (NEF, CR2, CR3, ARW, DNG …), Tonkurve, Helligkeit/Kontrast, Farbbalance, Filter, PowerTRACE |
+| **Bilder** | Import bis zu Kamera-Rohdaten (NEF, CR2, CR3, ARW, DNG …), Tonkurve, Helligkeit/Kontrast, Farbbalance, Filter, SuperTrace |
 | **Dokument** | Seiten mit Masterseite, Ebenen, Objekt-Manager, Symbole und Klone, Hilfslinien, Gitter, Rückgängig ohne Grenze |
 | **Austausch** | Import: SVG, PDF, EPS/PS, DXF, Bilder. Export: PDF, SVG, EPS, DXF, PNG, JPEG, TIFF, WebP, PSD, HTML |
 | **Druck** | Druckvorschau, Ausschiessen für Broschüren und Nutzen |

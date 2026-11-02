@@ -56,7 +56,7 @@ public:
 
     // Mit der rechten Maustaste ziehen: beim Loslassen fragt ein Menü, was
     // passieren soll (target = Objekt unter der Maus, 0 = keines; move = Verschiebung)
-    enum class DropAction { Move, Copy, CopyFill, CopyOutline, CopyAll, PowerClipInside };
+    enum class DropAction { Move, Copy, CopyFill, CopyOutline, CopyAll, SuperClipInside };
     void rightDrop(DropAction action, NodeId target, const QTransform& move);
 
 private:

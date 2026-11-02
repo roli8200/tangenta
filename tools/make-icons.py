@@ -240,7 +240,7 @@ ICONS = {
     'fx-bevel': '<path d="M4 4h16v16H4z" fill="#9cc3ef" stroke="#1f5fae"/><path d="M4 4l4 4h8l4-4z" fill="#ffffff" opacity="0.8"/><path d="M4 20l4-4h8l4 4z" fill="#1f5fae" opacity="0.6"/><rect x="8" y="8" width="8" height="8" fill="#9cc3ef"/>',
     'fx-lens': '<circle cx="10" cy="10" r="6" fill="#cfe7ff" stroke="#1f5fae" stroke-width="1.5"/><path d="M14.5 14.5l6 6" stroke="#555" stroke-width="2.2"/>',
     'fx-perspective': '<path d="M6 5h12l3 14H3z" fill="#9cc3ef" stroke="#1f5fae"/><path d="M12 5v14M4.5 12h15" stroke="#1f5fae" stroke-width="0.7" stroke-dasharray="1.5 1"/>',
-    'fx-powerclip': '<circle cx="12" cy="12" r="8" fill="none" stroke="#1f5fae" stroke-width="1.5"/><path d="M5 15l4-5 3 3 3-4 4 6" fill="none" stroke="#e2740c" stroke-width="1.4"/>',
+    'fx-superclip': '<circle cx="12" cy="12" r="8" fill="none" stroke="#1f5fae" stroke-width="1.5"/><path d="M5 15l4-5 3 3 3-4 4 6" fill="none" stroke="#e2740c" stroke-width="1.4"/>',
     'fx-clear': '<circle cx="12" cy="12" r="7" fill="#9cc3ef" opacity="0.6"/><path d="M6 6l12 12M18 6L6 18" stroke="#d22" stroke-width="1.8"/>',
     'view-fullscreen': '<rect x="3" y="5" width="18" height="14" fill="#333" stroke="#111"/><rect x="7" y="7" width="10" height="10" fill="#fff"/>',
     'table-merge': '<rect x="3.5" y="5.5" width="17" height="13" fill="#fff" stroke="#1f5fae"/><path d="M3.5 12h17M12 12v6.5" stroke="#1f5fae"/><rect x="4" y="6" width="16" height="5.5" fill="#9cc3ef"/>',

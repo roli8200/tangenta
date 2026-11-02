@@ -6,7 +6,7 @@
 #include "ImageObject.h"
 #include "ImagePool.h"
 #include "PathOps.h"
-#include "PowerClipObject.h"
+#include "SuperClipObject.h"
 #include "TextObject.h"
 
 #include <QCoreApplication>
@@ -1144,8 +1144,8 @@ private:
         // Bildpunkte -> Einheitsquadrat (Zeile 0 oben) -> Seite
         image->setTransform(QTransform::fromScale(1.0 / w, -1.0 / h) * QTransform::fromTranslate(0, 1) * m_g.ctm * m_toMm);
         if (m_g.clip && !m_g.clip->contains(image->boundingRect())) {
-            // Beschnittenes Bild: PowerClip in der Form der Beschneidung
-            auto clip = std::make_unique<PowerClipObject>();
+            // Beschnittenes Bild: SuperClip in der Form der Beschneidung
+            auto clip = std::make_unique<SuperClipObject>();
             std::unique_ptr<CurveObject> frame = CurveObject::fromPath(*m_g.clip);
             vek::Style s;
             s.fill = Fill::none();

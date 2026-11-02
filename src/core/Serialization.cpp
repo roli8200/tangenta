@@ -12,7 +12,7 @@
 #include "DimensionObject.h"
 #include "TableObject.h"
 #include "CloneObject.h"
-#include "PowerClipObject.h"
+#include "SuperClipObject.h"
 #include "BlendObject.h"
 #include "ConnectorObject.h"
 
@@ -47,7 +47,9 @@ QHash<QString, Factory>& registry()
         t.insert(QStringLiteral("dimension"), [] { return std::make_unique<DimensionObject>(); });
         t.insert(QStringLiteral("table"), [] { return std::make_unique<TableObject>(); });
         t.insert(QStringLiteral("clone"), [] { return std::make_unique<CloneObject>(); });
-        t.insert(QStringLiteral("powerclip"), [] { return std::make_unique<PowerClipObject>(); });
+        t.insert(QStringLiteral("superclip"), [] { return std::make_unique<SuperClipObject>(); });
+        // Dateien aus Version 0.85 und älter
+        t.insert(QStringLiteral("powerclip"), [] { return std::make_unique<SuperClipObject>(); });
         t.insert(QStringLiteral("blend"), [] { return std::make_unique<BlendObject>(); });
         t.insert(QStringLiteral("connector"), [] { return std::make_unique<ConnectorObject>(); });
         t.insert(QStringLiteral("image"), [] { return std::make_unique<ImageObject>(); });

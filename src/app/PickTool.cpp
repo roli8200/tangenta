@@ -506,7 +506,7 @@ void PickTool::rightRelease(QMouseEvent* event, const QPointF& doc)
     add(QObject::tr("K&ontur hierher kopieren"), DropAction::CopyOutline, true);
     add(QObject::tr("&Alle Eigenschaften hierher kopieren"), DropAction::CopyAll, true);
     menu.addSeparator();
-    add(QObject::tr("&PowerClip innen"), DropAction::PowerClipInside, true);
+    add(QObject::tr("&SuperClip innen"), DropAction::SuperClipInside, true);
     menu.addSeparator();
     menu.addAction(QObject::tr("Abbrechen"));
     if (const QAction* chosen = menu.exec(event->globalPosition().toPoint()); chosen && chosen->data().isValid())
@@ -529,7 +529,7 @@ void PickTool::rightDrop(DropAction action, NodeId target, const QTransform& mov
     case DropAction::CopyFill: ed.copyPropertiesTo(sel.first(), target, Editor::CopyFill); break;
     case DropAction::CopyOutline: ed.copyPropertiesTo(sel.first(), target, pen); break;
     case DropAction::CopyAll: ed.copyPropertiesTo(sel.first(), target, pen | Editor::CopyFill | Editor::CopyText); break;
-    case DropAction::PowerClipInside: ed.placeInsideFrame(target); break;
+    case DropAction::SuperClipInside: ed.placeInsideFrame(target); break;
     }
 }
 
@@ -793,8 +793,8 @@ bool PickTool::keyPress(QKeyEvent* event)
             m_canvas.setCursor(Qt::ArrowCursor);
         } else if (m_drag != Drag::None) {
             cancelDrag();
-        } else if (ed.editedPowerClip() != 0) {
-            ed.endPowerClipEdit(); // PowerClip bearbeiten beenden wie "Fertig"
+        } else if (ed.editedSuperClip() != 0) {
+            ed.endSuperClipEdit(); // SuperClip bearbeiten beenden wie "Fertig"
         } else {
             ed.clearSelection();
             m_canvas.setSelectedGuide(-1);
