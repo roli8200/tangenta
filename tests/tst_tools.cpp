@@ -5624,6 +5624,50 @@ private slots:
 
     // CDR-Import: beschädigte und ungewöhnliche Dateien (Testdateien aus LibreOffice, MPL-2.0) dürfen
     // nicht abstürzen; Ergebnis ist entweder eine Zeichnung oder eine Fehlermeldung
+    void openDialogOffersForeignFormats()
+    {
+        const QString filter = MainWindow::openFilter();
+        for (const char* pattern : {"*.vek", "*.cdr", "*.cmx", "*.pdf", "*.ai", "*.svg", "*.png"})
+            QVERIFY2(filter.section(QStringLiteral(";;"), 0, 0).contains(QLatin1String(pattern)), pattern);
+    }
+
+    void inkscapeSvgImports()
+    {
+        // so speichert Inkscape: mm-Masse, Ebenen als Gruppen, eigene Namensräume
+        const QByteArray data =
+            "<?xml version='1.0' encoding='UTF-8' standalone='no'?>\n"
+            "<svg width='100mm' height='50mm' viewBox='0 0 100 50' version='1.1' id='svg1'\n"
+            "   inkscape:version='1.3.2 (091e20e, 2023-11-25)' sodipodi:docname='test.svg'\n"
+            "   xmlns:inkscape='http://www.inkscape.org/namespaces/inkscape'\n"
+            "   xmlns:sodipodi='http://sodipodi.sourceforge.net/DTD/sodipodi-0.dtd'\n"
+            "   xmlns='http://www.w3.org/2000/svg' xmlns:svg='http://www.w3.org/2000/svg'>\n"
+            "  <sodipodi:namedview id='namedview1' pagecolor='#ffffff' inkscape:document-units='mm' />\n"
+            "  <defs id='defs1' />\n"
+            "  <g inkscape:label='Ebene 1' inkscape:groupmode='layer' id='layer1'>\n"
+            "    <rect style='fill:#ff0000;stroke:none' id='rect1' width='40' height='20' x='10' y='10' />\n"
+            "    <path style='fill:none;stroke:#000000;stroke-width:0.5' d='m 60,10 30,30' id='path1'\n"
+            "       sodipodi:nodetypes='cc' />\n"
+            "  </g>\n"
+            "</svg>\n";
+        QString error;
+        const svg::Import imp = svg::read(data, &error);
+        QVERIFY2(imp.group, qPrintable(error));
+        QCOMPARE(qRound(imp.size.width()), 100);
+        QCOMPARE(qRound(imp.size.height()), 50);
+        int shapes = 0;
+        std::function<void(const Node&)> count = [&](const Node& n) {
+            if (dynamic_cast<const GroupObject*>(&n)) {
+                for (int i = 0; i < n.childCount(); ++i)
+                    count(*n.child(i));
+            } else {
+                ++shapes;
+            }
+        };
+        count(*imp.group);
+        QCOMPARE(shapes, 2);
+        QVERIFY(imp.group->boundingRect().contains(QRectF(10, 10, 80, 30).adjusted(1, 1, -1, -1)));
+    }
+
     void cdrImportIsRobust()
     {
         for (const char* name : {"EDB-35217-2.cdr", "fdo65220-2.cdr"}) {

@@ -38,6 +38,8 @@ public:
     ~MainWindow() override;
 
     bool openFile(const QString& path);
+    // Filter für Datei/Öffnen: eigene Dokumente, Fremdformate (CDR, PDF, AI, SVG …) und Bilder
+    static QString openFilter();
     // Optionen > Allgemein > "Beim Starten von TANGENTA" (nur ohne Datei in der Befehlszeile)
     void applyStartup();
     // Neues Dokument mit Seitengrösse/Seitenzahl (Dialog "Neues Dokument erstellen" je nach Option)

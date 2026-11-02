@@ -1935,16 +1935,41 @@ void MainWindow::rememberLastFile(const QString& path)
 
 void MainWindow::open()
 {
-    if (!maybeSave())
-        return;
     QSettings settings;
     const QString path = QFileDialog::getOpenFileName(this, tr("Öffnen"),
                                                       settings.value(QStringLiteral("files/lastDir")).toString(),
-                                                      fileFilter());
+                                                      openFilter());
     if (path.isEmpty())
         return;
     settings.setValue(QStringLiteral("files/lastDir"), QFileInfo(path).absolutePath());
+    // Fremdformate und Bilder fragen in openFile() selbst nach dem Speichern
+    if (QFileInfo(path).suffix().toLower() == QLatin1String(io::FileSuffix) && !maybeSave())
+        return;
     openFile(path);
+}
+
+QString MainWindow::openFilter()
+{
+    auto patterns = [](const QStringList& suffixes) {
+        QStringList out;
+        for (const QString& s : suffixes)
+            out << QStringLiteral("*.") + s;
+        return out.join(QLatin1Char(' '));
+    };
+    QStringList images;
+    for (const QString& suffix : imagepool::importSuffixes())
+        if (!vectorImportSuffixes().contains(suffix) && suffix != QLatin1String(io::FileSuffix))
+            images << suffix;
+    const QStringList all = QStringList{QLatin1String(io::FileSuffix)} + vectorImportSuffixes() + images;
+    return QStringList{tr("Alle unterstützten Dateien (%1)").arg(patterns(all)), fileFilter(),
+                       tr("Zeichnungen aus anderen Programmen (%1)")
+                           .arg(patterns({QStringLiteral("cdr"), QStringLiteral("cmx")})),
+                       tr("PDF und Illustrator (%1)").arg(patterns({QStringLiteral("pdf"), QStringLiteral("ai")})),
+                       tr("SVG, auch aus Inkscape (%1)").arg(patterns({QStringLiteral("svg")})),
+                       tr("PostScript und DXF (%1)")
+                           .arg(patterns({QStringLiteral("eps"), QStringLiteral("ps"), QStringLiteral("dxf")})),
+                       tr("Bilder (%1)").arg(patterns(images)), tr("Alle Dateien (*)")}
+        .join(QStringLiteral(";;"));
 }
 
 QStringList MainWindow::vectorImportSuffixes()
