@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.21)
-project(Tangenta VERSION 0.85 LANGUAGES C CXX)
+project(Tangenta VERSION 0.86 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)

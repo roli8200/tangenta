@@ -222,16 +222,16 @@ T = {
     },
 
     'download': {
-        'hero': {'eyebrow': 'Téléchargement · version 0.85', 'h1': 'Télécharger<br><span class="grad">TANGENTA.</span>',
+        'hero': {'eyebrow': 'Téléchargement · version 0.86', 'h1': 'Télécharger<br><span class="grad">TANGENTA.</span>',
                  'lead': 'Gratuit pour Windows et Linux. Tous les paquets se trouvent sur GitHub avec la version actuelle.'},
         'win': {'h2': 'Installer sous Windows', 'steps': [
-            'Télécharger <b>TANGENTA-0.85-x64-setup.exe</b> et le lancer.',
+            'Télécharger <b>TANGENTA-0.86-x64-setup.exe</b> et le lancer.',
             'Accepter la licence et choisir <b>Install</b>. Le setup demande les droits d’administrateur et installe pour tous les utilisateurs.',
             'Ouvrir TANGENTA depuis le menu Démarrer. Les fichiers <code>.vek</code> s’ouvrent ensuite d’un double-clic.'],
             'note': 'Si Windows affiche « Windows a protégé votre ordinateur », cliquez sur <b>Informations complémentaires</b>, puis sur <b>Exécuter quand même</b>. Les paquets ne sont pas encore signés numériquement.'},
         'lin': {'h2': 'Installer sous Linux', 'steps': [
             'Télécharger le paquet pour votre système :',
-            'L’installer dans un terminal : <code>sudo apt install ./tangenta_0.85-1~debian12_amd64.deb</code> (adapter le nom du fichier).',
+            'L’installer dans un terminal : <code>sudo apt install ./tangenta_0.86-1~debian12_amd64.deb</code> (adapter le nom du fichier).',
             'Ouvrir TANGENTA depuis le menu des applications ou taper <code>tangenta</code>. Désinstaller avec <code>sudo apt remove tangenta</code>.']},
         'req': {'label': 'Configuration requise', 'h2': 'Ce dont votre ordinateur a besoin.', 'th': ['', 'Minimum', 'Recommandé'],
                 'rows': [('Système', 'Windows 10 (64 bits), Debian 12, Ubuntu 24.04', 'Windows 11, Debian 13, Ubuntu 26.04'),
@@ -247,12 +247,12 @@ T = {
                             ('MSI silencieux', 'msiexec /i TANGENTA-{v}-x64.msi /qn'),
                             ('MSI avec journal', 'msiexec /i TANGENTA-{v}-x64.msi /qn /l*v C:\\Temp\\tangenta.log'),
                             ('Désinstaller', 'msiexec /x TANGENTA-{v}-x64.msi /qn')]},
-        'notes': {'label': 'Nouveau dans 0.85', 'h2': 'La première version publique.', 'items': [
-            'Assistant IA avec sept fournisseurs, Claude aussi via votre propre abonnement',
-            'Recherche d’images dans huit banques, résolution jusqu’à l’original et visionneuse',
-            'SuperTrace avec avant/après, réglage des couleurs et vectorisation rapide',
-            'Imposition pour brochures, cahiers et poses multiples',
-            'Setup, MSI et paquets .deb pour quatre systèmes Linux']},
+        'notes': {'label': 'Nouveautés 0.86', 'h2': 'Ouvre les fichiers CDR.', 'items': [
+            'Ouverture directe des fichiers CDR et CMX, de la version 5 à X6 et au-delà',
+            'Texte CDR avec rotation, compression, gras et italique ; images détourées conservées',
+            'Fichier/Ouvrir lit aussi PDF, AI, SVG (y compris Inkscape), EPS et DXF',
+            'SuperTrace conserve bien mieux les petits textes',
+            'Les gros fichiers avec photos se chargent plusieurs fois plus vite']},
         'source': {'label': 'Code source', 'h2': 'Vous préférez compiler vous-même ?',
                    'sub': 'Le guide de compilation vous mène pas à pas d’un ordinateur vide à votre propre build, sous Windows et Linux. Il est rédigé en allemand.',
                    'more': 'Vers le guide de compilation'},

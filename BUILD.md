@@ -527,15 +527,15 @@ flowchart LR
 
 | Aufgabe | Befehl |
 |---|---|
-| Setup still | `TANGENTA-0.85-x64-setup.exe /quiet` |
-| Setup mit Fortschrittsanzeige, ohne Fragen | `TANGENTA-0.85-x64-setup.exe /passive` |
-| Zielordner und Desktop-Verknüpfung | `TANGENTA-0.85-x64-setup.exe /quiet InstallFolder="D:\Programme\TANGENTA" DesktopShortcut=1` |
-| Protokoll | `TANGENTA-0.85-x64-setup.exe /quiet /log C:\Temp\tangenta-setup.log` |
-| Deinstallieren | `TANGENTA-0.85-x64-setup.exe /uninstall /quiet` |
-| MSI still | `msiexec /i TANGENTA-0.85-x64.msi /qn` |
-| MSI mit Zielordner | `msiexec /i TANGENTA-0.85-x64.msi /qn INSTALLFOLDER="D:\Programme\TANGENTA" DESKTOPSHORTCUT=1` |
-| MSI mit Protokoll | `msiexec /i TANGENTA-0.85-x64.msi /qn /l*v C:\Temp\tangenta.log` |
-| MSI entfernen | `msiexec /x TANGENTA-0.85-x64.msi /qn` |
+| Setup still | `TANGENTA-0.86-x64-setup.exe /quiet` |
+| Setup mit Fortschrittsanzeige, ohne Fragen | `TANGENTA-0.86-x64-setup.exe /passive` |
+| Zielordner und Desktop-Verknüpfung | `TANGENTA-0.86-x64-setup.exe /quiet InstallFolder="D:\Programme\TANGENTA" DesktopShortcut=1` |
+| Protokoll | `TANGENTA-0.86-x64-setup.exe /quiet /log C:\Temp\tangenta-setup.log` |
+| Deinstallieren | `TANGENTA-0.86-x64-setup.exe /uninstall /quiet` |
+| MSI still | `msiexec /i TANGENTA-0.86-x64.msi /qn` |
+| MSI mit Zielordner | `msiexec /i TANGENTA-0.86-x64.msi /qn INSTALLFOLDER="D:\Programme\TANGENTA" DESKTOPSHORTCUT=1` |
+| MSI mit Protokoll | `msiexec /i TANGENTA-0.86-x64.msi /qn /l*v C:\Temp\tangenta.log` |
+| MSI entfernen | `msiexec /x TANGENTA-0.86-x64.msi /qn` |
 
 Beide Pakete installieren für alle Benutzer nach `C:\Program Files\TANGENTA`. Das braucht
 Administratorrechte. Sie legen einen Startmenü-Eintrag an und verknüpfen `.vek`-Dateien mit
@@ -553,7 +553,7 @@ make packages DEB_TARGETS=debian12 # nur eines
 ```
 
 Der erste Lauf lädt Qt und die Container-Abbilder und dauert rund 30 Minuten je System. Ergebnis in
-`build/packages`, zum Beispiel `tangenta_0.85-1~debian12_amd64.deb`.
+`build/packages`, zum Beispiel `tangenta_0.86-1~debian12_amd64.deb`.
 
 `packaging/linux/package-linux.sh` startet je System einen frischen Container. Darin läuft
 `build-deb.sh`, das folgende Schritte macht:
@@ -582,7 +582,7 @@ flowchart LR
 Installieren und entfernen:
 
 ```sh
-sudo apt install ./tangenta_0.85-1~debian12_amd64.deb
+sudo apt install ./tangenta_0.86-1~debian12_amd64.deb
 sudo apt remove tangenta
 ```
 

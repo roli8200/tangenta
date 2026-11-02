@@ -1,0 +1,39 @@
+# TANGENTA
+
+> TANGENTA: Vektorgrafik, frei unter der GPL, für Windows und Linux. Mit KI-Assistent, der wirklich zeichnet, SuperTrace und Bildersuche.
+
+TANGENTA ist freie Software (GPLv3) von Intersoft Networks, Version 0.86, für Windows 10/11, Debian 12/13 und Ubuntu 24.04/26.04. Quellcode und Downloads: https://github.com/roli8200/tangenta. Die Seiten gibt es auf Deutsch, Englisch, Französisch und Italienisch; jede Seite liegt zusätzlich als Markdown unter ihrer Adresse mit angehängtem .md.
+
+## Deutsch
+
+- [TANGENTA – freie Vektorgrafik mit KI für Windows und Linux](https://tangenta.ch/index.html.md): TANGENTA: Vektorgrafik, frei unter der GPL, für Windows und Linux. Mit KI-Assistent, der wirklich zeichnet, SuperTrace und Bildersuche.
+- [Funktionen – TANGENTA](https://tangenta.ch/features.html.md): Alle Werkzeuge von TANGENTA: Zeichnen, Formen, Füllungen, Effekte, Text, Bilder, Druck, Dateiformate und Tastenkürzel.
+- [KI-Assistent – TANGENTA](https://tangenta.ch/ai.html.md): Der KI-Assistent von TANGENTA zeichnet echte Vektoren, bedient das Programm, sucht Bilder und prüft sein Ergebnis. Claude über Ihr Abo, OpenAI, Gemini, DeepSeek oder Ollama.
+- [Download – TANGENTA](https://tangenta.ch/download.html.md): TANGENTA herunterladen: Setup und MSI für Windows 10/11, .deb für Debian 12/13 und Ubuntu 24.04/26.04. Kostenlos, mit stiller Installation.
+
+## English
+
+- [TANGENTA – free vector graphics with AI for Windows and Linux](https://tangenta.ch/en/index.html.md): TANGENTA: vector graphics, free under the GPL, for Windows and Linux. With an AI assistant that really draws, SuperTrace and image search.
+- [Features – TANGENTA](https://tangenta.ch/en/features.html.md): Every tool in TANGENTA: drawing, shaping, fills, effects, text, images, print, file formats and keyboard shortcuts.
+- [AI assistant – TANGENTA](https://tangenta.ch/en/ai.html.md): The TANGENTA AI assistant draws real vectors, operates the program, finds images and checks its own result. Claude via your subscription, OpenAI, Gemini, DeepSeek or Ollama.
+- [Download – TANGENTA](https://tangenta.ch/en/download.html.md): Download TANGENTA: setup and MSI for Windows 10/11, .deb for Debian 12/13 and Ubuntu 24.04/26.04. Free of charge, with silent installation.
+
+## Français
+
+- [TANGENTA – dessin vectoriel libre avec IA pour Windows et Linux](https://tangenta.ch/fr/index.html.md): TANGENTA : dessin vectoriel libre sous licence GPL, pour Windows et Linux. Avec un assistant IA qui dessine vraiment, SuperTrace et la recherche d’images.
+- [Fonctions – TANGENTA](https://tangenta.ch/fr/features.html.md): Tous les outils de TANGENTA : dessin, formes, remplissages, effets, texte, images, impression, formats de fichier et raccourcis clavier.
+- [Assistant IA – TANGENTA](https://tangenta.ch/fr/ai.html.md): L’assistant IA de TANGENTA dessine de vrais vecteurs, pilote le programme, trouve des images et vérifie son résultat. Claude via votre abonnement, OpenAI, Gemini, DeepSeek ou Ollama.
+- [Téléchargement – TANGENTA](https://tangenta.ch/fr/download.html.md): Télécharger TANGENTA : setup et MSI pour Windows 10/11, .deb pour Debian 12/13 et Ubuntu 24.04/26.04. Gratuit, avec installation silencieuse.
+
+## Italiano
+
+- [TANGENTA – grafica vettoriale libera con IA per Windows e Linux](https://tangenta.ch/it/index.html.md): TANGENTA: grafica vettoriale libera sotto licenza GPL, per Windows e Linux. Con un assistente IA che disegna davvero, SuperTrace e la ricerca di immagini.
+- [Funzioni – TANGENTA](https://tangenta.ch/it/features.html.md): Tutti gli strumenti di TANGENTA: disegno, forme, riempimenti, effetti, testo, immagini, stampa, formati di file e scorciatoie da tastiera.
+- [Assistente IA – TANGENTA](https://tangenta.ch/it/ai.html.md): L’assistente IA di TANGENTA disegna veri vettori, usa il programma, trova immagini e controlla il risultato. Claude tramite il suo abbonamento, OpenAI, Gemini, DeepSeek o Ollama.
+- [Download – TANGENTA](https://tangenta.ch/it/download.html.md): Scaricare TANGENTA: setup e MSI per Windows 10/11, .deb per Debian 12/13 e Ubuntu 24.04/26.04. Gratuito, con installazione silenziosa.
+
+## Optional
+
+- [Quellcode auf GitHub](https://github.com/roli8200/tangenta): Programm, Tests und Bauanleitung
+- [Bauanleitung](https://github.com/roli8200/tangenta/blob/main/BUILD.md): eigene Build-Umgebung für Windows und Linux
+- [Neueste Version](https://github.com/roli8200/tangenta/releases/latest): Setup, MSI und .deb-Pakete

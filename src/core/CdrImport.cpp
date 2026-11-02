@@ -12,14 +12,18 @@
 #include <librevenge-stream/librevenge-stream.h>
 #include <librevenge/librevenge.h>
 
+#include <QBuffer>
 #include <QFont>
 #include <QFontMetricsF>
 #include <QHash>
+#include <QImage>
 #include <QPainterPath>
 #include <QTransform>
+#include <QtEndian>
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 #include <memory>
 
 namespace librevenge {
@@ -69,6 +73,36 @@ QByteArray binary(const Props& p, const char* key)
     if (const librevenge::RVNGBinaryData* d = librevenge::tangentaBinaryData(v))
         return QByteArray(reinterpret_cast<const char*>(d->getDataBuffer()), qsizetype(d->size()));
     return QByteArray::fromBase64(QByteArray(v->getStr().cstr()));
+}
+
+// libcdr liefert Bilder als BMP mit 32 Bit je Pixel; eine Maske aus der Datei steht im vierten
+// Byte (siehe bitmap-mask-apply.inc), sonst ist es überall 0. Qt liest den Alphakanal eines
+// solchen BMP nicht, darum werden maskierte Bilder als PNG übernommen.
+QByteArray withMask(const QByteArray& bmp)
+{
+    if (bmp.size() < 54 || !bmp.startsWith("BM"))
+        return bmp;
+    const auto* data = reinterpret_cast<const uchar*>(bmp.constData());
+    const qint64 offset = qFromLittleEndian<quint32>(data + 10);
+    const int width = qFromLittleEndian<qint32>(data + 18);
+    const int height = qFromLittleEndian<qint32>(data + 22);
+    if (qFromLittleEndian<quint16>(data + 28) != 32 || qFromLittleEndian<quint32>(data + 30) != 0 || width <= 0
+        || height <= 0 || offset + qint64(width) * height * 4 > bmp.size())
+        return bmp;
+    const uchar* pixels = data + offset;
+    bool masked = false;
+    for (qint64 i = 0; i < qint64(width) * height && !masked; ++i)
+        masked = pixels[i * 4 + 3] != 0;
+    if (!masked)
+        return bmp;
+    QImage image(width, height, QImage::Format_ARGB32);
+    for (int y = 0; y < height; ++y) // BMP: unterste Zeile zuerst; Bytes B, G, R, A wie ARGB32
+        std::memcpy(image.scanLine(y), pixels + qint64(height - 1 - y) * width * 4, std::size_t(width) * 4);
+    QByteArray png;
+    QBuffer buffer(&png);
+    buffer.open(QIODevice::WriteOnly);
+    image.save(&buffer, "PNG");
+    return png;
 }
 
 // Zeichnet libcdr in TANGENTA-Objekte: jede Seite eine Gruppe, Gruppen der Zeichnung als Gruppen
@@ -149,7 +183,7 @@ public:
     {
         if (!parent())
             return;
-        const QString key = imagepool::add(binary(p, "office:binary-data"));
+        const QString key = imagepool::add(withMask(binary(p, "office:binary-data")));
         if (key.isEmpty())
             return;
         const double x = num(p, "svg:x") * kMm, y = num(p, "svg:y") * kMm;
@@ -492,7 +526,7 @@ private:
 
     Fill bitmapFill() const
     {
-        const QString key = imagepool::add(binary(m_style, "draw:fill-image"));
+        const QString key = imagepool::add(withMask(binary(m_style, "draw:fill-image")));
         if (key.isEmpty()) {
             if (const auto c = color(str(m_style, "draw:fill-color")))
                 return Fill::solid(*c);

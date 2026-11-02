@@ -5,19 +5,100 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>TANGENTA – dessin vectoriel libre avec IA pour Windows et Linux</title>
   <meta name="description" content="TANGENTA : dessin vectoriel libre sous licence GPL, pour Windows et Linux. Avec un assistant IA qui dessine vraiment, SuperTrace et la recherche d’images.">
+  <meta name="robots" content="index, follow, max-image-preview:large">
+  <meta name="theme-color" content="#0b1020">
   <link rel="canonical" href="https://tangenta.ch/fr/">
   <link rel="alternate" hreflang="de" href="https://tangenta.ch/">
   <link rel="alternate" hreflang="en" href="https://tangenta.ch/en/">
   <link rel="alternate" hreflang="fr" href="https://tangenta.ch/fr/">
   <link rel="alternate" hreflang="it" href="https://tangenta.ch/it/">
   <link rel="alternate" hreflang="x-default" href="https://tangenta.ch/">
+  <link rel="alternate" type="text/markdown" href="https://tangenta.ch/fr/index.html.md" title="Markdown">
   <meta property="og:type" content="website">
+  <meta property="og:site_name" content="TANGENTA">
+  <meta property="og:url" content="https://tangenta.ch/fr/">
   <meta property="og:title" content="TANGENTA – dessin vectoriel libre avec IA pour Windows et Linux">
   <meta property="og:description" content="TANGENTA : dessin vectoriel libre sous licence GPL, pour Windows et Linux. Avec un assistant IA qui dessine vraiment, SuperTrace et la recherche d’images.">
   <meta property="og:image" content="https://tangenta.ch/img/01-hauptfenster.png">
+  <meta property="og:image:alt" content="TANGENTA – dessin vectoriel libre avec IA pour Windows et Linux">
   <meta property="og:locale" content="fr_CH">
+  <meta property="og:locale:alternate" content="de_CH">
+  <meta property="og:locale:alternate" content="en_GB">
+  <meta property="og:locale:alternate" content="it_CH">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="TANGENTA – dessin vectoriel libre avec IA pour Windows et Linux">
+  <meta name="twitter:description" content="TANGENTA : dessin vectoriel libre sous licence GPL, pour Windows et Linux. Avec un assistant IA qui dessine vraiment, SuperTrace et la recherche d’images.">
+  <meta name="twitter:image" content="https://tangenta.ch/img/01-hauptfenster.png">
   <link rel="icon" href="../img/favicon.png">
+  <link rel="apple-touch-icon" href="../img/tangenta-256.png">
   <link rel="stylesheet" href="../styles.css">
+  <script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "Organization",
+   "name": "Intersoft Networks",
+   "url": "https://intersoft-networks.ch",
+   "@id": "https://intersoft-networks.ch/#organization",
+   "logo": "https://tangenta.ch/img/tangenta-256.png"
+  },
+  {
+   "@type": "WebPage",
+   "@id": "https://tangenta.ch/fr/#webpage",
+   "url": "https://tangenta.ch/fr/",
+   "name": "TANGENTA – dessin vectoriel libre avec IA pour Windows et Linux",
+   "description": "TANGENTA : dessin vectoriel libre sous licence GPL, pour Windows et Linux. Avec un assistant IA qui dessine vraiment, SuperTrace et la recherche d’images.",
+   "inLanguage": "fr",
+   "primaryImageOfPage": "https://tangenta.ch/img/01-hauptfenster.png",
+   "isPartOf": {
+    "@type": "WebSite",
+    "@id": "https://tangenta.ch/#website",
+    "url": "https://tangenta.ch/",
+    "name": "TANGENTA",
+    "publisher": {
+     "@id": "https://intersoft-networks.ch/#organization"
+    }
+   }
+  },
+  {
+   "@type": "SoftwareApplication",
+   "@id": "https://tangenta.ch/#software",
+   "name": "TANGENTA",
+   "description": "TANGENTA : dessin vectoriel libre sous licence GPL, pour Windows et Linux. Avec un assistant IA qui dessine vraiment, SuperTrace et la recherche d’images.",
+   "applicationCategory": "DesignApplication",
+   "applicationSubCategory": "Vector graphics editor",
+   "operatingSystem": "Windows 10, Windows 11, Debian 12, Debian 13, Ubuntu 24.04, Ubuntu 26.04",
+   "softwareVersion": "0.86",
+   "license": "https://www.gnu.org/licenses/gpl-3.0.html",
+   "isAccessibleForFree": true,
+   "downloadUrl": "https://github.com/roli8200/tangenta/releases/latest",
+   "codeRepository": "https://github.com/roli8200/tangenta",
+   "screenshot": [
+    "https://tangenta.ch/img/01-hauptfenster.png",
+    "https://tangenta.ch/img/02-ki-assistent.png",
+    "https://tangenta.ch/img/03-supertrace.png"
+   ],
+   "image": "https://tangenta.ch/img/tangenta-256.png",
+   "inLanguage": [
+    "de",
+    "en",
+    "fr",
+    "it"
+   ],
+   "url": "https://tangenta.ch/fr/",
+   "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "CHF"
+   },
+   "publisher": {
+    "@id": "https://intersoft-networks.ch/#organization"
+   }
+  }
+ ]
+}
+</script>
 </head>
 <body>
 <header class="nav">
@@ -125,14 +206,14 @@
         <h3>Windows 10 / 11</h3>
         <p>Setup avec assistant ou MSI pour le déploiement en réseau, tous deux installables en silence.</p>
         <a class="btn btn-primary" href="https://github.com/roli8200/tangenta/releases/latest">Télécharger le setup</a>
-        <pre><code>TANGENTA-0.85-x64-setup.exe /quiet
-msiexec /i TANGENTA-0.85-x64.msi /qn</code></pre>
+        <pre><code>TANGENTA-0.86-x64-setup.exe /quiet
+msiexec /i TANGENTA-0.86-x64.msi /qn</code></pre>
       </article>
       <article class="card">
         <h3>Debian et Ubuntu</h3>
         <p>Paquets pour Debian 12, Debian 13, Ubuntu 24.04 et 26.04, avec leur propre Qt 6.10.</p>
         <a class="btn btn-primary" href="https://github.com/roli8200/tangenta/releases/latest">Télécharger le .deb</a>
-        <pre><code>sudo apt install ./tangenta_0.85-1~debian12_amd64.deb</code></pre>
+        <pre><code>sudo apt install ./tangenta_0.86-1~debian12_amd64.deb</code></pre>
       </article>
     </div>
     <p class="center"><a class="more" href="../fr/download.html">Tous les paquets, la configuration requise et l’installation silencieuse →</a></p>

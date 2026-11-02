@@ -5793,12 +5793,12 @@ private slots:
 
         // 3. SuperTrace: das Plakat als Bitmap nachzeichnen
         output::ExportOptions o;
-        o.dpi = 60;
+        o.dpi = 75;
         const QImage bitmap = output::renderImage(*window.canvas(), o);
-        TraceDialog trace(bitmap, trace::Preset::Clipart, &window);
+        TraceDialog trace(bitmap, trace::Preset::HighQuality, &window);
         trace.resize(1300, 820);
         trace.show();
-        QTest::qWait(4000);
+        QTest::qWait(8000);
         trace.grab().save(dir + QStringLiteral("/03-supertrace.png"));
         trace.close();
 

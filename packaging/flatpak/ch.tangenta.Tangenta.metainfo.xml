@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>ch.tangenta.Tangenta</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>GPL-3.0-or-later</project_license>
+  <name>TANGENTA</name>
+  <summary>Vector graphics editor with AI assistance</summary>
+  <summary xml:lang="de">Vektorgrafik-Editor mit KI-Unterstützung</summary>
+  <developer id="ch.intersoft-networks">
+    <name>Intersoft Networks</name>
+  </developer>
+  <description>
+    <p>TANGENTA is a free vector graphics editor for Windows and Linux: curves, text, effects,
+      imposition and printing, with an optional AI assistant and image search.</p>
+    <p xml:lang="de">TANGENTA ist ein freier Vektorgrafik-Editor für Windows und Linux: Kurven, Text,
+      Effekte, Ausschiessen und Druck, auf Wunsch mit KI-Assistent und Bildersuche.</p>
+    <ul>
+      <li>SuperTrace turns bitmaps into curves</li>
+      <li>Opens CDR, CMX, PDF, AI, SVG, EPS and DXF files</li>
+      <li>AI assistant with several providers</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">ch.tangenta.Tangenta.desktop</launchable>
+  <url type="homepage">https://tangenta.ch/</url>
+  <url type="vcs-browser">https://github.com/roli8200/tangenta</url>
+  <url type="bugtracker">https://github.com/roli8200/tangenta/issues</url>
+  <screenshots>
+    <screenshot type="default">
+      <image>https://tangenta.ch/img/01-hauptfenster.png</image>
+    </screenshot>
+    <screenshot>
+      <image>https://tangenta.ch/img/03-supertrace.png</image>
+    </screenshot>
+  </screenshots>
+  <content_rating type="oars-1.1"/>
+  <provides>
+    <mediatype>application/x-tangenta</mediatype>
+  </provides>
+  <releases>
+    <release version="0.86" date="2026-11-02"/>
+    <release version="0.85" date="2026-11-02"/>
+  </releases>
+</component>

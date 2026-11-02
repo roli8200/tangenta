@@ -1,0 +1,27 @@
+# TANGENTA-Webseite (Apache): Zeichensatz, Markdown für Sprachmodelle, Weiterleitungen, Cache
+AddDefaultCharset utf-8
+AddType text/markdown .md
+AddCharset utf-8 .md .txt .xml .css
+DirectoryIndex index.html
+Options -Indexes
+
+# Quellen der Seite gehören nicht ins Netz
+RedirectMatch 404 ^/(src|README\.md)(/|$)
+
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    # immer https://tangenta.ch (ohne www); Zertifikatsprüfung ausgenommen
+    RewriteCond %{REQUEST_URI} !^/\.well-known/
+    RewriteCond %{HTTPS} !=on [OR]
+    RewriteCond %{HTTP_HOST} !^tangenta\.ch$ [NC]
+    RewriteCond %{HTTP_HOST} ^(www\.)?tangenta\.ch$ [NC]
+    RewriteRule ^ https://tangenta.ch%{REQUEST_URI} [R=301,L]
+</IfModule>
+
+<IfModule mod_expires.c>
+    ExpiresActive On
+    ExpiresByType image/png "access plus 30 days"
+    ExpiresByType image/svg+xml "access plus 30 days"
+    ExpiresByType text/css "access plus 7 days"
+    ExpiresByType text/html "access plus 1 hour"
+</IfModule>

@@ -225,16 +225,16 @@ T = {
 
     # ------------------------------------------------------------ Download
     'download': {
-        'hero': {'eyebrow': 'Download · Version 0.85', 'h1': 'TANGENTA<br><span class="grad">herunterladen.</span>',
+        'hero': {'eyebrow': 'Download · Version 0.86', 'h1': 'TANGENTA<br><span class="grad">herunterladen.</span>',
                  'lead': 'Kostenlos für Windows und Linux. Alle Pakete liegen auf GitHub bei der aktuellen Version.'},
         'win': {'h2': 'Installieren unter Windows', 'steps': [
-            '<b>TANGENTA-0.85-x64-setup.exe</b> herunterladen und starten.',
+            '<b>TANGENTA-0.86-x64-setup.exe</b> herunterladen und starten.',
             'Lizenz bestätigen und <b>Installieren</b> wählen. Das Setup braucht Administratorrechte und installiert für alle Benutzer.',
             'TANGENTA im Startmenü öffnen. <code>.vek</code>-Dateien öffnen sich danach per Doppelklick.'],
             'note': 'Zeigt Windows „Der Computer wurde durch Windows geschützt“, klicken Sie auf <b>Weitere Informationen</b> und dann <b>Trotzdem ausführen</b>. Die Pakete sind noch nicht digital signiert.'},
         'lin': {'h2': 'Installieren unter Linux', 'steps': [
             'Das Paket für Ihr System herunterladen:',
-            'Im Terminal installieren: <code>sudo apt install ./tangenta_0.85-1~debian12_amd64.deb</code> (Dateiname anpassen).',
+            'Im Terminal installieren: <code>sudo apt install ./tangenta_0.86-1~debian12_amd64.deb</code> (Dateiname anpassen).',
             'TANGENTA im Startmenü öffnen oder <code>tangenta</code> eingeben. Entfernen mit <code>sudo apt remove tangenta</code>.']},
         'req': {'label': 'Systemanforderungen', 'h2': 'Was Ihr Rechner braucht.', 'th': ['', 'Mindestens', 'Empfohlen'],
                 'rows': [('System', 'Windows 10 (64 Bit), Debian 12, Ubuntu 24.04', 'Windows 11, Debian 13, Ubuntu 26.04'),
@@ -250,12 +250,12 @@ T = {
                             ('MSI still', 'msiexec /i TANGENTA-{v}-x64.msi /qn'),
                             ('MSI mit Protokoll', 'msiexec /i TANGENTA-{v}-x64.msi /qn /l*v C:\\Temp\\tangenta.log'),
                             ('Entfernen', 'msiexec /x TANGENTA-{v}-x64.msi /qn')]},
-        'notes': {'label': 'Neu in 0.85', 'h2': 'Die erste öffentliche Version.', 'items': [
-            'KI-Assistent mit sieben Anbietern, Claude auch über das eigene Abo',
-            'Bildersuche in acht Archiven mit Auflösung bis zum Original und Bildbetrachter',
-            'SuperTrace mit Vorher/Nachher, Farbsteuerung und Blitzvektorisierung',
-            'Ausschiessen für Heft, Falzbogen und Nutzen',
-            'Setup, MSI und .deb-Pakete für vier Linux-Systeme']},
+        'notes': {'label': 'Neu in 0.86', 'h2': 'CDR-Dateien öffnen.', 'items': [
+            'CDR- und CMX-Dateien direkt öffnen, von Version 5 bis X6 und neuer',
+            'Text aus CDR mit Drehung, Stauchung, fett und kursiv; freigestellte Bilder',
+            'Datei/Öffnen liest auch PDF, AI, SVG (auch aus Inkscape), EPS und DXF',
+            'SuperTrace erhält kleine Schrift deutlich besser',
+            'Grosse Dateien mit Fotos laden mehrfach schneller']},
         'source': {'label': 'Quellcode', 'h2': 'Lieber selbst bauen?',
                    'sub': 'Die Bauanleitung führt Schritt für Schritt vom leeren Rechner zum eigenen Build, unter Windows und Linux.',
                    'more': 'Zur Bauanleitung'},

@@ -5,19 +5,100 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Téléchargement – TANGENTA</title>
   <meta name="description" content="Télécharger TANGENTA : setup et MSI pour Windows 10/11, .deb pour Debian 12/13 et Ubuntu 24.04/26.04. Gratuit, avec installation silencieuse.">
+  <meta name="robots" content="index, follow, max-image-preview:large">
+  <meta name="theme-color" content="#0b1020">
   <link rel="canonical" href="https://tangenta.ch/fr/download.html">
   <link rel="alternate" hreflang="de" href="https://tangenta.ch/download.html">
   <link rel="alternate" hreflang="en" href="https://tangenta.ch/en/download.html">
   <link rel="alternate" hreflang="fr" href="https://tangenta.ch/fr/download.html">
   <link rel="alternate" hreflang="it" href="https://tangenta.ch/it/download.html">
   <link rel="alternate" hreflang="x-default" href="https://tangenta.ch/download.html">
+  <link rel="alternate" type="text/markdown" href="https://tangenta.ch/fr/download.html.md" title="Markdown">
   <meta property="og:type" content="website">
+  <meta property="og:site_name" content="TANGENTA">
+  <meta property="og:url" content="https://tangenta.ch/fr/download.html">
   <meta property="og:title" content="Téléchargement – TANGENTA">
   <meta property="og:description" content="Télécharger TANGENTA : setup et MSI pour Windows 10/11, .deb pour Debian 12/13 et Ubuntu 24.04/26.04. Gratuit, avec installation silencieuse.">
   <meta property="og:image" content="https://tangenta.ch/img/01-hauptfenster.png">
+  <meta property="og:image:alt" content="Téléchargement – TANGENTA">
   <meta property="og:locale" content="fr_CH">
+  <meta property="og:locale:alternate" content="de_CH">
+  <meta property="og:locale:alternate" content="en_GB">
+  <meta property="og:locale:alternate" content="it_CH">
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="Téléchargement – TANGENTA">
+  <meta name="twitter:description" content="Télécharger TANGENTA : setup et MSI pour Windows 10/11, .deb pour Debian 12/13 et Ubuntu 24.04/26.04. Gratuit, avec installation silencieuse.">
+  <meta name="twitter:image" content="https://tangenta.ch/img/01-hauptfenster.png">
   <link rel="icon" href="../img/favicon.png">
+  <link rel="apple-touch-icon" href="../img/tangenta-256.png">
   <link rel="stylesheet" href="../styles.css">
+  <script type="application/ld+json">
+{
+ "@context": "https://schema.org",
+ "@graph": [
+  {
+   "@type": "Organization",
+   "name": "Intersoft Networks",
+   "url": "https://intersoft-networks.ch",
+   "@id": "https://intersoft-networks.ch/#organization",
+   "logo": "https://tangenta.ch/img/tangenta-256.png"
+  },
+  {
+   "@type": "WebPage",
+   "@id": "https://tangenta.ch/fr/download.html#webpage",
+   "url": "https://tangenta.ch/fr/download.html",
+   "name": "Téléchargement – TANGENTA",
+   "description": "Télécharger TANGENTA : setup et MSI pour Windows 10/11, .deb pour Debian 12/13 et Ubuntu 24.04/26.04. Gratuit, avec installation silencieuse.",
+   "inLanguage": "fr",
+   "primaryImageOfPage": "https://tangenta.ch/img/01-hauptfenster.png",
+   "isPartOf": {
+    "@type": "WebSite",
+    "@id": "https://tangenta.ch/#website",
+    "url": "https://tangenta.ch/",
+    "name": "TANGENTA",
+    "publisher": {
+     "@id": "https://intersoft-networks.ch/#organization"
+    }
+   }
+  },
+  {
+   "@type": "SoftwareApplication",
+   "@id": "https://tangenta.ch/#software",
+   "name": "TANGENTA",
+   "description": "TANGENTA : dessin vectoriel libre sous licence GPL, pour Windows et Linux. Avec un assistant IA qui dessine vraiment, SuperTrace et la recherche d’images.",
+   "applicationCategory": "DesignApplication",
+   "applicationSubCategory": "Vector graphics editor",
+   "operatingSystem": "Windows 10, Windows 11, Debian 12, Debian 13, Ubuntu 24.04, Ubuntu 26.04",
+   "softwareVersion": "0.86",
+   "license": "https://www.gnu.org/licenses/gpl-3.0.html",
+   "isAccessibleForFree": true,
+   "downloadUrl": "https://github.com/roli8200/tangenta/releases/latest",
+   "codeRepository": "https://github.com/roli8200/tangenta",
+   "screenshot": [
+    "https://tangenta.ch/img/01-hauptfenster.png",
+    "https://tangenta.ch/img/02-ki-assistent.png",
+    "https://tangenta.ch/img/03-supertrace.png"
+   ],
+   "image": "https://tangenta.ch/img/tangenta-256.png",
+   "inLanguage": [
+    "de",
+    "en",
+    "fr",
+    "it"
+   ],
+   "url": "https://tangenta.ch/fr/",
+   "offers": {
+    "@type": "Offer",
+    "price": "0",
+    "priceCurrency": "CHF"
+   },
+   "publisher": {
+    "@id": "https://intersoft-networks.ch/#organization"
+   }
+  }
+ ]
+}
+</script>
 </head>
 <body>
 <header class="nav">
@@ -30,7 +111,7 @@
 
 <main id="top">
   <section class="hero page-hero">
-    <p class="eyebrow">Téléchargement · version 0.85</p>
+    <p class="eyebrow">Téléchargement · version 0.86</p>
     <h1>Télécharger<br><span class="grad">TANGENTA.</span></h1>
     <p class="lead">Gratuit pour Windows et Linux. Tous les paquets se trouvent sur GitHub avec la version actuelle.</p>
   </section>
@@ -41,14 +122,14 @@
         <h3>Windows 10 / 11</h3>
         <p>Setup avec assistant ou MSI pour le déploiement en réseau, tous deux installables en silence.</p>
         <a class="btn btn-primary" href="https://github.com/roli8200/tangenta/releases/latest">Télécharger le setup</a>
-        <pre><code>TANGENTA-0.85-x64-setup.exe /quiet
-msiexec /i TANGENTA-0.85-x64.msi /qn</code></pre>
+        <pre><code>TANGENTA-0.86-x64-setup.exe /quiet
+msiexec /i TANGENTA-0.86-x64.msi /qn</code></pre>
       </article>
       <article class="card">
         <h3>Debian et Ubuntu</h3>
         <p>Paquets pour Debian 12, Debian 13, Ubuntu 24.04 et 26.04, avec leur propre Qt 6.10.</p>
         <a class="btn btn-primary" href="https://github.com/roli8200/tangenta/releases/latest">Télécharger le .deb</a>
-        <pre><code>sudo apt install ./tangenta_0.85-1~debian12_amd64.deb</code></pre>
+        <pre><code>sudo apt install ./tangenta_0.86-1~debian12_amd64.deb</code></pre>
       </article>
     </div>
   </section>
@@ -57,17 +138,17 @@ msiexec /i TANGENTA-0.85-x64.msi /qn</code></pre>
     <div class="split-text">
       <p class="label"><b>01</b> / Windows</p>
       <h2>Installer sous Windows</h2>
-      <ol class="steps"><li>Télécharger <b>TANGENTA-0.85-x64-setup.exe</b> et le lancer.</li><li>Accepter la licence et choisir <b>Install</b>. Le setup demande les droits d’administrateur et installe pour tous les utilisateurs.</li><li>Ouvrir TANGENTA depuis le menu Démarrer. Les fichiers <code>.vek</code> s’ouvrent ensuite d’un double-clic.</li></ol>
+      <ol class="steps"><li>Télécharger <b>TANGENTA-0.86-x64-setup.exe</b> et le lancer.</li><li>Accepter la licence et choisir <b>Install</b>. Le setup demande les droits d’administrateur et installe pour tous les utilisateurs.</li><li>Ouvrir TANGENTA depuis le menu Démarrer. Les fichiers <code>.vek</code> s’ouvrent ensuite d’un double-clic.</li></ol>
       <p class="sub small">Si Windows affiche « Windows a protégé votre ordinateur », cliquez sur <b>Informations complémentaires</b>, puis sur <b>Exécuter quand même</b>. Les paquets ne sont pas encore signés numériquement.</p>
     </div>
     <div class="split-text">
       <p class="label"><b>02</b> / Linux</p>
       <h2>Installer sous Linux</h2>
-      <ol class="steps"><li>Télécharger le paquet pour votre système :</li><li>L’installer dans un terminal : <code>sudo apt install ./tangenta_0.85-1~debian12_amd64.deb</code> (adapter le nom du fichier).</li><li>Ouvrir TANGENTA depuis le menu des applications ou taper <code>tangenta</code>. Désinstaller avec <code>sudo apt remove tangenta</code>.</li></ol>
-      <pre><code>tangenta_0.85-1~debian12_amd64.deb
-tangenta_0.85-1~debian13_amd64.deb
-tangenta_0.85-1~ubuntu24.04_amd64.deb
-tangenta_0.85-1~ubuntu26.04_amd64.deb</code></pre>
+      <ol class="steps"><li>Télécharger le paquet pour votre système :</li><li>L’installer dans un terminal : <code>sudo apt install ./tangenta_0.86-1~debian12_amd64.deb</code> (adapter le nom du fichier).</li><li>Ouvrir TANGENTA depuis le menu des applications ou taper <code>tangenta</code>. Désinstaller avec <code>sudo apt remove tangenta</code>.</li></ol>
+      <pre><code>tangenta_0.86-1~debian12_amd64.deb
+tangenta_0.86-1~debian13_amd64.deb
+tangenta_0.86-1~ubuntu24.04_amd64.deb
+tangenta_0.86-1~ubuntu26.04_amd64.deb</code></pre>
     </div>
   </section>
 
@@ -81,13 +162,13 @@ tangenta_0.85-1~ubuntu26.04_amd64.deb</code></pre>
     <p class="label"><b>04</b> / Pour l’informatique</p>
     <h2>Installation silencieuse.</h2>
     <p class="sub">Pour GPO, Intune, SCCM ou vos propres scripts. Les deux paquets s’installent dans <code>C:\Program Files\TANGENTA</code> ; une version plus récente remplace l’ancienne.</p>
-    <div class="table-wrap"><table class="table"><tbody><tr><td>Setup silencieux</td><td><code>TANGENTA-0.85-x64-setup.exe /quiet</code></td></tr><tr><td>Setup avec progression</td><td><code>TANGENTA-0.85-x64-setup.exe /passive</code></td></tr><tr><td>Dossier et raccourci sur le bureau</td><td><code>TANGENTA-0.85-x64-setup.exe /quiet InstallFolder="D:\Programmes\TANGENTA" DesktopShortcut=1</code></td></tr><tr><td>MSI silencieux</td><td><code>msiexec /i TANGENTA-0.85-x64.msi /qn</code></td></tr><tr><td>MSI avec journal</td><td><code>msiexec /i TANGENTA-0.85-x64.msi /qn /l*v C:\Temp\tangenta.log</code></td></tr><tr><td>Désinstaller</td><td><code>msiexec /x TANGENTA-0.85-x64.msi /qn</code></td></tr></tbody></table></div>
+    <div class="table-wrap"><table class="table"><tbody><tr><td>Setup silencieux</td><td><code>TANGENTA-0.86-x64-setup.exe /quiet</code></td></tr><tr><td>Setup avec progression</td><td><code>TANGENTA-0.86-x64-setup.exe /passive</code></td></tr><tr><td>Dossier et raccourci sur le bureau</td><td><code>TANGENTA-0.86-x64-setup.exe /quiet InstallFolder="D:\Programmes\TANGENTA" DesktopShortcut=1</code></td></tr><tr><td>MSI silencieux</td><td><code>msiexec /i TANGENTA-0.86-x64.msi /qn</code></td></tr><tr><td>MSI avec journal</td><td><code>msiexec /i TANGENTA-0.86-x64.msi /qn /l*v C:\Temp\tangenta.log</code></td></tr><tr><td>Désinstaller</td><td><code>msiexec /x TANGENTA-0.86-x64.msi /qn</code></td></tr></tbody></table></div>
   </section>
 
   <section class="section narrow">
-    <p class="label"><b>05</b> / Nouveau dans 0.85</p>
-    <h2>La première version publique.</h2>
-    <ul class="dots"><li>Assistant IA avec sept fournisseurs, Claude aussi via votre propre abonnement</li><li>Recherche d’images dans huit banques, résolution jusqu’à l’original et visionneuse</li><li>SuperTrace avec avant/après, réglage des couleurs et vectorisation rapide</li><li>Imposition pour brochures, cahiers et poses multiples</li><li>Setup, MSI et paquets .deb pour quatre systèmes Linux</li></ul>
+    <p class="label"><b>05</b> / Nouveautés 0.86</p>
+    <h2>Ouvre les fichiers CDR.</h2>
+    <ul class="dots"><li>Ouverture directe des fichiers CDR et CMX, de la version 5 à X6 et au-delà</li><li>Texte CDR avec rotation, compression, gras et italique ; images détourées conservées</li><li>Fichier/Ouvrir lit aussi PDF, AI, SVG (y compris Inkscape), EPS et DXF</li><li>SuperTrace conserve bien mieux les petits textes</li><li>Les gros fichiers avec photos se chargent plusieurs fois plus vite</li></ul>
   </section>
 
   <section class="section narrow">

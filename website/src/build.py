@@ -9,7 +9,11 @@ der Sprachwechsel immer auf die gleiche Seite führt.
 """
 import html
 import importlib.util
+import json
 import os
+import re
+from html.parser import HTMLParser
+from urllib.parse import urljoin
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SITE = os.path.dirname(HERE)
@@ -18,8 +22,12 @@ PAGES = ['index', 'features', 'ai', 'download']
 DOMAIN = 'https://tangenta.ch'
 GITHUB = 'https://github.com/roli8200/tangenta'
 RELEASES = GITHUB + '/releases/latest'
-VERSION = '0.85'
+VERSION = '0.86'
 DEBS = ['debian12', 'debian13', 'ubuntu24.04', 'ubuntu26.04']
+PUBLISHER = {'@type': 'Organization', 'name': 'Intersoft Networks', 'url': 'https://intersoft-networks.ch'}
+# Vorschaubild je Seite (Open Graph, Twitter, JSON-LD)
+OG_IMAGE = {'index': '01-hauptfenster.png', 'features': '06-andockfenster.png', 'ai': '02-ki-assistent.png',
+            'download': '01-hauptfenster.png'}
 
 
 def load(lang):
@@ -49,9 +57,43 @@ def esc(s):
     return html.escape(s, quote=True)
 
 
+def md_url(lang, page):
+    """Markdown-Fassung einer Seite (llmstxt.org: gleiche Adresse mit angehängtem .md)."""
+    folder = '' if lang == 'de' else lang + '/'
+    return DOMAIN + '/' + folder + page + '.html.md'
+
+
+def json_ld(t, lang, page, title, description):
+    """Strukturierte Daten: Herausgeber, Webseite und auf Start- und Downloadseite das Programm."""
+    image = f'{DOMAIN}/img/{OG_IMAGE[page]}'
+    graph = [
+        dict(PUBLISHER, **{'@id': PUBLISHER['url'] + '/#organization', 'logo': f'{DOMAIN}/img/tangenta-256.png'}),
+        {'@type': 'WebPage', '@id': page_url(lang, page) + '#webpage', 'url': page_url(lang, page), 'name': title,
+         'description': description, 'inLanguage': lang, 'primaryImageOfPage': image,
+         'isPartOf': {'@type': 'WebSite', '@id': DOMAIN + '/#website', 'url': DOMAIN + '/', 'name': 'TANGENTA',
+                      'publisher': {'@id': PUBLISHER['url'] + '/#organization'}}},
+    ]
+    if page in ('index', 'download'):
+        graph.append({
+            '@type': 'SoftwareApplication', '@id': DOMAIN + '/#software', 'name': 'TANGENTA',
+            'description': t['meta']['index'][1], 'applicationCategory': 'DesignApplication',
+            'applicationSubCategory': 'Vector graphics editor',
+            'operatingSystem': 'Windows 10, Windows 11, Debian 12, Debian 13, Ubuntu 24.04, Ubuntu 26.04',
+            'softwareVersion': VERSION, 'license': 'https://www.gnu.org/licenses/gpl-3.0.html',
+            'isAccessibleForFree': True, 'downloadUrl': RELEASES, 'codeRepository': GITHUB,
+            'screenshot': [f'{DOMAIN}/img/{n}' for n in ('01-hauptfenster.png', '02-ki-assistent.png', '03-supertrace.png')],
+            'image': f'{DOMAIN}/img/tangenta-256.png', 'inLanguage': LANGS, 'url': page_url(lang, 'index'),
+            'offers': {'@type': 'Offer', 'price': '0', 'priceCurrency': 'CHF'},
+            'publisher': {'@id': PUBLISHER['url'] + '/#organization'}})
+    data = json.dumps({'@context': 'https://schema.org', '@graph': graph}, ensure_ascii=False, indent=1)
+    return '<script type="application/ld+json">\n' + data.replace('</', '<\\/') + '\n</script>'
+
+
 def head(t, lang, page, title, description):
     alts = '\n'.join(f'  <link rel="alternate" hreflang="{l}" href="{page_url(l, page)}">' for l in LANGS)
+    other_locales = '\n'.join(f'  <meta property="og:locale:alternate" content="{LOCALES[l]}">' for l in LANGS if l != lang)
     p = prefix(lang)
+    image = f'{DOMAIN}/img/{OG_IMAGE[page]}'
     return f'''<!doctype html>
 <html lang="{lang}">
 <head>
@@ -59,16 +101,29 @@ def head(t, lang, page, title, description):
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{esc(title)}</title>
   <meta name="description" content="{esc(description)}">
+  <meta name="robots" content="index, follow, max-image-preview:large">
+  <meta name="theme-color" content="#0b1020">
   <link rel="canonical" href="{page_url(lang, page)}">
 {alts}
   <link rel="alternate" hreflang="x-default" href="{page_url('de', page)}">
+  <link rel="alternate" type="text/markdown" href="{md_url(lang, page)}" title="Markdown">
   <meta property="og:type" content="website">
+  <meta property="og:site_name" content="TANGENTA">
+  <meta property="og:url" content="{page_url(lang, page)}">
   <meta property="og:title" content="{esc(title)}">
   <meta property="og:description" content="{esc(description)}">
-  <meta property="og:image" content="{DOMAIN}/img/01-hauptfenster.png">
+  <meta property="og:image" content="{image}">
+  <meta property="og:image:alt" content="{esc(title)}">
   <meta property="og:locale" content="{t['locale']}">
+{other_locales}
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="{esc(title)}">
+  <meta name="twitter:description" content="{esc(description)}">
+  <meta name="twitter:image" content="{image}">
   <link rel="icon" href="{p}img/favicon.png">
+  <link rel="apple-touch-icon" href="{p}img/tangenta-256.png">
   <link rel="stylesheet" href="{p}styles.css">
+  {json_ld(t, lang, page, title, description)}
 </head>
 <body>
 '''
@@ -469,24 +524,222 @@ make test &amp;&amp; make run</code></pre>
 '''
 
 
+# ---------------------------------------------------------------- Markdown, llms.txt, Sitemap
+
+class Markdown(HTMLParser):
+    """Wandelt den Inhalt einer Seite (<main>) in Markdown für Sprachmodelle (llms.txt).
+
+    Bewusst klein: nur die Elemente, die build.py selbst erzeugt. Links und Bilder werden absolut.
+    """
+    BLOCKS = {'p', 'figure', 'section', 'article', 'div', 'details', 'ul', 'ol', 'table', 'blockquote'}
+
+    def __init__(self, base):
+        super().__init__(convert_charrefs=True)
+        self.base = base
+        self.out = []
+        self.skip = 0           # in aria-hidden (Laufband) oder Fensterleiste
+        self.pre = False
+        self.lists = []         # ['ul'|'ol', Zähler]
+        self.link = None        # [href, text]
+        self.row = None
+        self.rows = 0
+        self.quote = False
+        self.lists_of_chips = 0  # in Kürzel-/Chip-Leisten: Einträge mit · trennen
+
+    def write(self, s):
+        if self.link is not None:
+            self.link[1] += s
+        elif self.row is not None and not self.pre:
+            self.row[-1] += s
+        else:
+            self.out.append(s)
+
+    def block(self):
+        self.out.append('\n\n')
+
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        if self.skip or a.get('aria-hidden') == 'true' or a.get('class') == 'window-bar':
+            if tag not in ('img', 'br', 'i'):
+                self.skip += 1
+            return
+        if tag in ('h1', 'h2', 'h3', 'h4'):
+            self.block()
+            self.out.append('#' * int(tag[1]) + ' ')
+        elif tag in ('ul', 'ol'):
+            self.lists.append([tag, 0])
+            self.block()
+        elif tag == 'li':
+            kind = self.lists[-1] if self.lists else ['ul', 0]
+            kind[1] += 1
+            self.out.append('\n' + ('  ' * (len(self.lists) - 1)) + (f'{kind[1]}. ' if kind[0] == 'ol' else '- '))
+        elif tag == 'pre':
+            self.block()
+            self.out.append('```\n')
+            self.pre = True
+        elif tag == 'code' and not self.pre:
+            self.write('`')
+        elif tag in ('b', 'strong'):
+            self.write('**')
+        elif tag == 'summary':
+            self.block()
+            self.out.append('**')
+        elif tag == 'blockquote':
+            self.block()
+            self.out.append('> ')
+        elif tag == 'br' or (tag == 'span' and not self.lists_of_chips):
+            self.write(' ')
+        elif tag == 'a':
+            self.link = [urljoin(self.base, a.get('href', '')), '']
+        elif tag == 'img':
+            if a.get('alt'):
+                self.block()
+                self.out.append(f'![{a["alt"]}]({urljoin(self.base, a.get("src", ""))})')
+                self.block()
+        elif tag == 'div' and any(c in a.get('class', '').split() for c in ('keys', 'chips')):
+            self.lists_of_chips += 1
+            self.block()
+        elif tag == 'tr':
+            self.row = []
+        elif tag in ('td', 'th') and self.row is not None:
+            self.row.append('')
+        elif tag in self.BLOCKS:
+            self.block()
+
+    def handle_endtag(self, tag):
+        if self.skip:
+            if tag not in ('img', 'br', 'i'):
+                self.skip -= 1
+            return
+        if tag in ('h1', 'h2', 'h3', 'h4'):
+            self.block()
+        elif tag in ('ul', 'ol'):
+            if self.lists:
+                self.lists.pop()
+            self.block()
+        elif tag == 'pre':
+            self.out.append('\n```')
+            self.block()
+            self.pre = False
+        elif tag == 'code' and not self.pre:
+            self.write('`')
+        elif tag in ('b', 'strong'):
+            self.write('**')
+        elif tag == 'summary':
+            self.out.append('**')
+            self.block()
+        elif tag == 'a' and self.link is not None:
+            href, text = self.link
+            self.link = None
+            text = ' '.join(text.split())
+            if text:
+                self.write(f'[{text}]({href})')
+        elif tag == 'tr' and self.row is not None:
+            cells = [' '.join(c.split()).replace('|', '\\|') for c in self.row]
+            self.row = None
+            self.out.append('| ' + ' | '.join(cells) + ' |\n')
+            if self.rows == 0:
+                self.out.append('|' + '---|' * len(cells) + '\n')
+            self.rows += 1
+        elif tag == 'table':
+            self.rows = 0
+            self.block()
+        elif tag == 'span':
+            self.write(' · ' if self.lists_of_chips else ' ')
+        elif tag == 'div' and self.lists_of_chips:
+            self.lists_of_chips -= 1
+            self.block()
+        elif tag in self.BLOCKS:
+            self.block()
+
+    def handle_data(self, data):
+        if self.skip:
+            return
+        if self.pre:
+            self.out.append(data)
+        else:
+            self.write(re.sub(r'\s+', ' ', data))
+
+    def text(self):
+        s = ''.join(self.out)
+        s = re.sub(r'[ \t·]+\n', '\n', s)
+        s = re.sub(r'\n[ \t]+(?=[^\s-])', '\n', s)
+        s = re.sub(r'\n{3,}', '\n\n', s)
+        return s.strip() + '\n'
+
+
+def markdown(lang, page, title, description, body):
+    m = Markdown(page_url(lang, page))
+    m.feed(body)
+    return f'# {title}\n\n> {description}\n\nURL: {page_url(lang, page)}\n\n' + m.text()
+
+
+def llms_txt(texts):
+    """llms.txt (llmstxt.org): Überblick und Links auf die Markdown-Fassungen aller Seiten."""
+    de = texts['de']
+    lines = ['# TANGENTA', '', f'> {de["meta"]["index"][1]}', '',
+             f'TANGENTA ist freie Software (GPLv3) von Intersoft Networks, Version {VERSION}, '
+             'für Windows 10/11, Debian 12/13 und Ubuntu 24.04/26.04. Quellcode und Downloads: '
+             f'{GITHUB}. Die Seiten gibt es auf Deutsch, Englisch, Französisch und Italienisch; '
+             'jede Seite liegt zusätzlich als Markdown unter ihrer Adresse mit angehängtem .md.', '']
+    for l in LANGS:
+        t = texts[l]
+        lines += [f'## {t["lang_name"]}', '']
+        lines += [f'- [{t["meta"][p][0]}]({md_url(l, p)}): {t["meta"][p][1]}' for p in PAGES]
+        lines.append('')
+    lines += ['## Optional', '',
+              f'- [Quellcode auf GitHub]({GITHUB}): Programm, Tests und Bauanleitung',
+              f'- [Bauanleitung]({GITHUB}/blob/main/BUILD.md): eigene Build-Umgebung für Windows und Linux',
+              f'- [Neueste Version]({RELEASES}): Setup, MSI und .deb-Pakete', '']
+    return '\n'.join(lines)
+
+
+def sitemap():
+    entries = []
+    for l in LANGS:
+        for p in PAGES:
+            alts = ''.join(f'\n    <xhtml:link rel="alternate" hreflang="{a}" href="{page_url(a, p)}"/>' for a in LANGS)
+            alts += f'\n    <xhtml:link rel="alternate" hreflang="x-default" href="{page_url("de", p)}"/>'
+            prio = '1.0' if p == 'index' else '0.8'
+            entries.append(f'  <url>\n    <loc>{page_url(l, p)}</loc>{alts}\n    <changefreq>monthly</changefreq>\n'
+                           f'    <priority>{prio}</priority>\n  </url>')
+    return ('<?xml version="1.0" encoding="UTF-8"?>\n'
+            '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">\n'
+            + '\n'.join(entries) + '\n</urlset>\n')
+
+
+def robots():
+    return f'User-agent: *\nAllow: /\nDisallow: /src/\n\nSitemap: {DOMAIN}/sitemap.xml\n'
+
+
 LANG_NAMES = {}
+LOCALES = {}
+
+
+def write(path, text):
+    with open(path, 'w', encoding='utf-8', newline='\n') as f:
+        f.write(text)
 
 
 def main():
     texts = {l: load(l) for l in LANGS}
     for l in LANGS:
         LANG_NAMES[l] = texts[l]['lang_name']
+        LOCALES[l] = texts[l]['locale']
     for l in LANGS:
         t = texts[l]
         out = SITE if l == 'de' else os.path.join(SITE, l)
         os.makedirs(out, exist_ok=True)
         bodies = {'index': home, 'features': features, 'ai': ai_page, 'download': download_page}
         for page in PAGES:
-            meta = t['meta'][page]
-            doc = head(t, l, page, meta[0], meta[1]) + nav(t, l, page) + '\n' + bodies[page](t, l) + '\n' + footer(t, l)
-            with open(os.path.join(out, page + '.html'), 'w', encoding='utf-8', newline='\n') as f:
-                f.write(doc)
-    print('Seiten:', len(LANGS) * len(PAGES))
+            title, description = t['meta'][page]
+            body = bodies[page](t, l)
+            write(os.path.join(out, page + '.html'), head(t, l, page, title, description) + nav(t, l, page) + '\n' + body + '\n' + footer(t, l))
+            write(os.path.join(out, page + '.html.md'), markdown(l, page, title, description, body))
+    write(os.path.join(SITE, 'llms.txt'), llms_txt(texts))
+    write(os.path.join(SITE, 'sitemap.xml'), sitemap())
+    write(os.path.join(SITE, 'robots.txt'), robots())
+    print('Seiten:', len(LANGS) * len(PAGES), '+ Markdown, llms.txt, sitemap.xml, robots.txt')
 
 
 if __name__ == '__main__':

@@ -56,6 +56,15 @@ if(KIND STREQUAL "cdr")
         # CDR5 speichert ein Byte je Zeichen; Bit 0 der Zeichenflags bedeutet dort nicht "zwei Bytes"
         replace_line(${SOURCE}/src/lib/CDRParser.cpp "charDescriptions.push_back((unsigned char)((readU16(input) >> 3) & 0xff));"
             "charDescriptions.push_back((unsigned char)((readU16(input) >> 3) & 0xfe)); // TANGENTA")
+        # Bitmap-Masken (durchsichtige Bereiche, z. B. ausgestellte Fotos)
+        file(READ ${PATCHES}/bitmap-mask.inc maskdecl)
+        file(READ ${PATCHES}/bitmap-mask-read.inc maskread)
+        file(READ ${PATCHES}/bitmap-mask-apply.inc maskapply)
+        replace_line(${SOURCE}/src/lib/CDRParser.cpp "#include \"CDRParser.h\"\n" "#include \"CDRParser.h\"\n${maskdecl}")
+        replace_line(${SOURCE}/src/lib/CDRParser.cpp "  readRImage(colorModel, width, height, bpp, palette, bitmap, input);\n"
+            "  readRImage(colorModel, width, height, bpp, palette, bitmap, input);\n${maskread}")
+        replace_line(${SOURCE}/src/lib/CDRStylesCollector.cpp "#include \"libcdr_utils.h\"\n" "#include \"libcdr_utils.h\"\n${maskdecl}")
+        replace_line(${SOURCE}/src/lib/CDRStylesCollector.cpp "  if (storeBMP)\n" "${maskapply}  if (storeBMP)\n")
         file(READ ${PATCHES}/text-transform.inc trafo)
         replace_line(${SOURCE}/src/lib/CDRContentCollector.cpp "    librevenge::RVNGPropertyList textFrameProps;\n"
             "    librevenge::RVNGPropertyList textFrameProps;\n${trafo}")

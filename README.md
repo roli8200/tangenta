@@ -113,8 +113,8 @@ Pakete:
 Still installieren, z.B. per GPO, Intune oder Skript:
 
 ```bat
-TANGENTA-0.85-x64-setup.exe /quiet
-msiexec /i TANGENTA-0.85-x64.msi /qn INSTALLFOLDER="D:\Programme\TANGENTA" DESKTOPSHORTCUT=1
+TANGENTA-0.86-x64-setup.exe /quiet
+msiexec /i TANGENTA-0.86-x64.msi /qn INSTALLFOLDER="D:\Programme\TANGENTA" DESKTOPSHORTCUT=1
 ```
 
 ### Debian und Ubuntu
@@ -122,8 +122,20 @@ msiexec /i TANGENTA-0.85-x64.msi /qn INSTALLFOLDER="D:\Programme\TANGENTA" DESKT
 Je ein Paket für Debian 12, Debian 13, Ubuntu 24.04 und Ubuntu 26.04. Qt 6.10 ist mit dabei.
 
 ```sh
-sudo apt install ./tangenta_0.85-1~debian12_amd64.deb
+sudo apt install ./tangenta_0.86-1~debian12_amd64.deb
 ```
+
+### Andere Linux-Systeme (Flatpak)
+
+Für Fedora, openSUSE, Arch, Mint und alle anderen Systeme mit Flatpak. Die KDE-Laufzeit (Qt 6.10)
+holt Flatpak beim Installieren selbst von Flathub.
+
+```sh
+flatpak install --user TANGENTA-0.86-x86_64.flatpak
+flatpak run ch.tangenta.Tangenta
+```
+
+Selbst bauen: `packaging/flatpak/build-flatpak.sh` (braucht `flatpak` und `flatpak-builder`).
 
 ### Selbst bauen
 
