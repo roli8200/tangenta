@@ -58,6 +58,12 @@
     unsigned fontSize = 0;
     if (number("character.latin.size", fontSize))
       style.m_fontSize = (double)fontSize / 254000.0;
+    unsigned weight = 0;
+    if (number("character.latin.weight", weight))
+      style.m_fontWeight = weight;
+    unsigned italic = 0;
+    if (number("character.latin.italic", italic))
+      style.m_fontItalic = italic ? 1 : 0;
 
     if (exists("character.outline"))
     {

@@ -12,6 +12,8 @@
 #include <librevenge-stream/librevenge-stream.h>
 #include <librevenge/librevenge.h>
 
+#include <QFont>
+#include <QFontMetricsF>
 #include <QHash>
 #include <QPainterPath>
 #include <QTransform>
@@ -19,6 +21,11 @@
 #include <algorithm>
 #include <cmath>
 #include <memory>
+
+namespace librevenge {
+// in third_party/cdr-support/patches/patch.cmake ergänzt: Bilddaten ohne Base64
+const RVNGBinaryData* tangentaBinaryData(const RVNGProperty* property);
+}
 
 namespace vek::cdr {
 
@@ -57,7 +64,11 @@ std::optional<Color> color(const QString& hex, double opacity = 1.0)
 QByteArray binary(const Props& p, const char* key)
 {
     const librevenge::RVNGProperty* v = p[key];
-    return v ? QByteArray::fromBase64(QByteArray(v->getStr().cstr())) : QByteArray();
+    if (!v)
+        return {};
+    if (const librevenge::RVNGBinaryData* d = librevenge::tangentaBinaryData(v))
+        return QByteArray(reinterpret_cast<const char*>(d->getDataBuffer()), qsizetype(d->size()));
+    return QByteArray::fromBase64(QByteArray(v->getStr().cstr()));
 }
 
 // Zeichnet libcdr in TANGENTA-Objekte: jede Seite eine Gruppe, Gruppen der Zeichnung als Gruppen
@@ -161,6 +172,17 @@ public:
     void startTextObject(const Props& p) override
     {
         m_textFrame = QRectF(num(p, "svg:x") * kMm, num(p, "svg:y") * kMm, num(p, "svg:width") * kMm, num(p, "svg:height") * kMm);
+        // Abbildung lokal (Zoll, y nach oben) -> Seite (Zoll, y nach unten), siehe text-transform.inc;
+        // hier umgerechnet auf TANGENTA-Koordinaten (mm, y nach unten)
+        m_textMatrix.reset();
+        m_textBox.reset();
+        if (p["tangenta:m11"]) {
+            m_textMatrix = QTransform(num(p, "tangenta:m11"), num(p, "tangenta:m12"), -num(p, "tangenta:m21"),
+                                      -num(p, "tangenta:m22"), num(p, "tangenta:dx") * kMm, num(p, "tangenta:dy") * kMm);
+            if (p["tangenta:box-w"])
+                m_textBox = QRectF(num(p, "tangenta:box-x") * kMm, -num(p, "tangenta:box-y") * kMm,
+                                   num(p, "tangenta:box-w") * kMm, num(p, "tangenta:box-h") * kMm);
+        }
         m_paragraphs.clear();
         m_inText = true;
     }
@@ -178,14 +200,7 @@ public:
             }
         if (!any)
             return;
-        auto text = std::make_unique<TextObject>(TextObject::Kind::Paragraph);
-        text->setParagraphs(m_paragraphs);
-        // Die Masse stammen aus der Zeichnung; etwas Luft, damit andere Schriftmetrik nicht umbricht
-        // oder Zeilen versteckt
-        const double lineMm = largest * 25.4 / 72.0 * 1.3;
-        const double needed = lineMm * double(m_paragraphs.size());
-        text->setFrameSize(QSizeF(std::max(m_textFrame.width() * 1.04, lineMm), std::max(m_textFrame.height(), needed) * 1.15));
-        text->setTransform(QTransform::fromTranslate(m_textFrame.left(), m_textFrame.top()));
+        std::unique_ptr<TextObject> text = m_textMatrix ? placedText(largest) : framedText(largest);
         vek::Style st;
         st.fill = Fill::solid(Color(0, 0, 0));
         st.stroke.reset();
@@ -196,6 +211,62 @@ public:
             for (const TextRun& run : par.runs)
                 registerFont(run.format, m_rawFont.value(run.format.family, run.format.family), raw);
     }
+    // Ältere Ausgabe ohne Abbildung: Rahmen achsenparallel aus den Seitenmassen
+    std::unique_ptr<TextObject> framedText(double largest) const
+    {
+        auto text = std::make_unique<TextObject>(TextObject::Kind::Paragraph);
+        text->setParagraphs(m_paragraphs);
+        // Die Masse stammen aus der Zeichnung; etwas Luft, damit andere Schriftmetrik nicht umbricht
+        // oder Zeilen versteckt
+        const double lineMm = largest * 25.4 / 72.0 * 1.3;
+        const double needed = lineMm * double(m_paragraphs.size());
+        text->setFrameSize(QSizeF(std::max(m_textFrame.width() * 1.04, lineMm), std::max(m_textFrame.height(), needed) * 1.15));
+        text->setTransform(QTransform::fromTranslate(m_textFrame.left(), m_textFrame.top()));
+        return text;
+    }
+
+    // Text mit der Abbildung aus der Datei: Drehung, Stauchung und Spiegelung bleiben erhalten.
+    // Mengentext bekommt seinen lokalen Rahmen, Grafiktext steht mit der ersten Grundlinie am
+    // Ursprung (links, Mitte oder rechts je nach Ausrichtung).
+    std::unique_ptr<TextObject> placedText(double largest) const
+    {
+        if (m_textBox) {
+            auto text = std::make_unique<TextObject>(TextObject::Kind::Paragraph);
+            text->setParagraphs(m_paragraphs);
+            const double lineMm = largest * 25.4 / 72.0 * 1.3;
+            const double needed = lineMm * double(m_paragraphs.size());
+            text->setFrameSize(QSizeF(std::max(m_textBox->width() * 1.04, lineMm), std::max(m_textBox->height(), needed) * 1.15));
+            text->setTransform(QTransform::fromTranslate(m_textBox->left(), m_textBox->top()) * *m_textMatrix);
+            return text;
+        }
+        auto text = std::make_unique<TextObject>(TextObject::Kind::Artistic);
+        text->setParagraphs(m_paragraphs);
+        const QRectF block = text->frameRect();
+        double ascent = 0.0;
+        for (const TextRun& run : m_paragraphs.first().runs) {
+            const QString installed = fontmatch::installedFamily(run.format.family);
+            QFont font(installed.isEmpty() ? run.format.family : installed);
+            font.setPixelSize(std::max(1, int(std::lround(run.format.sizePt * 25.4 / 72.0 * TextObject::kUnitsPerMm))));
+            font.setBold(run.format.bold);
+            font.setItalic(run.format.italic);
+            ascent = std::max(ascent, QFontMetricsF(font).ascent() / TextObject::kUnitsPerMm);
+        }
+        double originX = block.left();
+        const TextParagraph::Align align = m_paragraphs.first().align;
+        if (align == TextParagraph::Align::Center)
+            originX = block.center().x();
+        else if (align == TextParagraph::Align::Right)
+            originX = block.right();
+        QTransform local = QTransform::fromTranslate(-originX, -ascent);
+        // Ersatzschriften laufen oft breiter: ungedrehten Text auf die Breite in der Datei stauchen
+        const bool upright = std::abs(m_textMatrix->m12()) < 1e-6 && std::abs(m_textMatrix->m21()) < 1e-6;
+        const double shown = block.width() * std::abs(m_textMatrix->m11());
+        if (upright && m_textFrame.width() > 0.0 && shown > m_textFrame.width() * 1.02)
+            local *= QTransform::fromScale(m_textFrame.width() / shown, 1.0);
+        text->setTransform(local * *m_textMatrix);
+        return text;
+    }
+
     void openParagraph(const Props& p) override
     {
         m_paragraph = TextParagraph();
@@ -462,6 +533,8 @@ private:
     int m_skip = 0;
     bool m_inText = false;
     QRectF m_textFrame;
+    std::optional<QTransform> m_textMatrix;
+    std::optional<QRectF> m_textBox;
     QList<TextParagraph> m_paragraphs;
     TextParagraph m_paragraph;
     CharFormat m_format;
