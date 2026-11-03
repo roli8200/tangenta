@@ -4499,6 +4499,11 @@ TANGENTA processes images internally at 16 bits per channel (camera raw data, 16
         <translation>&amp;Blend</translation>
     </message>
     <message>
+        <source>&amp;Kontur</source>
+        <comment>Effekt</comment>
+        <translation>C&amp;ontour</translation>
+    </message>
+    <message>
         <source>&amp;Hülle</source>
         <translation>&amp;Envelope</translation>
     </message>

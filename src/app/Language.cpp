@@ -1,6 +1,7 @@
 #include "Language.h"
 
 #include <QApplication>
+#include <QFont>
 #include <QLibraryInfo>
 #include <QLocale>
 #include <QSettings>
@@ -27,7 +28,10 @@ QList<Language> languages()
     return {{QStringLiteral("de"), QStringLiteral("Deutsch")},
             {QStringLiteral("en"), QStringLiteral("English")},
             {QStringLiteral("fr"), QStringLiteral("Français")},
-            {QStringLiteral("it"), QStringLiteral("Italiano")}};
+            {QStringLiteral("it"), QStringLiteral("Italiano")},
+            {QStringLiteral("es"), QStringLiteral("Español")},
+            {QStringLiteral("pt"), QStringLiteral("Português")},
+            {QStringLiteral("zh"), QStringLiteral("简体中文")}};
 }
 
 QString languageSetting()
@@ -52,6 +56,11 @@ QString activeLanguage()
         return chosen;
     // Erste Systemsprache, die TANGENTA kann ("de-CH" -> "de")
     for (const QString& ui : QLocale::system().uiLanguages()) {
+        // Traditionelles Chinesisch (Taiwan, Hongkong) nicht mit der vereinfachten Fassung bedienen
+        if (ui.startsWith(QLatin1String("zh"), Qt::CaseInsensitive)
+            && (ui.contains(QLatin1String("Hant"), Qt::CaseInsensitive) || ui.contains(QLatin1String("TW"), Qt::CaseInsensitive)
+                || ui.contains(QLatin1String("HK"), Qt::CaseInsensitive) || ui.contains(QLatin1String("MO"), Qt::CaseInsensitive)))
+            continue;
         const QString code = ui.left(2).toLower();
         if (supported(code))
             return code;
@@ -59,9 +68,21 @@ QString activeLanguage()
     return QStringLiteral("en");
 }
 
+void applyLanguageFont(const QString& code)
+{
+    static const QFont original = QApplication::font();
+    QFont font = original;
+    if (code == QLatin1String("zh"))
+        font.setFamilies({original.family(), QStringLiteral("Microsoft YaHei UI"), QStringLiteral("Microsoft YaHei"),
+                          QStringLiteral("PingFang SC"), QStringLiteral("Noto Sans CJK SC"), QStringLiteral("Source Han Sans SC"),
+                          QStringLiteral("WenQuanYi Micro Hei"), QStringLiteral("SimSun")});
+    QApplication::setFont(font);
+}
+
 void installTranslations()
 {
     const QString code = activeLanguage();
+    applyLanguageFont(code);
     // Deutsch steht im Quelltext, braucht also nur Qts eigene Texte
     if (code != QLatin1String("de")) {
         static QTranslator app;
@@ -71,7 +92,9 @@ void installTranslations()
     // Qt-eigene Texte (Abbrechen, Ja/Nein, Dateidialog): erst neben der Anwendung
     // (Windows-Fassung), sonst aus der Qt-Installation (Linux)
     static QTranslator qt;
-    const QString name = QStringLiteral("qt_") + code;
+    // Qt führt Chinesisch als zh_CN und Portugiesisch als pt_BR
+    const QString qtCode = code == QLatin1String("zh") ? QStringLiteral("zh_CN") : code == QLatin1String("pt") ? QStringLiteral("pt_BR") : code;
+    const QString name = QStringLiteral("qt_") + qtCode;
     if (qt.load(name, QApplication::applicationDirPath() + QStringLiteral("/translations"))
         || qt.load(name, QLibraryInfo::path(QLibraryInfo::TranslationsPath)))
         QApplication::installTranslator(&qt);

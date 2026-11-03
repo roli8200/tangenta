@@ -34,7 +34,7 @@ Your files stay with you.
   and the page, dynamic guides.
 - **Fast and lean**: a native program in C++ and Qt 6. It starts in seconds and installs with one
   click or silently across the network.
-- **Your language**: the interface speaks English, German, French and Italian (View > Language).
+- **Your language**: the interface speaks English, German, French, Italian, Spanish, Portuguese and Simplified Chinese (View > Language).
 - **Open**: your document is a plain file. Opens CDR, CMX, PDF, AI, SVG, EPS and DXF. Exports PDF, SVG,
   EPS, DXF and all common image formats. Scripting in JavaScript.
 

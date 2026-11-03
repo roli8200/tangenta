@@ -238,6 +238,7 @@ if(VEK_BUILD_APP)
     qt_add_translations(TARGETS vekapp
         SOURCE_TARGETS vekcore vekapp
         TS_FILES translations/tangenta_en.ts translations/tangenta_fr.ts translations/tangenta_it.ts
+                 translations/tangenta_es.ts translations/tangenta_pt.ts translations/tangenta_zh.ts
         RESOURCE_PREFIX /i18n
         LUPDATE_OPTIONS -source-language de -locations none -no-obsolete)
     endif()

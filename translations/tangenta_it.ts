@@ -4499,6 +4499,11 @@ TANGENTA elabora internamente le immagini a 16 bit per canale (dati raw della fo
         <translation>Fu&amp;sione</translation>
     </message>
     <message>
+        <source>&amp;Kontur</source>
+        <comment>Effekt</comment>
+        <translation>C&amp;ontorno</translation>
+    </message>
+    <message>
         <source>&amp;Hülle</source>
         <translation>&amp;Inviluppo</translation>
     </message>

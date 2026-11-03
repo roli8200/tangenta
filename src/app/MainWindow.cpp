@@ -965,7 +965,7 @@ void MainWindow::createMenusAndToolbars()
     // Effekte: Überblendung, Kontur, Hülle, Extrudieren, Linse, Abschrägung, …
     effects->addSeparator();
     effects->addAction(icon(QStringLiteral("tool-blend")), tr("Ü&berblendung"), this, [this] { m_canvas->setTool(ToolId::Blend); });
-    effects->addAction(icon(QStringLiteral("tool-contour")), tr("&Kontur"), QKeySequence(Qt::CTRL | Qt::Key_F9), this,
+    effects->addAction(icon(QStringLiteral("tool-contour")), tr("&Kontur", "Effekt"), QKeySequence(Qt::CTRL | Qt::Key_F9), this,
                        [this] { m_canvas->setTool(ToolId::Contour); });
     effects->addAction(icon(QStringLiteral("tool-envelope")), tr("&Hülle"), QKeySequence(Qt::CTRL | Qt::Key_F7), this, [this] {
         m_envelopeDock->show();

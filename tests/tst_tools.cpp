@@ -18,6 +18,7 @@
 #include "FlyoutButton.h"
 #include "GroupObject.h"
 #include "BitmapFilters.h"
+#include "Language.h"
 #include "MainWindow.h"
 #include "PickTool.h"
 #include "PolygonObject.h"
@@ -5772,10 +5773,11 @@ private slots:
             OptionsDialog dialog(*m_editor, nullptr);
             germanPages = int(dialog.pagePaths().size());
         }
-        for (const char* code : {"en", "fr", "it"}) {
+        for (const char* code : {"en", "fr", "it", "es", "pt", "zh"}) {
             QTranslator translator;
             QVERIFY2(translator.load(QStringLiteral(":/i18n/tangenta_") + QLatin1String(code)), code);
             QApplication::installTranslator(&translator);
+            applyLanguageFont(QLatin1String(code));
             {
                 // Kein Menüeintrag mehr deutsch
                 MainWindow window;
@@ -5849,6 +5851,7 @@ private slots:
             }
             QApplication::removeTranslator(&translator);
         }
+        applyLanguageFont(QStringLiteral("de"));
     }
 
     void cdrImportIsRobust()

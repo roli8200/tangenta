@@ -121,7 +121,7 @@ Translations = translations
 EOF
 if [ -d "$QT_DIR/translations" ]; then
     mkdir -p "$STAGE$PREFIX/translations"
-    for lang in de en fr it; do
+    for lang in de en fr it es pt_BR zh_CN; do
         cp "$QT_DIR"/translations/qt*_$lang.qm "$STAGE$PREFIX/translations/" 2>/dev/null || true
     done
 fi

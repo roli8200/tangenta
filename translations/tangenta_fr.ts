@@ -4499,6 +4499,11 @@ TANGENTA traite les images en interne avec 16 bits par canal (données brutes d'
         <translation>&amp;Mélange</translation>
     </message>
     <message>
+        <source>&amp;Kontur</source>
+        <comment>Effekt</comment>
+        <translation>C&amp;ontour</translation>
+    </message>
+    <message>
         <source>&amp;Hülle</source>
         <translation>En&amp;veloppe</translation>
     </message>
