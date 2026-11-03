@@ -1,5 +1,6 @@
 #include "Outline.h"
 
+#include <QCoreApplication>
 #include <QPainterPathStroker>
 #include <QTransform>
 
@@ -74,7 +75,7 @@ int arrowCount()
 
 QString arrowName(int index)
 {
-    return QString::fromUtf8(kArrows[std::clamp(index, 0, arrowCount() - 1)].name);
+    return QCoreApplication::translate("outline", kArrows[std::clamp(index, 0, arrowCount() - 1)].name);
 }
 
 QPainterPath arrowShape(int index)

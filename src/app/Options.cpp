@@ -13,7 +13,7 @@ namespace vek {
 
 namespace {
 
-// Vorgaben (aus dem Optionen-Dialog, siehe docs/optionen.md).
+// Vorgaben (aus dem Optionen-Dialog, siehe docs/options.md).
 // Auswahllisten und Optionsfelder speichern den Index.
 const QHash<QString, QVariant>& defaults()
 {

@@ -121,7 +121,9 @@ Translations = translations
 EOF
 if [ -d "$QT_DIR/translations" ]; then
     mkdir -p "$STAGE$PREFIX/translations"
-    cp "$QT_DIR"/translations/qt*_de.qm "$STAGE$PREFIX/translations/" 2>/dev/null || true
+    for lang in de en fr it; do
+        cp "$QT_DIR"/translations/qt*_$lang.qm "$STAGE$PREFIX/translations/" 2>/dev/null || true
+    done
 fi
 strip --strip-unneeded "$STAGE$PREFIX/bin/tangenta" "$LIB"/*.so* 2>/dev/null || true
 find "$PLUG" -name '*.so' -exec strip --strip-unneeded {} \; 2>/dev/null || true

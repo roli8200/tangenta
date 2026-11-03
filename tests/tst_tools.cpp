@@ -118,6 +118,10 @@
 
 #include <QtTest>
 #include <QTreeWidget>
+#include <QTranslator>
+#include <QGroupBox>
+#include <QAbstractButton>
+#include <QMenuBar>
 #include <QDockWidget>
 #include <QPushButton>
 #include <QCheckBox>
@@ -5666,6 +5670,96 @@ private slots:
         count(*imp.group);
         QCOMPARE(shapes, 2);
         QVERIFY(imp.group->boundingRect().contains(QRectF(10, 10, 80, 30).adjusted(1, 1, -1, -1)));
+    }
+
+    void interfaceTranslations()
+    {
+        if (!QFile::exists(QStringLiteral(":/i18n/tangenta_en.qm")))
+            QSKIP("ohne Qt LinguistTools gebaut");
+        QCoreApplication::setOrganizationName(QStringLiteral("VektoreditorTest")); // sonst kein QSettings
+        Options::instance().attach(m_editor.get());
+        int germanPages = 0;
+        {
+            OptionsDialog dialog(*m_editor, nullptr);
+            germanPages = int(dialog.pagePaths().size());
+        }
+        for (const char* code : {"en", "fr", "it"}) {
+            QTranslator translator;
+            QVERIFY2(translator.load(QStringLiteral(":/i18n/tangenta_") + QLatin1String(code)), code);
+            QApplication::installTranslator(&translator);
+            {
+                // Kein Menüeintrag mehr deutsch
+                MainWindow window;
+                QStringList german;
+                const QRegularExpression umlaut(QStringLiteral("[äöüÄÖÜ]"));
+                std::function<void(QMenu*)> walk = [&](QMenu* menu) {
+                    for (QAction* a : menu->actions()) {
+                        if (a->menu())
+                            walk(a->menu());
+                        if (a->text().contains(umlaut))
+                            german << a->text();
+                    }
+                };
+                for (QAction* a : window.menuBar()->actions()) {
+                    if (a->menu())
+                        walk(a->menu());
+                }
+                QVERIFY2(german.isEmpty(), qPrintable(QLatin1String(code) + QStringLiteral(": ") + german.join(QStringLiteral(" | "))));
+
+                // Optionen: Pfade passen zusammen (drei Wurzeln, gleich viele Seiten), Sprünge aus dem Menü treffen
+                OptionsDialog dialog(*m_editor, nullptr);
+                QSet<QString> roots;
+                for (const QString& path : dialog.pagePaths())
+                    roots.insert(path.section(QLatin1Char('/'), 0, 0));
+                QCOMPARE(roots.size(), 3);
+                QCOMPARE(int(dialog.pagePaths().size()), germanPages);
+                for (const char* path : {"Dokument/Lineale", "Arbeitsbereich/An Objekten ausrichten", "Global/KI",
+                                         "Arbeitsbereich/SuperTrace", "Global/Bildersuche"})
+                    QVERIFY2(dialog.selectPage(MainWindow::tr(path)), qPrintable(QLatin1String(code) + QLatin1Char(' ') + MainWindow::tr(path)));
+                // Übersicht übrig gebliebener deutscher Texte (nur auf Wunsch, Benutzerdaten zählen mit)
+                if (qEnvironmentVariableIsSet("VEK_I18N_SCAN")) {
+                    QSet<QString> left;
+                    auto scan = [&](QWidget* root) {
+                        for (QWidget* w : root->findChildren<QWidget*>()) {
+                            QStringList texts{w->toolTip()};
+                            if (auto* l = qobject_cast<QLabel*>(w))
+                                texts << l->text();
+                            if (auto* b = qobject_cast<QAbstractButton*>(w))
+                                texts << b->text();
+                            if (auto* c = qobject_cast<QComboBox*>(w))
+                                for (int i = 0; i < c->count(); ++i)
+                                    texts << c->itemText(i);
+                            if (auto* g = qobject_cast<QGroupBox*>(w))
+                                texts << g->title();
+                            for (QAction* a : w->actions())
+                                texts << a->text() << a->toolTip();
+                            for (const QString& t : texts)
+                                if (t.contains(umlaut))
+                                    left << t.left(120);
+                        }
+                    };
+                    scan(&window);
+                    scan(&dialog);
+                    QStringList sorted(left.begin(), left.end());
+                    sorted.sort();
+                    for (const QString& t : sorted)
+                        qInfo().noquote() << "I18N" << code << t;
+                }
+                if (qEnvironmentVariableIsSet("VEK_SCREENSHOT_DIR")) {
+                    const QString dir = qEnvironmentVariable("VEK_SCREENSHOT_DIR");
+                    window.resize(1500, 900);
+                    window.show();
+                    QTest::qWait(200);
+                    window.grab().save(dir + QStringLiteral("/90-sprache-%1.png").arg(QLatin1String(code)));
+                    dialog.resize(1000, 700);
+                    dialog.selectPage(MainWindow::tr("Global/KI"));
+                    dialog.show();
+                    QTest::qWait(200);
+                    dialog.grab().save(dir + QStringLiteral("/91-optionen-%1.png").arg(QLatin1String(code)));
+                }
+            }
+            QApplication::removeTranslator(&translator);
+        }
     }
 
     void cdrImportIsRobust()

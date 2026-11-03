@@ -127,7 +127,8 @@ private:
     // Kontextmenü auf Objekten
     void showObjectContextMenu(const QPoint& globalPos);
     // Oberflächengrösse geändert: Neustart anbieten
-    void offerRestart();
+    // Fragt nach einem Neustart; leer = Text für die Oberflächengrösse
+    void offerRestart(const QString& title = QString(), const QString& question = QString());
     void editUniformFill();
     void editFountainFill();
     void editOutlineColor();

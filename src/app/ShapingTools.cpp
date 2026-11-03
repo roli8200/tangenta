@@ -185,7 +185,9 @@ void BrushShapingTool::commit()
     QList<NodeId> ids;
     for (const Work& w : work)
         ids << w.id;
-    static const char* names[] = {"Verschmieren", "Verwischen", "Aufrauen", "Wirbel", "Anziehen", "Abstossen"};
+    static const char* names[] = {QT_TRANSLATE_NOOP("QObject", "Verschmieren"), QT_TRANSLATE_NOOP("QObject", "Verwischen"),
+                                   QT_TRANSLATE_NOOP("QObject", "Aufrauen"), QT_TRANSLATE_NOOP("QObject", "Wirbel"),
+                                   QT_TRANSLATE_NOOP("QObject", "Anziehen"), QT_TRANSLATE_NOOP("QObject", "Abstossen")};
     m_canvas.editor().replaceObjects(ids, [&work](const DrawObject& o) -> Editor::Replacement {
         for (const Work& w : work) {
             if (w.id != o.id())
@@ -363,7 +365,8 @@ void FreeTransformTool::mouseRelease(QMouseEvent* event, const QPointF& doc)
         return;
     }
     Editor& ed = m_canvas.editor();
-    static const char* names[] = {"Freies Drehen", "Freies Spiegeln", "Freies Skalieren", "Freies Neigen"};
+    static const char* names[] = {QT_TRANSLATE_NOOP("QObject", "Freies Drehen"), QT_TRANSLATE_NOOP("QObject", "Freies Spiegeln"),
+                                   QT_TRANSLATE_NOOP("QObject", "Freies Skalieren"), QT_TRANSLATE_NOOP("QObject", "Freies Neigen")};
     ed.transformSelection(transformFor(mode(), m_pivot, doc, ed.selectionBounds()), QObject::tr(names[int(mode())]));
     m_canvas.update();
 }

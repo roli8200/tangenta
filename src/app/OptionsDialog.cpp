@@ -7,6 +7,7 @@
 #include "Editor.h"
 #include "Options.h"
 #include "ImagePool.h"
+#include "Language.h"
 #include "Ai.h"
 #include "ClaudeCode.h"
 #include "ImageSearch.h"
@@ -53,7 +54,11 @@ namespace vek {
 
 namespace {
 
-const QString kLater = QObject::tr("Folgt in einer späteren Version von TANGENTA");
+// Erst beim Aufruf übersetzen: eine globale Konstante entstünde vor dem Laden der Übersetzung
+QString laterHint()
+{
+    return QObject::tr("Folgt in einer späteren Version von TANGENTA");
+}
 
 struct PageSize {
     const char* name;
@@ -131,7 +136,7 @@ OptionsDialog::OptionsDialog(Editor& editor, QMainWindow* window, QWidget* paren
         if (item)
             m_stack->setCurrentIndex(item->data(0, Qt::UserRole).toInt());
     });
-    selectPage(QStringLiteral("Arbeitsbereich"));
+    selectPage(tr("Arbeitsbereich"));
 }
 
 // --- Bausteine --------------------------------------------------------------------------------
@@ -399,7 +404,7 @@ QWidget* OptionsDialog::button(const QString& text, std::function<void()> onClic
 void OptionsDialog::later(QWidget* w)
 {
     w->setEnabled(false);
-    w->setToolTip(kLater);
+    w->setToolTip(laterHint());
 }
 
 void OptionsDialog::markLaterStart()
@@ -434,6 +439,23 @@ void OptionsDialog::buildWorkspace()
     laterRest();
     endGroup();
     group(tr("Benutzeroberfläche"));
+    {
+        // Sprache steht in QSettings "ui/language" (wie Ansicht > Sprache), nicht unter options/
+        QBoxLayout* r = row();
+        auto* l = new QLabel(tr("Sprache (Language):"), m_pageWidget);
+        l->setMinimumWidth(170);
+        r->addWidget(l);
+        auto* combo = new QComboBox(m_pageWidget);
+        combo->setObjectName(QStringLiteral("language"));
+        combo->addItem(tr("Wie das System"), QString());
+        for (const Language& language : languages())
+            combo->addItem(language.name, language.code);
+        combo->setCurrentIndex(std::max(0, combo->findData(languageSetting())));
+        r->addWidget(combo);
+        r->addStretch(1);
+        m_appliers << [combo] { setLanguageSetting(combo->currentData().toString()); };
+    }
+    note(tr("Die Sprache gilt ab dem nächsten Start."));
     check(QStringLiteral("ws/general/centerDialogs"), tr("Dialogfelder beim Anzeigen zentrieren"));
     markLaterStart();
     check(QStringLiteral("ws/general/dockerTitles"), tr("Titel in verschiebbaren Andockfenstern anzeigen"));
@@ -506,7 +528,7 @@ void OptionsDialog::buildWorkspace()
         const QString id = modes->item(i)->data(Qt::UserRole).toString();
         if (id != QLatin1String("node") && id != QLatin1String("edge") && id != QLatin1String("center")) {
             modes->item(i)->setFlags(modes->item(i)->flags() & ~Qt::ItemIsEnabled);
-            modes->item(i)->setToolTip(kLater);
+            modes->item(i)->setToolTip(laterHint());
         }
     }
     {
@@ -724,7 +746,7 @@ void OptionsDialog::buildTools()
     slider(QStringLiteral("ws/tools/shapeRecognition/delay"), tr("Verzögerung:"), 10, 1000, tr(" Sekunde(n)"));
     note(tr("Gilt für das Smart-Zeichnen (Umschalt+S): so lange nach dem Loslassen kann man weiterzeichnen, bevor die Form erkannt wird."));
 
-    page(base + QStringLiteral("/Freihand|Bezier"), tr("Freihand/Bezier"));
+    page(base + QLatin1Char('/') + tr("Freihand/Bezier").replace(QLatin1Char('/'), QLatin1Char('|')), tr("Freihand/Bezier"));
     slider(QStringLiteral("ws/tools/freehand/smoothing"), tr("Freihandglättung:"), 0, 100, QString());
     number(QStringLiteral("ws/tools/freehand/corner"), tr("Eckengrenzwert:"), 1, 10, 0, tr(" Pixel"));
     number(QStringLiteral("ws/tools/freehand/straight"), tr("Geradengrenzwert:"), 1, 10, 0, tr(" Pixel"));
@@ -794,7 +816,7 @@ void OptionsDialog::buildTools()
     textField(QStringLiteral("ws/tools/angle/suffix"), tr("Suffix:"));
     note(hint);
 
-    page(base + QStringLiteral("/Zoom|Schwenken"), tr("Zoom/Schwenken"));
+    page(base + QLatin1Char('/') + tr("Zoom/Schwenken").replace(QLatin1Char('/'), QLatin1Char('|')), tr("Zoom/Schwenken"));
     radios(QStringLiteral("ws/tools/zoom/rightZoom"), tr("Rechte Maustaste für Zoom:"), {tr("Verkleinern"), tr("Kontextmenü")});
     radios(QStringLiteral("ws/tools/zoom/rightPan"), tr("Rechte Maustaste für das Hilfsmittel 'Schwenken':"),
            {tr("Verkleinern"), tr("Kontextmenü")});

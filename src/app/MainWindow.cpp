@@ -52,6 +52,7 @@
 #include "TableTool.h"
 #include "BitmapFilters.h"
 #include "TextTool.h"
+#include "Language.h"
 #include "UiScale.h"
 #include "Ruler.h"
 
@@ -643,6 +644,34 @@ void MainWindow::createMenusAndToolbars()
         });
     }
 
+    // Sprache: wirkt nach einem Neustart. "Language" steht immer dabei, damit man auch aus
+    // einer fremden Sprache zurückfindet.
+    const QString languageTitle = tr("&Sprache");
+    QMenu* languageMenu = view->addMenu(activeLanguage() == QLatin1String("en")
+                                            ? languageTitle
+                                            : languageTitle + QStringLiteral(" (Language)"));
+    auto* languageGroup = new QActionGroup(languageMenu);
+    QAction* systemLanguage = languageMenu->addAction(tr("Wie das &System"));
+    systemLanguage->setData(QString());
+    languageMenu->addSeparator();
+    for (const Language& l : languages()) {
+        QAction* a = languageMenu->addAction(l.name);
+        a->setData(l.code);
+    }
+    for (QAction* a : languageMenu->actions()) {
+        if (a->isSeparator())
+            continue;
+        a->setCheckable(true);
+        a->setChecked(a->data().toString() == languageSetting());
+        languageGroup->addAction(a);
+        connect(a, &QAction::triggered, this, [this, code = a->data().toString()] {
+            if (code == languageSetting())
+                return;
+            setLanguageSetting(code);
+            offerRestart(tr("Sprache"), tr("Die neue Sprache gilt ab dem nächsten Start. Jetzt neu starten?"));
+        });
+    }
+
     QMenu* layoutMenu = menuBar()->addMenu(tr("&Layout"));
     layoutMenu->addAction(tr("Seite &einfügen"), this, [this] { m_editor.insertPage(m_editor.currentPageIndex() + 1); });
     layoutMenu->addAction(tr("Seite &löschen"), this, [this] { m_editor.deletePage(m_editor.currentPageIndex()); });
@@ -949,7 +978,7 @@ void MainWindow::createMenusAndToolbars()
     m_selectionActions << lens;
     m_selectionActions << effects->addAction(icon(QStringLiteral("fx-perspective")), tr("&Perspektive hinzufügen"), this,
                                              [this] { m_canvas->setTool(ToolId::Perspective); });
-    QMenu* superclip = effects->addMenu(icon(QStringLiteral("fx-superclip")), tr("Po&werClip"));
+    QMenu* superclip = effects->addMenu(icon(QStringLiteral("fx-superclip")), tr("Super&Clip"));
     m_selectionActions << superclip->addAction(tr("In &Rahmen platzieren …"), this, [this] {
         m_canvas->setTool(ToolId::Pick);
         m_canvas->pickTool().beginPickTarget([this](NodeId frame) { m_editor.placeInsideFrame(frame); });
@@ -1489,11 +1518,11 @@ void MainWindow::runImageDialog(const QString& label, ImagePreviewDialog& dialog
     m_editor.setImagePixels(id, result, label);
 }
 
-void MainWindow::offerRestart()
+void MainWindow::offerRestart(const QString& title, const QString& question)
 {
     const auto answer = QMessageBox::question(
-        this, tr("Oberflächengrösse"),
-        tr("Die neue Oberflächengrösse gilt ab dem nächsten Start. Jetzt neu starten?"));
+        this, title.isEmpty() ? tr("Oberflächengrösse") : title,
+        question.isEmpty() ? tr("Die neue Oberflächengrösse gilt ab dem nächsten Start. Jetzt neu starten?") : question);
     if (answer != QMessageBox::Yes)
         return;
     // Erst schliessen (fragt nach ungespeicherten Änderungen), dann neu starten
@@ -2430,7 +2459,7 @@ void MainWindow::createTableMenu()
     menu->addSeparator();
 
     using T = TableObject;
-    QMenu* insert = menu->addMenu(tr("&Einfügen"));
+    QMenu* insert = menu->addMenu(tr("&Einfügen", "Tabelle: Zeilen oder Spalten einfügen"));
     insert->addAction(tr("Zeile &oben"), this, [this] { tableCommand(tr("Zeile einfügen"), [](T& t, const TableRange& r) { t.insertRow(r.row0); }); });
     insert->addAction(tr("Zeile &unten"), this, [this] { tableCommand(tr("Zeile einfügen"), [](T& t, const TableRange& r) { t.insertRow(r.row1 + 1); }); });
     insert->addAction(tr("Spalte &links"), this, [this] { tableCommand(tr("Spalte einfügen"), [](T& t, const TableRange& r) { t.insertColumn(r.col0); }); });

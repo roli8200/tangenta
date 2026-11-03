@@ -31,8 +31,11 @@ if (-not $SkipTests) {
 
 New-Item -ItemType Directory -Force $target | Out-Null
 Copy-Item (Join-Path $build 'tangenta.exe') $target -Force
+# Warnungen auf stderr (z.B. fehlende dxcompiler.dll) sind kein Fehler; es zählt der Rückgabewert
+$ErrorActionPreference = 'Continue'
 & (Join-Path $qtDir 'bin\windeployqt.exe') --release --no-system-d3d-compiler `
-    --no-opengl-sw (Join-Path $target 'tangenta.exe') | Out-Null
+    --no-opengl-sw (Join-Path $target 'tangenta.exe') 2>&1 | Out-Null
+$ErrorActionPreference = 'Stop'
 if ($LASTEXITCODE -ne 0) { throw 'windeployqt fehlgeschlagen' }
 # MinGW-Laufzeit, falls windeployqt sie nicht mitgenommen hat
 # libgomp: OpenMP für das Entwickeln von Kamera-Rohdaten (LibRaw)

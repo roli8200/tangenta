@@ -1,5 +1,6 @@
 #include "PathOps.h"
 
+#include <QCoreApplication>
 #include <QLineF>
 
 #include <algorithm>
@@ -769,7 +770,7 @@ QString mediaPresetName(int preset)
         QT_TRANSLATE_NOOP("pathops", "Tropfen"),            QT_TRANSLATE_NOOP("pathops", "Keil"),
         QT_TRANSLATE_NOOP("pathops", "Pinselstrich"),       QT_TRANSLATE_NOOP("pathops", "Taille"),
     };
-    return QString::fromUtf8(names[std::clamp(preset, 0, mediaPresetCount() - 1)]);
+    return QCoreApplication::translate("pathops", names[std::clamp(preset, 0, mediaPresetCount() - 1)]);
 }
 
 double mediaProfile(int preset, double t, double length, double width)

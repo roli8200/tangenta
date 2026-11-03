@@ -6,7 +6,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 set(CMAKE_AUTOMOC ON)
 
-find_package(Qt6 6.5 REQUIRED COMPONENTS Core Gui Widgets Svg PrintSupport Qml Network Test)
+find_package(Qt6 6.7 REQUIRED COMPONENTS Core Gui Widgets Svg PrintSupport Qml Network Test)
+# Übersetzungen der Oberfläche; ohne Linguist-Werkzeuge (Debian: qt6-tools-dev) nur deutsch
+find_package(Qt6 QUIET COMPONENTS LinguistTools)
+if(NOT Qt6LinguistTools_FOUND)
+    message(WARNING "Qt6 LinguistTools fehlen (Debian/Ubuntu: qt6-tools-dev): Oberfläche nur deutsch")
+endif()
 
 option(VEK_BUILD_TESTS "Build unit tests" ON)
 option(VEK_BUILD_APP "Build the application" ON)
@@ -205,6 +210,7 @@ if(VEK_BUILD_APP)
         src/app/CutTools.cpp
         src/app/FlyoutButton.cpp
         src/app/UiScale.cpp
+        src/app/Language.cpp
         src/app/FreehandTool.cpp
         src/app/ShapeTool.cpp
         src/app/ColorDialog.cpp
@@ -225,6 +231,15 @@ if(VEK_BUILD_APP)
     qt_add_resources(vekapp "icons" PREFIX "/icons" BASE resources/icons FILES ${VEK_ICONS})
 
     # Programmzeichen (tools/make-logo.py): SVG plus eigene Schnitte für kleine Grössen
+    # Übersetzungen der Oberfläche (Quelltexte deutsch); .ts nachführen mit
+    # cmake --build <build> --target update_translations, die .qm landen als :/i18n/tangenta_<sprache>.qm
+    if(Qt6LinguistTools_FOUND)
+    qt_add_translations(TARGETS vekapp
+        SOURCE_TARGETS vekcore vekapp
+        TS_FILES translations/tangenta_en.ts translations/tangenta_fr.ts translations/tangenta_it.ts
+        RESOURCE_PREFIX /i18n
+        LUPDATE_OPTIONS -source-language de -locations none)
+    endif()
     qt_add_resources(vekapp "dxf" PREFIX "/dxf" BASE resources/dxf FILES resources/dxf/acad2004.dxf)
     qt_add_resources(vekapp "brand" PREFIX "/brand" BASE resources/brand FILES
         resources/brand/tangenta.svg

@@ -26,17 +26,15 @@ namespace vek {
 
 namespace {
 
-const char* kExample = R"(// TANGENTA-Skript (JavaScript). Masse in mm, Farben "#rrggbb" oder Namen wie "orange".
-// tg.rectangle/ellipse/polygon/line/polyline/text legen Objekte an, tg.selection() liefert die Auswahl.
-// Ein Lauf ist ein Rückgängig-Schritt (Strg+Z). Strg+Eingabe führt aus.
-
+// Beispielskript: die Kommentare oben kommen übersetzt dazu (ScriptDocker::tr)
+const char* kExample = R"(
 const colors = ["crimson", "orange", "gold", "seagreen", "royalblue", "purple"];
 for (let i = 0; i < colors.length; i++) {
     const r = tg.rectangle(20 + i * 25, 20, 20, 20, 3);
     r.fill = colors[i];
     r.rotate(i * 15);
 }
-console.log("Seite", tg.currentPage, "von", tg.pageCount, "–", tg.pageWidth, "x", tg.pageHeight, "mm");
+console.log(tg.currentPage, "/", tg.pageCount, "–", tg.pageWidth, "x", tg.pageHeight, "mm");
 )";
 
 } // namespace
@@ -85,7 +83,10 @@ ScriptDocker::ScriptDocker(Editor& editor, QWidget* parent) : QWidget(parent), m
     QFont mono = QFontDatabase::systemFont(QFontDatabase::FixedFont);
     m_code->setFont(mono);
     m_code->setTabStopDistance(QFontMetricsF(mono).horizontalAdvance(QLatin1Char(' ')) * 4);
-    m_code->setPlainText(QString::fromUtf8(kExample));
+    m_code->setPlainText(tr("// TANGENTA-Skript (JavaScript). Masse in mm, Farben \"#rrggbb\" oder Namen wie \"orange\".\n"
+                            "// tg.rectangle/ellipse/polygon/line/polyline/text legen Objekte an, tg.selection() liefert die Auswahl.\n"
+                            "// Ein Lauf ist ein Rückgängig-Schritt (Strg+Z). Strg+Eingabe führt aus.\n")
+                         + QString::fromUtf8(kExample));
     m_output = new QPlainTextEdit(split);
     m_output->setReadOnly(true);
     m_output->setFont(mono);

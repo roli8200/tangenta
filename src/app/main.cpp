@@ -1,12 +1,10 @@
+#include "Language.h"
 #include "MainWindow.h"
 #include "UiScale.h"
 
 #include <QApplication>
 #include <QIcon>
-#include <QLibraryInfo>
-#include <QLocale>
 #include <QTimer>
-#include <QTranslator>
 
 int main(int argc, char* argv[])
 {
@@ -18,14 +16,8 @@ int main(int argc, char* argv[])
     QApplication::setDesktopFileName(QStringLiteral("tangenta"));
     QApplication::setApplicationVersion(QStringLiteral(VEK_VERSION));
 
-    // Qt-eigene Texte (Abbrechen, Ja/Nein, Dateidialog) in der Sprache des Systems:
-    // erst neben der Anwendung (Windows-Fassung), sonst aus der Qt-Installation (Linux)
-    QTranslator qtTranslator;
-    if (qtTranslator.load(QLocale(), QStringLiteral("qt"), QStringLiteral("_"),
-                          QApplication::applicationDirPath() + QStringLiteral("/translations"))
-        || qtTranslator.load(QLocale(), QStringLiteral("qt"), QStringLiteral("_"),
-                             QLibraryInfo::path(QLibraryInfo::TranslationsPath)))
-        QApplication::installTranslator(&qtTranslator);
+    // Oberfläche in der gewählten Sprache (Ansicht > Sprache), sonst in der des Systems
+    vek::installTranslations();
 
     // Kleine Grössen haben eigene, kräftigere Schnitte; das SVG deckt alles Grössere ab
     QIcon icon(QStringLiteral(":/brand/tangenta.svg"));
