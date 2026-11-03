@@ -15,6 +15,7 @@
 #include "AutoCorrect.h"
 #include "Align.h"
 #include "BitmapFilters.h"
+#include "BitmapArt.h"
 #include "Imposition.h"
 #include <QPainter>
 #include <QTemporaryDir>
@@ -1576,6 +1577,166 @@ private slots:
         const QImage blur = gaussian(img, 6);
         QVERIFY(QColor(blur.pixel(10, 15)).red() > 20 && QColor(blur.pixel(10, 15)).red() < 235); // Kante weich
         QCOMPARE(pixelate(img, 40).pixel(0, 0), pixelate(img, 40).pixel(39, 29));
+    }
+
+    void bitmapArt()
+    {
+        using namespace filters;
+        // Verlauf mit Formen, ein Pixel ganz durchsichtig
+        QImage img(64, 48, QImage::Format_ARGB32);
+        for (int y = 0; y < img.height(); ++y)
+            for (int x = 0; x < img.width(); ++x)
+                img.setPixel(x, y, qRgb(x * 4, y * 5, 255 - x * 2));
+        {
+            QPainter p(&img);
+            p.fillRect(QRect(10, 10, 20, 12), Qt::black);
+            p.setBrush(Qt::yellow);
+            p.drawEllipse(QRect(36, 20, 20, 20));
+        }
+        img.setPixel(3, 3, qRgba(0, 0, 0, 0));
+        using Fn = std::function<QImage(const QImage&)>;
+        const QList<std::pair<const char*, Fn>> all{
+            {"posterize", [](const QImage& i) { return posterize(i, 4); }},
+            {"soften", [](const QImage& i) { return soften(i, 60); }},
+            {"impressionism", [](const QImage& i) { return impressionism(i, 4, 30, 0, 7); }},
+            {"watercolor", [](const QImage& i) { return watercolor(i, 2, 50, 50, 0, 7); }},
+            {"scraperboard", [](const QImage& i) { return scraperboard(i, 60, 50, false); }},
+            {"scraperboardColor", [](const QImage& i) { return scraperboard(i, 60, 50, true); }},
+            {"wavyPaper", [](const QImage& i) { return wavyPaper(i, 50, true); }},
+            {"fabric", [](const QImage& i) { return fabric(i, 6, 50, 0, 15); }},
+            {"glassBlock", [](const QImage& i) { return glassBlock(i, 12, 10); }},
+            {"smokedGlass", [](const QImage& i) { return smokedGlass(i, Color(32, 32, 32), 50, 20); }}};
+        const QImage ref = img.convertToFormat(QImage::Format_RGBA64);
+        for (const auto& [name, fn] : all) {
+            const QImage out = fn(img);
+            QVERIFY2(out.size() == img.size(), name);
+            QVERIFY2(out.format() == QImage::Format_RGBA64, name);
+            QVERIFY2(qAlpha(out.pixel(3, 3)) == 0, name); // Transparenz bleibt
+            QVERIFY2(qAlpha(out.pixel(20, 30)) == 255, name);
+            QVERIFY2(out == fn(img), name); // reproduzierbar
+            QVERIFY2(out != ref, name);     // wirkt
+        }
+        // Zufall hängt am Startwert
+        QVERIFY(impressionism(img, 4, 30, 0, 1) != impressionism(img, 4, 30, 0, 2));
+        QVERIFY(watercolor(img, 2, 50, 50, 0, 1) != watercolor(img, 2, 50, 50, 0, 2));
+
+        // Tontrennung: zwei Stufen ergeben je Kanal nur 0 oder 255
+        const QImage post = posterize(img, 2);
+        for (int y = 0; y < post.height(); ++y)
+            for (int x = 0; x < post.width(); ++x) {
+                const QRgb c = post.pixel(x, y);
+                if (qAlpha(c) == 255)
+                    for (int v : {qRed(c), qGreen(c), qBlue(c)})
+                        QVERIFY(v == 0 || v == 255);
+            }
+        // Weichzeichnen: 0 % lässt das Bild unverändert, 100 % bleibt milder als Gauss
+        QCOMPARE(soften(img, 0).convertToFormat(QImage::Format_ARGB32), img);
+        auto diff = [](const QImage& a, const QImage& b) {
+            double sum = 0;
+            for (int y = 0; y < a.height(); ++y)
+                for (int x = 0; x < a.width(); ++x)
+                    sum += std::abs(qRed(a.pixel(x, y)) - qRed(b.pixel(x, y))) + std::abs(qGreen(a.pixel(x, y)) - qGreen(b.pixel(x, y)));
+            return sum / (a.width() * a.height());
+        };
+        QVERIFY(diff(soften(img, 100), ref) > 0.5);
+        QVERIFY(diff(soften(img, 100), ref) < diff(gaussian(img, 6), ref));
+        // Rauchglas: schwarz zu 100 % ist fast schwarz, ohne Tönung und Unschärfe fast unverändert
+        const QImage dark = smokedGlass(img, Color(0, 0, 0), 100, 20);
+        QVERIFY(QColor(dark.pixel(50, 10)).value() < 20);
+        QVERIFY(diff(smokedGlass(img, Color(0, 0, 0), 0, 0), ref) < 2);
+        // Getönt: rote Scheibe macht Weiss rötlich, halb dunkle dunkelt ab
+        QImage white(32, 32, QImage::Format_RGB32);
+        white.fill(Qt::white);
+        const QColor red(smokedGlass(white, Color(220, 30, 30), 80, 20).pixel(16, 16));
+        QVERIFY(red.red() > red.green() + 80 && red.red() > red.blue() + 80);
+        QVERIFY(QColor(smokedGlass(white, Color(32, 32, 32), 50, 20).pixel(16, 16)).value() < 160);
+        // Schabkarton: dunkle Fläche bleibt schwarz, weisse Fläche wird überwiegend hell
+        QImage half(64, 32, QImage::Format_RGB32);
+        half.fill(Qt::black);
+        QPainter(&half).fillRect(QRect(32, 0, 32, 32), Qt::white);
+        const QImage sb = scraperboard(half, 60, 50, false);
+        QCOMPARE(QColor(sb.pixel(5, 16)).value(), 0);
+        double bright = 0;
+        for (int y = 0; y < 32; ++y)
+            for (int x = 44; x < 64; ++x)
+                bright += QColor(sb.pixel(x, y)).valueF();
+        QVERIFY(bright / (20 * 32) > 0.6);
+        // Farbige Linien übernehmen die Bildfarbe
+        QImage blue(48, 48, QImage::Format_RGB32);
+        blue.fill(QColor(80, 120, 255));
+        double hueSum = 0;
+        const QImage sbc = scraperboard(blue, 60, 80, true);
+        for (int y = 0; y < 48; ++y)
+            for (int x = 0; x < 48; ++x)
+                hueSum += qBlue(sbc.pixel(x, y)) - qRed(sbc.pixel(x, y));
+        QVERIFY(hueSum > 0);
+        // Wellenpapier ohne Farbe ist grau, mit Farbe nicht
+        const QRgb g = wavyPaper(img, 50, false).pixel(50, 40);
+        QVERIFY(std::abs(qRed(g) - qGreen(g)) <= 1 && std::abs(qGreen(g) - qBlue(g)) <= 1);
+        const QRgb wc = wavyPaper(img, 50, true).pixel(50, 5);
+        QVERIFY(std::abs(qRed(wc) - qBlue(wc)) > 30);
+        // Gewebe: in der einfarbigen Fläche wechseln Faden und Lücke (hell und dunkel)
+        QImage flat(60, 60, QImage::Format_RGB32);
+        flat.fill(QColor(180, 140, 100));
+        const QImage fab = fabric(flat, 12, 50, 0, 0);
+        int lo = 255, hi = 0;
+        for (int x = 0; x < 60; ++x) {
+            const int v = QColor(fab.pixel(x, 30)).value();
+            lo = std::min(lo, v);
+            hi = std::max(hi, v);
+        }
+        QVERIFY(hi - lo > 60);
+        // Glasblock: einfarbige Fläche bleibt in der Blockmitte gleich, Fugen setzen sich ab
+        const QImage gb = glassBlock(flat, 20, 20);
+        QVERIFY(std::abs(QColor(gb.pixel(10, 10)).red() - 180) < 8);
+        QVERIFY(std::abs(QColor(gb.pixel(20, 10)).red() - 180) > 15);
+        // Aquarell und Impressionismus behalten die Grundfarbe grob bei
+        for (const QImage& o : {watercolor(flat, 3, 30, 30, 0, 1), impressionism(flat, 6, 0, 0, 1)}) {
+            const QColor m(o.pixel(30, 30));
+            QVERIFY(std::abs(m.red() - 180) < 40 && std::abs(m.blue() - 100) < 40 && m.red() > m.blue());
+        }
+    }
+
+    // Vorschaubilder der künstlerischen Effekte (nur mit VEK_ART_PREVIEW_DIR und VEK_ART_PREVIEW_SRC)
+    void bitmapArtPreview()
+    {
+        const QString dir = qEnvironmentVariable("VEK_ART_PREVIEW_DIR");
+        const QString srcPath = qEnvironmentVariable("VEK_ART_PREVIEW_SRC");
+        if (dir.isEmpty() || srcPath.isEmpty())
+            QSKIP("nur für Sichtprüfung");
+        using namespace filters;
+        QImage src(srcPath);
+        QVERIFY(!src.isNull());
+        if (src.width() > 2000)
+            src = src.scaledToWidth(2000, Qt::SmoothTransformation);
+        using Fn = std::function<QImage(const QImage&)>;
+        const QList<std::pair<const char*, Fn>> all{
+            {"posterize", [](const QImage& i) { return posterize(i, 6); }},
+            {"soften", [](const QImage& i) { return soften(i, 50); }},
+            {"impressionism", [](const QImage& i) { return impressionism(i, 16, 30, 0); }},
+            {"watercolor", [](const QImage& i) { return watercolor(i, 5, 50, 50, 0); }},
+            {"scraperboard", [](const QImage& i) { return scraperboard(i, 50, 50, false); }},
+            {"scraperboard_color", [](const QImage& i) { return scraperboard(i, 50, 50, true); }},
+            {"wavypaper", [](const QImage& i) { return wavyPaper(i, 50, true); }},
+            {"wavypaper_gray", [](const QImage& i) { return wavyPaper(i, 50, false); }},
+            {"fabric", [](const QImage& i) { return fabric(i, 16, 50, 0, 0); }},
+            {"glassblock", [](const QImage& i) { return glassBlock(i, 60, 60); }},
+            {"smokedglass", [](const QImage& i) { return smokedGlass(i, Color(32, 32, 32), 50, 20); }},
+            {"smokedglass_blue", [](const QImage& i) { return smokedGlass(i, Color(40, 80, 160), 60, 30); }},
+            {"duotone", [](const QImage& i) { return duotone(i, Color(0, 0, 0), Color(150, 95, 40), 50, 16); }},
+            {"straighten", [](const QImage& i) { return straighten(i, 6, true); }},
+            {"rotate3d", [](const QImage& i) { return rotate3d(i, 20, 20); }},
+            {"perspective", [](const QImage& i) { return perspective(i, 40, 0); }}};
+        const QString only = qEnvironmentVariable("VEK_ART_PREVIEW_ONLY");
+        for (const auto& [name, fn] : all) {
+            if (!only.isEmpty() && !only.split(',').contains(QLatin1String(name)))
+                continue;
+            QElapsedTimer t;
+            t.start();
+            const QImage out = fn(src);
+            qInfo("%s: %lld ms (%dx%d)", name, t.elapsed(), src.width(), src.height());
+            QVERIFY(out.convertToFormat(QImage::Format_ARGB32).save(dir + "/" + name + ".png"));
+        }
     }
 
     void impositionLayouts()

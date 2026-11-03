@@ -42,6 +42,10 @@ QImage crystallize(const QImage& in, int cell, quint32 seed = 1);
 QImage vignette(const QImage& in, double amount, double size, const Color& color);
 QImage mosaic(const QImage& in, int cell);
 // 3D-Effekte
+// Bild als Ebene im Raum gedreht (Grad, ±75), mit Fluchtpunkt; passt ins alte Format, Rest durchsichtig
+QImage rotate3d(const QImage& in, double verticalDeg, double horizontalDeg);
+// Perspektive: + verkürzt die rechte bzw. obere Kante, − die linke bzw. untere (−100 … 100 %)
+QImage perspective(const QImage& in, double horizontal, double vertical);
 QImage emboss(const QImage& in, double depth, double angleDeg);
 QImage pinch(const QImage& in, double amount); // Ein-/Ausbuchtung (+ = aus, − = ein)
 QImage sphere(const QImage& in, double amount);
@@ -54,7 +58,12 @@ QImage diffuse(const QImage& in, int distance, quint32 seed = 1);
 
 // Bitmap-Befehle
 QImage toBlackWhite(const QImage& in, int threshold); // Modus > Schwarzweiss (1 Bit)
-QImage toGrayscale(const QImage& in);                 // Modus > Graustufen
+QImage toGrayscale(const QImage& in);                 // Modus > Graustufen (volle Tiefe)
+QImage toGrayscale(const QImage& in, int bits);       // 8 oder 16 Bit je Kanal
+// Modus > Duoton: Grauwerte mit zwei Druckfarben, balance 0 … 100 (mehr Farbe 2 bei höherem Wert)
+QImage duotone(const QImage& in, const Color& ink1, const Color& ink2, double balance, int bits);
+// Bild geraderichten: um die Mitte drehen; crop schneidet die leeren Ecken weg (gleiches Seitenverhältnis)
+QImage straighten(const QImage& in, double angleDeg, bool crop);
 QImage toPalette(const QImage& in, int colors);       // Modus > Palette (8 Bit)
 QImage colorMask(const QImage& in, const QList<Color>& colors, double tolerance); // Farben ausblenden
 

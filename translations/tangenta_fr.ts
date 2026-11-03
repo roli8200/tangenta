@@ -4615,6 +4615,22 @@ TANGENTA traite les images en interne avec 16 bits par canal (données brutes d'
         <translation>Éditeur de réglage d'&amp;image …</translation>
     </message>
     <message>
+        <source>Bild &amp;geraderichten …</source>
+        <translation>Redresser l'ima&amp;ge …</translation>
+    </message>
+    <message>
+        <source>Bild geraderichten</source>
+        <translation>Redresser l'image</translation>
+    </message>
+    <message>
+        <source>Drehwinkel (0,1°):</source>
+        <translation>Angle de rotation (0,1°) :</translation>
+    </message>
+    <message>
+        <source>Zuschneiden (1/0):</source>
+        <translation>Rogner (1/0) :</translation>
+    </message>
+    <message>
         <source>&amp;Blitzvektorisierung</source>
         <translation>Vectorisation &amp;rapide</translation>
     </message>
@@ -5291,28 +5307,36 @@ TANGENTA traite les images en interne avec 16 bits par canal (données brutes d'
         <translation>Mode noir et blanc</translation>
     </message>
     <message>
-        <source>&amp;Graustufen (8 Bit)</source>
-        <translation>Niveaux de &amp;gris (8 bits)</translation>
+        <source>&amp;Graustufen (%1 Bit)</source>
+        <translation>&amp;Niveaux de gris (%1 bits)</translation>
+    </message>
+    <message>
+        <source>&amp;Duoton (%1 Bit) …</source>
+        <translation>&amp;Bichromie (%1 bits) …</translation>
+    </message>
+    <message>
+        <source>Duoton</source>
+        <translation>Bichromie</translation>
+    </message>
+    <message>
+        <source>Farbe 1 (Tiefen):</source>
+        <translation>Couleur 1 (ombres) :</translation>
+    </message>
+    <message>
+        <source>Farbe 2:</source>
+        <translation>Couleur 2 :</translation>
+    </message>
+    <message>
+        <source>Gewichtung Farbe 2:</source>
+        <translation>Pondération couleur 2 :</translation>
+    </message>
+    <message>
+        <source>Modus Duoton</source>
+        <translation>Mode bichromie</translation>
     </message>
     <message>
         <source>Modus Graustufen</source>
         <translation>Mode niveaux de gris</translation>
-    </message>
-    <message>
-        <source>&amp;Palette (8 Bit)</source>
-        <translation>&amp;Palette (8 bits)</translation>
-    </message>
-    <message>
-        <source>Modus Palette</source>
-        <translation>Mode palette</translation>
-    </message>
-    <message>
-        <source>&amp;RGB (24 Bit)</source>
-        <translation>&amp;RVB (24 bits)</translation>
-    </message>
-    <message>
-        <source>Modus RGB</source>
-        <translation>Mode RVB</translation>
     </message>
     <message>
         <source>Bitmap &amp;neu aufbauen …</source>
@@ -5335,20 +5359,128 @@ TANGENTA traite les images en interne avec 16 bits par canal (données brutes d'
         <translation>Effets &amp;3D</translation>
     </message>
     <message>
+        <source>3D-Drehung</source>
+        <translation>Rotation 3D</translation>
+    </message>
+    <message>
+        <source>Senkrecht (Grad):</source>
+        <translation>Vertical (degrés) :</translation>
+    </message>
+    <message>
+        <source>Waagrecht (Grad):</source>
+        <translation>Horizontal (degrés) :</translation>
+    </message>
+    <message>
+        <source>Perspektive</source>
+        <translation>Perspective</translation>
+    </message>
+    <message>
+        <source>Waagrecht (%):</source>
+        <translation>Horizontal (%) :</translation>
+    </message>
+    <message>
+        <source>Senkrecht (%):</source>
+        <translation>Vertical (%) :</translation>
+    </message>
+    <message>
+        <source>Posterisieren</source>
+        <translation>Postériser</translation>
+    </message>
+    <message>
+        <source>Impressionismus</source>
+        <translation>Impressionnisme</translation>
+    </message>
+    <message>
+        <source>Strichgrösse (Pixel):</source>
+        <translation>Taille du trait (pixels) :</translation>
+    </message>
+    <message>
+        <source>Färbung:</source>
+        <translation>Coloration :</translation>
+    </message>
+    <message>
+        <source>Wasserfarben</source>
+        <translation>Aquarelle</translation>
+    </message>
+    <message>
+        <source>Körnung:</source>
+        <translation>Granulation :</translation>
+    </message>
+    <message>
+        <source>Wassermenge:</source>
+        <translation>Quantité d'eau :</translation>
+    </message>
+    <message>
+        <source>Papierschnitzel</source>
+        <translation>Carte à gratter</translation>
+    </message>
+    <message>
+        <source>Dichte:</source>
+        <translation>Densité :</translation>
+    </message>
+    <message>
+        <source>Strichbreite:</source>
+        <translation>Largeur du trait :</translation>
+    </message>
+    <message>
+        <source>Farbig (1/0):</source>
+        <translation>En couleur (1/0) :</translation>
+    </message>
+    <message>
+        <source>Wellenpapier</source>
+        <translation>Papier ondulé</translation>
+    </message>
+    <message>
+        <source>Pinseldruck:</source>
+        <translation>Pression du pinceau :</translation>
+    </message>
+    <message>
+        <source>Weichzeichnen</source>
+        <translation>Adoucir</translation>
+    </message>
+    <message>
+        <source>Gewebe</source>
+        <translation>Tissu</translation>
+    </message>
+    <message>
+        <source>Komplexität:</source>
+        <translation>Complexité :</translation>
+    </message>
+    <message>
+        <source>Drehung (Grad):</source>
+        <translation>Rotation (degrés) :</translation>
+    </message>
+    <message>
+        <source>Glasblock</source>
+        <translation>Bloc de verre</translation>
+    </message>
+    <message>
+        <source>Blockbreite (Pixel):</source>
+        <translation>Largeur des blocs (pixels) :</translation>
+    </message>
+    <message>
+        <source>Blockhöhe (Pixel):</source>
+        <translation>Hauteur des blocs (pixels) :</translation>
+    </message>
+    <message>
+        <source>Rauchglas</source>
+        <translation>Verre fumé</translation>
+    </message>
+    <message>
+        <source>Färbung (%):</source>
+        <translation>Teinte (%) :</translation>
+    </message>
+    <message>
+        <source>Unschärfe (%):</source>
+        <translation>Flou (%) :</translation>
+    </message>
+    <message>
+        <source>Farbe:</source>
+        <translation>Couleur :</translation>
+    </message>
+    <message>
         <source>Relief</source>
         <translation>Relief</translation>
-    </message>
-    <message>
-        <source>Tiefe:</source>
-        <translation>Profondeur :</translation>
-    </message>
-    <message>
-        <source>Richtung:</source>
-        <translation>Direction :</translation>
-    </message>
-    <message>
-        <source>Ein-/Ausbuchtung</source>
-        <translation>Pincement/Gonflement</translation>
     </message>
     <message>
         <source>Stärke:</source>
@@ -5375,18 +5507,6 @@ TANGENTA traite les images en interne avec 16 bits par canal (données brutes d'
         <translation>Bord :</translation>
     </message>
     <message>
-        <source>Bleistift</source>
-        <translation>Crayon</translation>
-    </message>
-    <message>
-        <source>Weichheit:</source>
-        <translation>Douceur :</translation>
-    </message>
-    <message>
-        <source>Ölgemälde</source>
-        <translation>Peinture à l'huile</translation>
-    </message>
-    <message>
         <source>Pinselgrösse:</source>
         <translation>Taille du pinceau :</translation>
     </message>
@@ -5395,168 +5515,20 @@ TANGENTA traite les images en interne avec 16 bits par canal (données brutes d'
         <translation>&amp;Flou</translation>
     </message>
     <message>
-        <source>Gausssche Unschärfe</source>
-        <translation>Flou gaussien</translation>
-    </message>
-    <message>
-        <source>Radius (Pixel):</source>
-        <translation>Rayon (pixels) :</translation>
-    </message>
-    <message>
-        <source>Bewegungsunschärfe</source>
-        <translation>Flou de mouvement</translation>
-    </message>
-    <message>
-        <source>Abstand (Pixel):</source>
-        <translation>Distance (pixels) :</translation>
-    </message>
-    <message>
-        <source>Radiale Unschärfe</source>
-        <translation>Flou radial</translation>
-    </message>
-    <message>
         <source>Glätten</source>
         <translation>Lisser</translation>
-    </message>
-    <message>
-        <source>&amp;Kamera</source>
-        <translation>Appareil p&amp;hoto</translation>
-    </message>
-    <message>
-        <source>Diffus</source>
-        <translation>Diffusion</translation>
-    </message>
-    <message>
-        <source>&amp;Farbänderung</source>
-        <translation>Transformation des co&amp;uleurs</translation>
-    </message>
-    <message>
-        <source>Halbton</source>
-        <translation>Demi-teinte</translation>
-    </message>
-    <message>
-        <source>Rasterweite (Pixel):</source>
-        <translation>Taille de trame (pixels) :</translation>
-    </message>
-    <message>
-        <source>Psychedelisch</source>
-        <translation>Psychédélique</translation>
-    </message>
-    <message>
-        <source>Stufe:</source>
-        <translation>Niveau :</translation>
-    </message>
-    <message>
-        <source>Solarisieren</source>
-        <translation>Solariser</translation>
-    </message>
-    <message>
-        <source>K&amp;ontur</source>
-        <translation>C&amp;ontour</translation>
-    </message>
-    <message>
-        <source>Kanten finden</source>
-        <translation>Rechercher les bords</translation>
-    </message>
-    <message>
-        <source>Kanten erkennen</source>
-        <translation>Détection des bords</translation>
-    </message>
-    <message>
-        <source>Konturverfolgung</source>
-        <translation>Suivi de contour</translation>
     </message>
     <message>
         <source>Kr&amp;eativ</source>
         <translation>Cr&amp;éatif</translation>
     </message>
     <message>
-        <source>Kristallisieren</source>
-        <translation>Cristalliser</translation>
-    </message>
-    <message>
         <source>Grösse (Pixel):</source>
         <translation>Taille (pixels) :</translation>
     </message>
     <message>
-        <source>Mosaikeffekt</source>
-        <translation>Mosaïque</translation>
-    </message>
-    <message>
-        <source>Vignette</source>
-        <translation>Vignette</translation>
-    </message>
-    <message>
-        <source>Kacheln</source>
-        <translation>Carreaux</translation>
-    </message>
-    <message>
-        <source>Anzahl:</source>
-        <translation>Nombre :</translation>
-    </message>
-    <message>
-        <source>Versatz (%):</source>
-        <translation>Décalage (%) :</translation>
-    </message>
-    <message>
-        <source>Pixelieren</source>
-        <translation>Pixéliser</translation>
-    </message>
-    <message>
-        <source>Welle</source>
-        <translation>Ondulation</translation>
-    </message>
-    <message>
-        <source>Amplitude (Pixel):</source>
-        <translation>Amplitude (pixels) :</translation>
-    </message>
-    <message>
-        <source>Periode (Pixel):</source>
-        <translation>Période (pixels) :</translation>
-    </message>
-    <message>
-        <source>Winkel:</source>
-        <translation>Angle :</translation>
-    </message>
-    <message>
-        <source>Wind</source>
-        <translation>Vent</translation>
-    </message>
-    <message>
-        <source>&amp;Rauschen</source>
-        <translation>Br&amp;uit</translation>
-    </message>
-    <message>
-        <source>Rauschen hinzufügen</source>
-        <translation>Ajouter du bruit</translation>
-    </message>
-    <message>
-        <source>Einfarbig (1/0):</source>
-        <translation>Monochrome (1/0) :</translation>
-    </message>
-    <message>
-        <source>Rauschen entfernen</source>
-        <translation>Supprimer le bruit</translation>
-    </message>
-    <message>
-        <source>Sch&amp;ärfe</source>
-        <translation>&amp;Netteté</translation>
-    </message>
-    <message>
-        <source>Unscharf maskieren</source>
-        <translation>Masque flou</translation>
-    </message>
-    <message>
         <source>Prozent:</source>
         <translation>Pourcentage :</translation>
-    </message>
-    <message>
-        <source>Schwellwert:</source>
-        <translation>Seuil :</translation>
-    </message>
-    <message>
-        <source>Scharfzeichnen</source>
-        <translation>Accentuer</translation>
     </message>
     <message>
         <source>Ta&amp;belle</source>

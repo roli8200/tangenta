@@ -17,6 +17,7 @@
 #include "CutTools.h"
 #include "FlyoutButton.h"
 #include "GroupObject.h"
+#include "BitmapFilters.h"
 #include "MainWindow.h"
 #include "PickTool.h"
 #include "PolygonObject.h"
@@ -5670,6 +5671,94 @@ private slots:
         count(*imp.group);
         QCOMPARE(shapes, 2);
         QVERIFY(imp.group->boundingRect().contains(QRectF(10, 10, 80, 30).adjusted(1, 1, -1, -1)));
+    }
+
+    void bitmapMenuAsRequested()
+    {
+        MainWindow window;
+        QMenu* bitmaps = nullptr;
+        for (QAction* a : window.menuBar()->actions())
+            if (a->text() == MainWindow::tr("&Bitmaps"))
+                bitmaps = a->menu();
+        QVERIFY(bitmaps);
+        auto names = [](QMenu* menu) {
+            QStringList list;
+            for (QAction* a : menu->actions())
+                if (!a->isSeparator())
+                    list << a->text().remove(QLatin1Char('&')).remove(QStringLiteral(" …"));
+            return list;
+        };
+        auto submenu = [&](const QString& title) -> QMenu* {
+            for (QAction* a : bitmaps->actions())
+                if (a->menu() && a->text().remove(QLatin1Char('&')) == title)
+                    return a->menu();
+            return nullptr;
+        };
+        const QStringList top = names(bitmaps);
+        for (const char* item : {"In Bitmap konvertieren", "Automatische Anpassung", "Bild geraderichten", "Modus", "3D-Effekte",
+                                 "Künstlerische Striche", "Unschärfe", "Kreativ", "Blitzvektorisierung"})
+            QVERIFY2(top.contains(QString::fromUtf8(item)), item);
+        for (const char* gone : {"Kamera", "Farbänderung", "Kontur", "Verzerren", "Rauschen", "Schärfe"})
+            QVERIFY2(!top.contains(QString::fromUtf8(gone)), gone);
+        QCOMPARE(names(submenu(QStringLiteral("Modus"))),
+                 QStringList({QStringLiteral("Schwarzweiss (1 Bit)"), QStringLiteral("Graustufen (8 Bit)"), QStringLiteral("Graustufen (16 Bit)"),
+                              QStringLiteral("Duoton (8 Bit)"), QStringLiteral("Duoton (16 Bit)")}));
+        QCOMPARE(names(submenu(QStringLiteral("3D-Effekte"))),
+                 QStringList({QStringLiteral("3D-Drehung"), QStringLiteral("Perspektive"), QStringLiteral("Sphäre")}));
+        QCOMPARE(names(submenu(QStringLiteral("Künstlerische Striche"))),
+                 QStringList({QStringLiteral("Posterisieren"), QStringLiteral("Kohle"), QStringLiteral("Impressionismus"),
+                              QStringLiteral("Wasserfarben"), QStringLiteral("Papierschnitzel"), QStringLiteral("Wellenpapier")}));
+        QCOMPARE(names(submenu(QStringLiteral("Unschärfe"))), QStringList({QStringLiteral("Glätten"), QStringLiteral("Weichzeichnen")}));
+        QCOMPARE(names(submenu(QStringLiteral("Kreativ"))),
+                 QStringList({QStringLiteral("Gewebe"), QStringLiteral("Glasblock"), QStringLiteral("Rauchglas")}));
+    }
+
+    void bitmapGeometryAndModes()
+    {
+        // Verlauf mit Muster, damit Drehungen etwas verändern
+        QImage img(120, 80, QImage::Format_RGBA64);
+        for (int y = 0; y < img.height(); ++y)
+            for (int x = 0; x < img.width(); ++x)
+                img.setPixelColor(x, y, QColor((x * 2) % 256, (y * 3) % 256, ((x / 10 + y / 10) % 2) * 200));
+        auto alpha = [](const QImage& i, int x, int y) { return i.pixelColor(x, y).alphaF(); };
+
+        // Geraderichten mit Zuschneiden: gleiche Grösse, keine leeren Ecken
+        const QImage straight = filters::straighten(img, 8.0, true);
+        QCOMPARE(straight.size(), img.size());
+        for (const QPoint& corner : {QPoint(0, 0), QPoint(119, 0), QPoint(0, 79), QPoint(119, 79)})
+            QVERIFY(alpha(straight, corner.x(), corner.y()) > 0.95);
+        // ohne Zuschneiden bleiben die Ecken leer
+        QVERIFY(alpha(filters::straighten(img, 8.0, false), 0, 0) < 0.05);
+
+        // 3D-Drehung 0/0 = unverändert, sonst leere Ränder
+        const QImage same = filters::rotate3d(img, 0, 0);
+        QCOMPARE(same.pixelColor(60, 40).rgb(), img.pixelColor(60, 40).rgb());
+        const QImage turned = filters::rotate3d(img, 0, 50);
+        QCOMPARE(turned.size(), img.size());
+        QVERIFY(alpha(turned, 0, 40) < 0.05);
+        QVERIFY(alpha(turned, 60, 40) > 0.95);
+
+        // Perspektive waagrecht: rechte Kante kürzer -> Ecke rechts oben leer, links oben voll
+        const QImage persp = filters::perspective(img, 60, 0);
+        QVERIFY(alpha(persp, 118, 1) < 0.05);
+        QVERIFY(alpha(persp, 2, 40) > 0.95);
+
+        // Graustufen 8 Bit: nur 256 Stufen, 16 Bit feiner
+        QImage fine(256, 1, QImage::Format_RGBA64);
+        for (int x = 0; x < 256; ++x)
+            fine.setPixelColor(x, 0, QColor::fromRgba64(qRgba64(quint16(x * 256 + 100), quint16(x * 256 + 100), quint16(x * 256 + 100), 65535)));
+        const QImage g8 = filters::toGrayscale(fine, 8), g16 = filters::toGrayscale(fine, 16);
+        auto raw = [](const QImage& i, int x) { return reinterpret_cast<const QRgba64*>(i.constScanLine(0))[x].red(); };
+        QCOMPARE(int(raw(g8, 10)) % 257, 0);
+        QVERIFY(int(raw(g16, 10)) % 257 != 0);
+
+        // Duoton: Weiss bleibt Papier, Schwarz wird dunkel und mischt beide Farben
+        QImage bw(2, 1, QImage::Format_RGBA64);
+        bw.setPixelColor(0, 0, Qt::white);
+        bw.setPixelColor(1, 0, Qt::black);
+        const QImage duo = filters::duotone(bw, Color(0, 0, 0), Color(200, 100, 0), 50, 8);
+        QCOMPARE(duo.pixelColor(0, 0).rgb(), QColor(Qt::white).rgb());
+        QVERIFY(duo.pixelColor(1, 0).lightness() < 40);
     }
 
     void interfaceTranslations()

@@ -91,6 +91,7 @@ add_library(vekcore STATIC
     src/core/CloneObject.cpp
     src/core/Effects.cpp
     src/core/BitmapFilters.cpp
+    src/core/BitmapArt.cpp
     src/core/SuperClipObject.cpp
     src/core/BlendObject.cpp
     src/core/SpellChecker.cpp
@@ -238,7 +239,7 @@ if(VEK_BUILD_APP)
         SOURCE_TARGETS vekcore vekapp
         TS_FILES translations/tangenta_en.ts translations/tangenta_fr.ts translations/tangenta_it.ts
         RESOURCE_PREFIX /i18n
-        LUPDATE_OPTIONS -source-language de -locations none)
+        LUPDATE_OPTIONS -source-language de -locations none -no-obsolete)
     endif()
     qt_add_resources(vekapp "dxf" PREFIX "/dxf" BASE resources/dxf FILES resources/dxf/acad2004.dxf)
     qt_add_resources(vekapp "brand" PREFIX "/brand" BASE resources/brand FILES

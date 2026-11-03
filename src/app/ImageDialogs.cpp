@@ -1,4 +1,5 @@
 #include "ImageDialogs.h"
+#include "ColorDialog.h"
 #include <QSettings>
 #include "Options.h"
 
@@ -241,11 +242,40 @@ QImage ImageAdjustDialog::process(const QImage& image) const
 
 EffectDialog::EffectDialog(const QString& title, const QImage& image, const QList<SliderSpec>& sliders, Function fn,
                            QWidget* parent)
+    : ImagePreviewDialog(title, image, parent),
+      m_fn([fn = std::move(fn)](const QImage& i, const QList<int>& v, const QList<Color>&) { return fn(i, v); })
+{
+    build({}, sliders);
+}
+
+EffectDialog::EffectDialog(const QString& title, const QImage& image, const QList<ColorSpec>& colors,
+                           const QList<SliderSpec>& sliders, ColorFunction fn, QWidget* parent)
     : ImagePreviewDialog(title, image, parent), m_fn(std::move(fn))
+{
+    build(colors, sliders);
+}
+
+void EffectDialog::build(const QList<ColorSpec>& colors, const QList<SliderSpec>& sliders)
 {
     auto* layout = new QVBoxLayout(settingsArea());
     layout->setContentsMargins(0, 0, 0, 0);
     auto* form = new QFormLayout;
+    for (const ColorSpec& spec : colors) {
+        const int index = int(m_colors.size());
+        m_colors << spec.value;
+        auto* button = new QPushButton(this);
+        button->setMinimumWidth(120);
+        m_colorButtons << button;
+        form->addRow(spec.label, button);
+        showColor(index);
+        connect(button, &QPushButton::clicked, this, [this, index, label = spec.label] {
+            if (const std::optional<Color> c = ColorDialog::getColor(this, label, m_colors[index])) {
+                m_colors[index] = *c;
+                showColor(index);
+                refreshPreview();
+            }
+        });
+    }
     for (const SliderSpec& spec : sliders)
         m_sliders << addSlider(form, spec, this);
     layout->addLayout(form);
@@ -253,13 +283,36 @@ EffectDialog::EffectDialog(const QString& title, const QImage& image, const QLis
     layout->addWidget(reset);
     for (QSlider* s : std::as_const(m_sliders))
         connect(s, &QSlider::valueChanged, this, &EffectDialog::refreshPreview);
-    connect(reset, &QPushButton::clicked, this, [this, sliders] {
+    connect(reset, &QPushButton::clicked, this, [this, sliders, colors] {
+        QList<Color> defaultColors;
+        for (const ColorSpec& spec : colors)
+            defaultColors << spec.value;
+        setColors(defaultColors);
         QList<int> defaults;
         for (const SliderSpec& spec : sliders)
             defaults << spec.value;
         setValues(defaults);
     });
     finishLayout();
+}
+
+void EffectDialog::showColor(int index)
+{
+    const Color& c = m_colors[index];
+    QPushButton* button = m_colorButtons[index];
+    button->setText(c.toHex());
+    // Schrift hell auf dunklem Grund
+    const bool dark = 0.299 * c.r + 0.587 * c.g + 0.114 * c.b < 128;
+    button->setStyleSheet(QStringLiteral("background:%1; color:%2").arg(c.toQColor().name(), dark ? QStringLiteral("white") : QStringLiteral("black")));
+}
+
+void EffectDialog::setColors(const QList<Color>& colors)
+{
+    for (int i = 0; i < m_colors.size() && i < colors.size(); ++i) {
+        m_colors[i] = colors[i];
+        showColor(i);
+    }
+    refreshPreview();
 }
 
 QList<int> EffectDialog::values() const
@@ -279,7 +332,7 @@ void EffectDialog::setValues(const QList<int>& values)
 
 QImage EffectDialog::process(const QImage& image) const
 {
-    return m_fn(image, values());
+    return m_fn(image, values(), m_colors);
 }
 
 // --- Tonkurve ------------------------------------------------------------------------------

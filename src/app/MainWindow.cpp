@@ -50,6 +50,7 @@
 #include "PerspectiveTool.h"
 #include "TableObject.h"
 #include "TableTool.h"
+#include "BitmapArt.h"
 #include "BitmapFilters.h"
 #include "TextTool.h"
 #include "Language.h"
@@ -1023,6 +1024,14 @@ void MainWindow::createMenusAndToolbars()
     });
     m_bitmapActions << bitmaps->addAction(icon(QStringLiteral("bitmap-edit")), tr("Bildanpassungs&editor …"), this,
                                           [this] { editBitmap(); });
+    m_bitmapActions << bitmaps->addAction(tr("Bild &geraderichten …"), this, [this] {
+        if (const ImageObject* image = m_editor.selectedImage()) {
+            EffectDialog dialog(tr("Bild geraderichten"), image->image(),
+                                {SliderSpec{tr("Drehwinkel (0,1°):"), -450, 450, 0}, SliderSpec{tr("Zuschneiden (1/0):"), 0, 1, 1}},
+                                [](const QImage& i, const QList<int>& v) { return filters::straighten(i, v[0] / 10.0, v[1] == 1); }, this);
+            runImageDialog(tr("Bild geraderichten"), dialog);
+        }
+    });
     bitmaps->addSeparator();
     m_bitmapActions << bitmaps->addAction(icon(QStringLiteral("bitmap-trace")), tr("&Blitzvektorisierung"), this,
                                           [this] { traceImage(-1, true); });
@@ -2291,13 +2300,23 @@ void MainWindow::addBitmapCommands(QMenu* bitmaps)
             runImageDialog(tr("Modus Schwarzweiss"), dialog);
         }
     });
-    m_bitmapActions << mode->addAction(tr("&Graustufen (8 Bit)"), this,
-                                       [this] { applyImageEffect(tr("Modus Graustufen"), [](const QImage& i) { return filters::toGrayscale(i); }); });
-    m_bitmapActions << mode->addAction(tr("&Palette (8 Bit)"), this,
-                                       [this] { applyImageEffect(tr("Modus Palette"), [](const QImage& i) { return filters::toPalette(i, 256); }); });
-    m_bitmapActions << mode->addAction(tr("&RGB (24 Bit)"), this, [this] {
-        applyImageEffect(tr("Modus RGB"), [](const QImage& i) { return i.convertToFormat(QImage::Format_RGB888).convertToFormat(QImage::Format_RGBA64); });
-    });
+    for (int bits : {8, 16})
+        m_bitmapActions << mode->addAction(tr("&Graustufen (%1 Bit)").arg(bits), this, [this, bits] {
+            applyImageEffect(tr("Modus Graustufen"), [bits](const QImage& i) { return filters::toGrayscale(i, bits); });
+        });
+    for (int bits : {8, 16})
+        m_bitmapActions << mode->addAction(tr("&Duoton (%1 Bit) …").arg(bits), this, [this, bits] {
+            if (const ImageObject* image = m_editor.selectedImage()) {
+                EffectDialog dialog(tr("Duoton"), image->image(),
+                                    {ColorSpec{tr("Farbe 1 (Tiefen):"), Color(0, 0, 0)}, ColorSpec{tr("Farbe 2:"), Color(150, 95, 40)}},
+                                    {SliderSpec{tr("Gewichtung Farbe 2:"), 0, 100, 50}},
+                                    [bits](const QImage& i, const QList<int>& v, const QList<Color>& c) {
+                                        return filters::duotone(i, c[0], c[1], v[0], bits);
+                                    },
+                                    this);
+                runImageDialog(tr("Modus Duoton"), dialog);
+            }
+        });
     m_bitmapActions << bitmaps->addAction(tr("Bitmap &neu aufbauen …"), this, [this] {
         const ImageObject* image = m_editor.selectedImage();
         if (!image)
@@ -2339,50 +2358,42 @@ void MainWindow::addBitmapCommands(QMenu* bitmaps)
         QString name;
         QList<SliderSpec> sliders;
         std::function<QImage(const QImage&, const QList<int>&)> fn;
+        QList<ColorSpec> colors = {}; // mit Farbfeldern: colorFn statt fn
+        EffectDialog::ColorFunction colorFn = {};
+        QList<int> pixels = {}; // Regler in Pixeln: für die verkleinerte Vorschau mitskalieren
     };
     using F = Filter;
+    using V = const QList<int>&;
     const QList<std::pair<QString, QList<F>>> groups{
         {tr("&3D-Effekte"),
-         {F{tr("Relief"), {{tr("Tiefe:"), 1, 100, 20}, {tr("Richtung:"), 0, 360, 135}}, [](const QImage& i, const QList<int>& v) { return filters::emboss(i, v[0], v[1]); }},
-          F{tr("Ein-/Ausbuchtung"), {{tr("Stärke:"), -100, 100, 50}}, [](const QImage& i, const QList<int>& v) { return filters::pinch(i, v[0]); }},
-          F{tr("Sphäre"), {{tr("Stärke:"), 0, 100, 60}}, [](const QImage& i, const QList<int>& v) { return filters::sphere(i, v[0]); }}}},
+         {F{tr("3D-Drehung"), {{tr("Senkrecht (Grad):"), -75, 75, 20}, {tr("Waagrecht (Grad):"), -75, 75, 20}},
+            [](const QImage& i, V v) { return filters::rotate3d(i, v[0], v[1]); }},
+          F{tr("Perspektive"), {{tr("Waagrecht (%):"), -100, 100, 40}, {tr("Senkrecht (%):"), -100, 100, 0}},
+            [](const QImage& i, V v) { return filters::perspective(i, v[0], v[1]); }},
+          F{tr("Sphäre"), {{tr("Stärke:"), 0, 100, 60}}, [](const QImage& i, V v) { return filters::sphere(i, v[0]); }}}},
         {tr("Künstlerische &Striche"),
-         {F{tr("Kohle"), {{tr("Grösse:"), 1, 20, 3}, {tr("Kante:"), 0, 100, 50}}, [](const QImage& i, const QList<int>& v) { return filters::charcoal(i, v[0], v[1]); }},
-          F{tr("Bleistift"), {{tr("Weichheit:"), 1, 50, 8}}, [](const QImage& i, const QList<int>& v) { return filters::pencil(i, v[0]); }},
-          F{tr("Ölgemälde"), {{tr("Pinselgrösse:"), 1, 8, 3}, {tr("Stufen:"), 2, 64, 20}}, [](const QImage& i, const QList<int>& v) { return filters::oilPaint(i, v[0], v[1]); }}}},
+         {F{tr("Posterisieren"), {{tr("Stufen:"), 2, 32, 6}}, [](const QImage& i, V v) { return filters::posterize(i, v[0]); }},
+          F{tr("Kohle"), {{tr("Grösse:"), 1, 20, 3}, {tr("Kante:"), 0, 100, 50}}, [](const QImage& i, V v) { return filters::charcoal(i, v[0], v[1]); },
+            {}, {}, {0}},
+          F{tr("Impressionismus"), {{tr("Strichgrösse (Pixel):"), 3, 100, 16}, {tr("Färbung:"), 0, 100, 30}, {tr("Helligkeit:"), -100, 100, 0}},
+            [](const QImage& i, V v) { return filters::impressionism(i, v[0], v[1], v[2]); }, {}, {}, {0}},
+          F{tr("Wasserfarben"), {{tr("Pinselgrösse:"), 1, 50, 5}, {tr("Körnung:"), 0, 100, 50}, {tr("Wassermenge:"), 0, 100, 50}, {tr("Helligkeit:"), -100, 100, 0}},
+            [](const QImage& i, V v) { return filters::watercolor(i, v[0], v[1], v[2], v[3]); }, {}, {}, {0}},
+          F{tr("Papierschnitzel"), {{tr("Dichte:"), 1, 100, 50}, {tr("Strichbreite:"), 1, 100, 50}, {tr("Farbig (1/0):"), 0, 1, 0}},
+            [](const QImage& i, V v) { return filters::scraperboard(i, v[0], v[1], v[2] == 1); }},
+          F{tr("Wellenpapier"), {{tr("Pinseldruck:"), 0, 100, 50}, {tr("Farbig (1/0):"), 0, 1, 1}},
+            [](const QImage& i, V v) { return filters::wavyPaper(i, v[0], v[1] == 1); }}}},
         {tr("&Unschärfe"),
-         {F{tr("Gausssche Unschärfe"), {{tr("Radius (Pixel):"), 1, 100, 5}}, [](const QImage& i, const QList<int>& v) { return filters::gaussian(i, v[0]); }},
-          F{tr("Bewegungsunschärfe"), {{tr("Abstand (Pixel):"), 1, 200, 15}, {tr("Richtung:"), 0, 360, 0}}, [](const QImage& i, const QList<int>& v) { return filters::motion(i, v[0], v[1]); }},
-          F{tr("Radiale Unschärfe"), {{tr("Stärke:"), 1, 100, 20}}, [](const QImage& i, const QList<int>& v) { return filters::radialBlur(i, v[0]); }},
-          F{tr("Zoom"), {{tr("Stärke:"), 1, 100, 20}}, [](const QImage& i, const QList<int>& v) { return filters::zoomBlur(i, v[0]); }},
-          F{tr("Glätten"), {{tr("Stärke:"), 1, 100, 40}}, [](const QImage& i, const QList<int>& v) { return filters::smooth(i, v[0]); }}}},
-        {tr("&Kamera"),
-         {F{tr("Diffus"), {{tr("Abstand (Pixel):"), 1, 20, 3}}, [](const QImage& i, const QList<int>& v) { return filters::diffuse(i, v[0]); }}}},
-        {tr("&Farbänderung"),
-         {F{tr("Halbton"), {{tr("Rasterweite (Pixel):"), 2, 50, 8}}, [](const QImage& i, const QList<int>& v) { return filters::halftone(i, v[0]); }},
-          F{tr("Psychedelisch"), {{tr("Stufe:"), 0, 255, 60}}, [](const QImage& i, const QList<int>& v) { return filters::psychedelic(i, v[0]); }},
-          F{tr("Solarisieren"), {{tr("Stufe:"), 0, 255, 128}}, [](const QImage& i, const QList<int>& v) { return filters::solarize(i, v[0]); }}}},
-        {tr("K&ontur"),
-         {F{tr("Kanten finden"), {{tr("Stärke:"), 1, 100, 50}}, [](const QImage& i, const QList<int>& v) { return filters::findEdges(i, v[0]); }},
-          F{tr("Kanten erkennen"), {{tr("Stärke:"), 1, 100, 50}}, [](const QImage& i, const QList<int>& v) { return filters::detectEdges(i, v[0]); }},
-          F{tr("Konturverfolgung"), {{tr("Schwelle:"), 0, 255, 128}}, [](const QImage& i, const QList<int>& v) { return filters::traceContour(i, v[0]); }}}},
+         {F{tr("Glätten"), {{tr("Stärke:"), 1, 100, 40}}, [](const QImage& i, V v) { return filters::smooth(i, v[0]); }},
+          F{tr("Weichzeichnen"), {{tr("Prozent:"), 1, 100, 50}}, [](const QImage& i, V v) { return filters::soften(i, v[0]); }}}},
         {tr("Kr&eativ"),
-         {F{tr("Kristallisieren"), {{tr("Grösse (Pixel):"), 2, 100, 12}}, [](const QImage& i, const QList<int>& v) { return filters::crystallize(i, v[0]); }},
-          F{tr("Mosaikeffekt"), {{tr("Grösse (Pixel):"), 2, 100, 12}}, [](const QImage& i, const QList<int>& v) { return filters::mosaic(i, v[0]); }},
-          F{tr("Vignette"), {{tr("Stärke:"), 0, 100, 60}, {tr("Grösse:"), 5, 100, 60}}, [](const QImage& i, const QList<int>& v) { return filters::vignette(i, v[0], v[1], Color(0, 0, 0)); }}}},
-        {tr("&Verzerren"),
-         {F{tr("Kacheln"), {{tr("Anzahl:"), 1, 50, 8}, {tr("Versatz (%):"), 0, 50, 10}}, [](const QImage& i, const QList<int>& v) { return filters::tiles(i, v[0], v[1]); }},
-          F{tr("Pixelieren"), {{tr("Grösse (Pixel):"), 2, 100, 8}}, [](const QImage& i, const QList<int>& v) { return filters::pixelate(i, v[0]); }},
-          F{tr("Welle"), {{tr("Amplitude (Pixel):"), 1, 100, 6}, {tr("Periode (Pixel):"), 4, 400, 40}}, [](const QImage& i, const QList<int>& v) { return filters::ripple(i, v[0], v[1]); }},
-          F{tr("Wirbel"), {{tr("Winkel:"), -720, 720, 180}}, [](const QImage& i, const QList<int>& v) { return filters::swirl(i, v[0]); }},
-          F{tr("Wind"), {{tr("Stärke:"), 1, 200, 20}}, [](const QImage& i, const QList<int>& v) { return filters::wind(i, v[0]); }}}},
-        {tr("&Rauschen"),
-         {F{tr("Rauschen hinzufügen"), {{tr("Stärke:"), 0, 100, 20}, {tr("Einfarbig (1/0):"), 0, 1, 0}}, [](const QImage& i, const QList<int>& v) { return filters::addNoise(i, v[0], v[1] == 1); }},
-          F{tr("Rauschen entfernen"), {{tr("Radius (Pixel):"), 1, 5, 1}}, [](const QImage& i, const QList<int>& v) { return filters::median(i, v[0]); }}}},
-        {tr("Sch&ärfe"),
-         {F{tr("Unscharf maskieren"), {{tr("Prozent:"), 1, 500, 100}, {tr("Radius (Pixel):"), 1, 50, 2}, {tr("Schwellwert:"), 0, 255, 0}},
-            [](const QImage& i, const QList<int>& v) { return filters::unsharpMask(i, v[0], v[1], v[2]); }},
-          F{tr("Scharfzeichnen"), {{tr("Stärke:"), 1, 100, 40}}, [](const QImage& i, const QList<int>& v) { return filters::sharpen(i, v[0]); }}}},
+         {F{tr("Gewebe"), {{tr("Grösse (Pixel):"), 3, 200, 16}, {tr("Komplexität:"), 0, 100, 50}, {tr("Helligkeit:"), -100, 100, 0}, {tr("Drehung (Grad):"), -90, 90, 0}},
+            [](const QImage& i, V v) { return filters::fabric(i, v[0], v[1], v[2], v[3]); }, {}, {}, {0}},
+          F{tr("Glasblock"), {{tr("Blockbreite (Pixel):"), 4, 2000, 60}, {tr("Blockhöhe (Pixel):"), 4, 2000, 60}},
+            [](const QImage& i, V v) { return filters::glassBlock(i, v[0], v[1]); }, {}, {}, {0, 1}},
+          F{tr("Rauchglas"), {{tr("Färbung (%):"), 0, 100, 50}, {tr("Unschärfe (%):"), 0, 100, 20}}, {},
+            {ColorSpec{tr("Farbe:"), Color(32, 32, 32)}},
+            [](const QImage& i, V v, const QList<Color>& c) { return filters::smokedGlass(i, c[0], v[0], v[1]); }}}},
     };
     for (const auto& [groupName, list] : groups) {
         QMenu* group = bitmaps->addMenu(groupName);
@@ -2390,7 +2401,21 @@ void MainWindow::addBitmapCommands(QMenu* bitmaps)
         for (const F& f : list) {
             m_bitmapActions << group->addAction(f.name + QStringLiteral(" …"), this, [this, f] {
                 if (const ImageObject* image = m_editor.selectedImage()) {
-                    EffectDialog dialog(f.name, image->image(), f.sliders, f.fn, this);
+                    // Pixelwerte auf die Grösse des bearbeiteten Bildes (Vorschau oder Original) umrechnen
+                    const int fullWidth = std::max(1, image->image().width());
+                    const QList<int> pixels = f.pixels;
+                    auto scaled = [fullWidth, pixels](const QImage& i, QList<int> v) {
+                        const double k = double(i.width()) / fullWidth;
+                        if (k < 1.0)
+                            for (int index : pixels)
+                                v[index] = std::max(1, int(std::lround(v[index] * k)));
+                        return v;
+                    };
+                    EffectDialog::ColorFunction fn = f.colorFn;
+                    if (!fn)
+                        fn = [plain = f.fn](const QImage& i, V v, const QList<Color>&) { return plain(i, v); };
+                    EffectDialog dialog(f.name, image->image(), f.colors, f.sliders,
+                                        [fn, scaled](const QImage& i, V v, const QList<Color>& c) { return fn(i, scaled(i, v), c); }, this);
                     runImageDialog(f.name, dialog);
                 }
             });

@@ -1,5 +1,6 @@
 #pragma once
 
+#include "Color.h"
 #include "ImageAdjust.h"
 
 #include <QDialog>
@@ -9,6 +10,7 @@
 #include <functional>
 
 class QComboBox;
+class QPushButton;
 class QLabel;
 class QSlider;
 class QSpinBox;
@@ -71,6 +73,12 @@ struct SliderSpec {
     int value = 0;
 };
 
+// Farbfeld (Knopf öffnet den Farbdialog)
+struct ColorSpec {
+    QString label;
+    Color value;
+};
+
 // "Bildanpassungseditor": Automatische Anpassung, Temperatur, Tönung,
 // Sättigung, Helligkeit, Kontrast, Glanzlichter, Schatten, Mitteltöne, Histogramm
 class ImageAdjustDialog : public ImagePreviewDialog {
@@ -96,17 +104,28 @@ class EffectDialog : public ImagePreviewDialog {
 
 public:
     using Function = std::function<QImage(const QImage&, const QList<int>&)>;
+    using ColorFunction = std::function<QImage(const QImage&, const QList<int>&, const QList<Color>&)>;
     EffectDialog(const QString& title, const QImage& image, const QList<SliderSpec>& sliders, Function fn,
                  QWidget* parent = nullptr);
+    // Mit Farbfeldern über den Reglern (Duoton, Rauchglas)
+    EffectDialog(const QString& title, const QImage& image, const QList<ColorSpec>& colors,
+                 const QList<SliderSpec>& sliders, ColorFunction fn, QWidget* parent = nullptr);
     QList<int> values() const;
     void setValues(const QList<int>& values);
+    QList<Color> colors() const { return m_colors; }
+    void setColors(const QList<Color>& colors);
 
 protected:
     QImage process(const QImage& image) const override;
 
 private:
+    void build(const QList<ColorSpec>& colors, const QList<SliderSpec>& sliders);
+    void showColor(int index);
+
     QList<QSlider*> m_sliders;
-    Function m_fn;
+    QList<QPushButton*> m_colorButtons;
+    QList<Color> m_colors;
+    ColorFunction m_fn;
 };
 
 // Kurve mit ziehbaren Punkten: Klick fügt hinzu, aus dem Feld ziehen entfernt

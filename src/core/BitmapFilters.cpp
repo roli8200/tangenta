@@ -3,6 +3,8 @@
 #include <QColor>
 #include <QPainter>
 #include <QRandomGenerator>
+#include <QPolygonF>
+#include <QTransform>
 #include <QtMath>
 
 #include <algorithm>
@@ -733,6 +735,141 @@ QImage colorMask(const QImage& in, const QList<Color>& colors, double tolerance)
         }
     }
     return out;
+}
+
+namespace {
+
+// Werte auf 8 Bit runden (Modus "8 Bit"); 16 Bit bleiben wie gerechnet
+float depth(float v, int bits)
+{
+    return bits >= 16 ? v : std::round(std::clamp(v, 0.f, 1.f) * 255.f) / 255.f;
+}
+
+// Projektive Abbildung des ganzen Bildes auf ein Viereck (Pixel); ausserhalb durchsichtig
+QImage mapToQuad(const QImage& in, const QPolygonF& quad)
+{
+    const Buf b(in);
+    QTransform forward;
+    if (!QTransform::quadToQuad(QPolygonF(QRectF(0, 0, b.w, b.h)), quad, forward))
+        return in.convertToFormat(QImage::Format_RGBA64);
+    bool invertible = false;
+    const QTransform back = forward.inverted(&invertible);
+    if (!invertible)
+        return in.convertToFormat(QImage::Format_RGBA64);
+    Buf out(b.w, b.h);
+    for (int y = 0; y < b.h; ++y)
+        for (int x = 0; x < b.w; ++x) {
+            const QPointF s = back.map(QPointF(x + 0.5, y + 0.5)) - QPointF(0.5, 0.5);
+            // halbes Pixel Saum, damit die Kante weich ausläuft
+            if (s.x() < -0.5 || s.y() < -0.5 || s.x() > b.w - 0.5 || s.y() > b.h - 0.5)
+                continue;
+            std::array<float, 4> p = b.sample(s.x(), s.y());
+            const float edge = float(std::clamp(std::min({s.x() + 0.5, s.y() + 0.5, b.w - 0.5 - s.x(), b.h - 0.5 - s.y()}), 0.0, 1.0));
+            for (float& v : p)
+                v *= edge;
+            out.at(x, y) = p;
+        }
+    return out.image();
+}
+
+// Viereck so verschieben und skalieren, dass es mittig in w × h passt
+QPolygonF fitted(QPolygonF quad, double w, double h)
+{
+    const QRectF box = quad.boundingRect();
+    const double scale = std::min(w / box.width(), h / box.height());
+    for (QPointF& p : quad)
+        p = QPointF(w / 2 + (p.x() - box.center().x()) * scale, h / 2 + (p.y() - box.center().y()) * scale);
+    return quad;
+}
+
+} // namespace
+
+QImage toGrayscale(const QImage& in, int bits)
+{
+    return perPixel(in, [bits](std::array<float, 3>& c) {
+        const float v = depth(luminance({c[0], c[1], c[2], 1}), bits);
+        c = {v, v, v};
+    });
+}
+
+QImage duotone(const QImage& in, const Color& ink1, const Color& ink2, double balance, int bits)
+{
+    // Wie im Druck: jede Farbe deckt je nach Tonwert, Papier weiss, Farben multiplizieren sich.
+    // Farbe 1 trägt die Tiefen, Farbe 2 die Mitteltöne; balance verschiebt das Gewicht.
+    const float w = float(std::clamp(balance, 0.0, 100.0) / 100.0);
+    const float gamma1 = 0.7f + 1.6f * w;       // höher = Farbe 1 nur noch in den Tiefen
+    const float gamma2 = 1.6f - 1.0f * w;       // tiefer = Farbe 2 reicht weiter ins Helle
+    const std::array<float, 3> a1{1 - ink1.r / 255.f, 1 - ink1.g / 255.f, 1 - ink1.b / 255.f};
+    const std::array<float, 3> a2{1 - ink2.r / 255.f, 1 - ink2.g / 255.f, 1 - ink2.b / 255.f};
+    return perPixel(in, [=](std::array<float, 3>& c) {
+        const float t = 1.f - depth(luminance({c[0], c[1], c[2], 1}), bits); // Deckung 0 = Papier
+        const float c1 = std::pow(t, gamma1);
+        const float c2 = std::pow(t, gamma2) * (0.35f + 0.65f * w);
+        for (int i = 0; i < 3; ++i)
+            c[i] = depth((1.f - c1 * a1[i]) * (1.f - c2 * a2[i]), bits);
+    });
+}
+
+QImage straighten(const QImage& in, double angleDeg, bool crop)
+{
+    const double w = in.width(), h = in.height();
+    const double a = qDegreesToRadians(angleDeg);
+    // Grösstes Rechteck mit gleichem Seitenverhältnis innerhalb des gedrehten Bildes
+    const double c = std::abs(std::cos(a)), sn = std::abs(std::sin(a));
+    // + gut ein Pixel, damit auch die Eckpixel ganz im Bild liegen (weicher Rand)
+    const double scale = crop ? std::max((w * c + h * sn) / w, (w * sn + h * c) / h) * (1.0 + 1.5 / std::min(w, h)) : 1.0;
+    QTransform t;
+    t.translate(w / 2, h / 2);
+    t.rotateRadians(a);
+    t.scale(scale, scale);
+    t.translate(-w / 2, -h / 2);
+    return mapToQuad(in, t.map(QPolygonF(QRectF(0, 0, w, h))));
+}
+
+QImage rotate3d(const QImage& in, double verticalDeg, double horizontalDeg)
+{
+    const double w = in.width(), h = in.height();
+    const double ax = qDegreesToRadians(std::clamp(verticalDeg, -75.0, 75.0));   // um die waagrechte Achse
+    const double ay = qDegreesToRadians(std::clamp(horizontalDeg, -75.0, 75.0)); // um die senkrechte Achse
+    const double camera = 2.0 * std::max(w, h);
+    QPolygonF quad;
+    for (const QPointF& corner : {QPointF(-w / 2, -h / 2), QPointF(w / 2, -h / 2), QPointF(w / 2, h / 2), QPointF(-w / 2, h / 2)}) {
+        // erst um y, dann um x drehen; z zeigt zum Betrachter
+        double x = corner.x(), y = corner.y(), z = 0;
+        const double x1 = x * std::cos(ay) + z * std::sin(ay);
+        const double z1 = -x * std::sin(ay) + z * std::cos(ay);
+        const double y2 = y * std::cos(ax) - z1 * std::sin(ax);
+        const double z2 = y * std::sin(ax) + z1 * std::cos(ax);
+        const double f = camera / (camera - z2);
+        quad << QPointF(x1 * f, y2 * f);
+    }
+    return mapToQuad(in, fitted(quad, w, h));
+}
+
+QImage perspective(const QImage& in, double horizontal, double vertical)
+{
+    const double w = in.width(), h = in.height();
+    const double ph = std::clamp(horizontal, -100.0, 100.0) / 100.0 * 0.45; // Anteil der Kantenverkürzung
+    const double pv = std::clamp(vertical, -100.0, 100.0) / 100.0 * 0.45;
+    // Ecken: oben links, oben rechts, unten rechts, unten links
+    QPolygonF quad{QPointF(0, 0), QPointF(w, 0), QPointF(w, h), QPointF(0, h)};
+    // waagrecht: rechte (+) oder linke (−) Kante wird kürzer
+    if (ph > 0) {
+        quad[1].ry() += h * ph;
+        quad[2].ry() -= h * ph;
+    } else {
+        quad[0].ry() -= h * ph;
+        quad[3].ry() += h * ph;
+    }
+    // senkrecht: obere (+) oder untere (−) Kante wird kürzer
+    if (pv > 0) {
+        quad[0].rx() += w * pv;
+        quad[1].rx() -= w * pv;
+    } else {
+        quad[3].rx() -= w * pv;
+        quad[2].rx() += w * pv;
+    }
+    return mapToQuad(in, fitted(quad, w, h));
 }
 
 } // namespace vek::filters
