@@ -13,12 +13,23 @@ namespace vek::pathops {
 // --- Kurvenanpassung ---------------------------------------------------------------------
 // Polylinie in wenige Bézierknoten zurückverwandeln: Ecken bleiben spitz, Bögen werden zu
 // glatten Kurvensegmenten, gerade Stücke zu Linien. tolerance = grösste Abweichung.
-SubPath fitPolyline(QList<QPointF> points, bool closed, double tolerance, double cornerAngle = 40.0);
+// kinks: auch kleine, aber abrupte Knicke als Ecke (Ergebnisse Boolescher Operationen: wo eine
+// Gerade in einen Bogen läuft, ist der Knick oft nur wenige Grad; über ihn hinweg angepasst
+// entstanden Schlaufen und Sporne)
+SubPath fitPolyline(QList<QPointF> points, bool closed, double tolerance, double cornerAngle = 40.0, bool kinks = false);
 // Jeden Teilpfad einer Fläche (z.B. Ergebnis einer Schnittmenge) anpassen
 QList<SubPath> fitRegion(const QPainterPath& region, double tolerance);
 // Fein unterteilte Linienzüge (Hülle, Fischauge) anpassen; geschlossene bleiben geschlossen,
 // offene offen. tolerance <= 0: aus der Grösse des Pfads
 QList<SubPath> fitPath(const QPainterPath& path, double tolerance = 0.0);
+// Fläche mit Nonzero-Regel (Schriftzeichen) so umbauen, dass auch die Gerade-ungerade-Regel der
+// Kurven dasselbe zeigt: sich überschneidende Teilpfade (variable Schriften, nicht zusammengeführte
+// TrueType-Konturen) werden vereinigt und wieder als Kurven angepasst, alle übrigen bleiben unverändert.
+// tolerance = grösste Abweichung in den Einheiten des Pfads
+QPainterPath withoutOverlaps(const QPainterPath& path, double tolerance);
+// Löcher einer Fläche schliessen: Teilpfade, die in einer ungeraden Zahl anderer liegen, fallen weg.
+// keepWiderThan >= 0: nur Löcher schmaler als dieser Wert (2 * Fläche / Umfang, beim Kreis der Radius)
+QPainterPath withoutHoles(const QPainterPath& path, double keepWiderThan = -1.0);
 
 // --- B-Spline und Teilstücke --------------------------------------------------------------
 // Kubischer B-Spline durch die Steuerpunkte (offen: beginnt und endet an den Endpunkten) als
@@ -42,6 +53,15 @@ QList<SubPath> withoutPieces(const QList<SubPath>& paths, const QList<CurvePiece
 SubPath subPath(const SubPath& path, double a, double b);
 // Pfad fein in Linienzüge zerlegen (Kurven mit höchstens step langen Stücken)
 QList<QPolygonF> flattenFine(const QPainterPath& path, double step);
+
+// --- Ecken (Andockfenster "Ecken") ------------------------------------------------------
+// Abrunden (Kreisbogen tangential an beide Segmente), Ausbuchten (nach innen gewölbter Bogen um
+// die Ecke) oder Abschrägen (Gerade). radius: Radius bzw. beim Abschrägen der Abstand von der
+// Ecke entlang der Segmente. Glatte Knoten und Enden offener Linienzüge bleiben unverändert; der
+// Radius wird auf die verfügbare Segmentlänge begrenzt (bearbeitete Nachbarecken teilen sie).
+// only: nur diese Knoten (leer = alle spitzen Ecken).
+enum class CornerOp { Fillet, Scallop, Chamfer };
+QList<SubPath> applyCorners(const QList<SubPath>& paths, CornerOp op, double radius, const QList<NodeRef>& only = {});
 
 // --- Geometrie eines Objekts in Seitenkoordinaten -----------------------------------------
 // Geschlossene Teilpfade zählen als Fläche (auch ohne Füllung),
@@ -76,12 +96,13 @@ double mediaProfile(int preset, double t, double length, double width);
 // Umriss eines Strichs entlang spine (ein Teilpfad) als gefüllte Fläche
 QPainterPath mediaOutline(const QPainterPath& spine, const ArtisticMedia& media);
 // Sprühdose: die versprühten Objekte entlang spine mit ihren Farben
-struct SprayPiece {
-    QPainterPath path;
-    Color color;
-};
+using SprayPiece = ArtPiece;
 QList<SprayPiece> sprayPieces(const QPainterPath& spine, const ArtisticMedia& media);
+// Pinsel oder Sprühdose: die farbigen Teile entlang spine (sonst leer)
+QList<ArtPiece> mediaPieces(const QPainterPath& spine, const ArtisticMedia& media);
 int sprayListCount();
 QString sprayListName(int index);
+// Objekte einer eingebauten Sprühliste (um den Ursprung, Grösse 1)
+const QList<ArtItem>& sprayListItems(int index);
 
 } // namespace vek::pathops

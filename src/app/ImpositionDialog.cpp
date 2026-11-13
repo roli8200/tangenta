@@ -3,6 +3,7 @@
 #include "Canvas.h"
 #include "Document.h"
 #include "Editor.h"
+#include "ExpressionSpinBox.h"
 #include "Output.h"
 
 #include <QApplication>
@@ -170,8 +171,8 @@ ImpositionDialog::ImpositionDialog(Canvas& canvas, const QString& title, QWidget
     m_paper->addItem(tr("Benutzerdefiniert"), QSizeF());
     form->addRow(tr("Papier:"), m_paper);
     auto* custom = new QHBoxLayout;
-    m_paperW = new QDoubleSpinBox(this);
-    m_paperH = new QDoubleSpinBox(this);
+    m_paperW = new ExpressionSpinBox(this);
+    m_paperH = new ExpressionSpinBox(this);
     for (QDoubleSpinBox* s : {m_paperW, m_paperH}) {
         s->setRange(20, 2000);
         s->setDecimals(1);
@@ -215,7 +216,7 @@ ImpositionDialog::ImpositionDialog(Canvas& canvas, const QString& title, QWidget
     form->addRow(tr("Spalten / Zeilen:"), grid);
 
     auto mm = [this](double max) {
-        auto* s = new QDoubleSpinBox(this);
+        auto* s = new ExpressionSpinBox(this);
         s->setRange(0, max);
         s->setDecimals(1);
         s->setSingleStep(0.5);

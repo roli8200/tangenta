@@ -573,6 +573,33 @@ QImage emboss(const QImage& in, double depth, double angleDeg)
     return out.image();
 }
 
+QImage embossColored(const QImage& in, double depth, double angleDeg, int colorMode, const Color& color)
+{
+    const Buf b(in);
+    Buf out(b.w, b.h);
+    const double a = qDegreesToRadians(angleDeg);
+    const double dx = std::cos(a), dy = -std::sin(a);
+    const float k = float(std::max(0.1, depth / 10.0));
+    const std::array<float, 3> base = colorMode == 2 ? std::array<float, 3>{0.f, 0.f, 0.f}
+                                    : colorMode == 3 ? std::array<float, 3>{color.r / 255.f, color.g / 255.f, color.b / 255.f}
+                                                     : std::array<float, 3>{0.5f, 0.5f, 0.5f};
+    for (int y = 0; y < b.h; ++y)
+        for (int x = 0; x < b.w; ++x) {
+            // Höhe aus Helligkeit und Deckung: auch eine einfarbige Fläche bekommt Kanten
+            auto height = [](const std::array<float, 4>& p) { return luminance(p) + 0.5f * p[3]; };
+            const float d = (height(b.sample(x + dx, y + dy)) - height(b.sample(x - dx, y - dy))) * k;
+            const std::array<float, 4>& src = b.at(x, y);
+            const float alpha = src[3];
+            std::array<float, 4> px{0.f, 0.f, 0.f, alpha};
+            for (int c = 0; c < 3; ++c) {
+                const float own = colorMode == 0 && alpha > 0.f ? src[c] / alpha : base[c];
+                px[c] = std::clamp(own + d, 0.f, 1.f) * alpha;
+            }
+            out.at(x, y) = px;
+        }
+    return out.image();
+}
+
 QImage pinch(const QImage& in, double amount)
 {
     const double cx = in.width() / 2.0, cy = in.height() / 2.0, rmax = std::min(cx, cy);
@@ -601,6 +628,122 @@ QImage sphere(const QImage& in, double amount)
         const double f = (1.0 - k) + k * (std::asin(r) / (M_PI / 2.0)) / std::max(1e-9, r) * (1.0 - z * 0.0);
         return QPointF(cx + dx * f * rmax, cy + dy * f * rmax);
     });
+}
+
+QImage cylinder(const QImage& in, double percent, bool vertical)
+{
+    const double k = std::clamp(percent, -100.0, 100.0) / 100.0;
+    if (k == 0.0)
+        return in.convertToFormat(QImage::Format_RGBA64);
+    const double cx = in.width() / 2.0 - 0.5, cy = in.height() / 2.0 - 0.5;
+    const double half = std::max(0.5, (vertical ? in.height() : in.width()) / 2.0);
+    // Abstand zur Achse −1 … 1 → Quelle: nach aussen über asin (Mitte vergrössert),
+    // nach innen über sin (Mitte gestaucht); dazwischen stufenlos
+    auto source = [k](double n) {
+        const double curved = k > 0 ? std::asin(std::clamp(n, -1.0, 1.0)) / (M_PI / 2.0) : std::sin(n * M_PI / 2.0);
+        return n + (curved - n) * std::abs(k);
+    };
+    return remap(in, [=](double x, double y) {
+        if (vertical)
+            return QPointF(x, cy + source((y - cy) / half) * half);
+        return QPointF(cx + source((x - cx) / half) * half, y);
+    });
+}
+
+QImage pageCurl(const QImage& in, const PageCurl& curl)
+{
+    const Buf b(in);
+    const double w = b.w, h = b.h;
+    // u, v: Abstand von der gewählten Ecke nach innen (Pixelmitten bei +0,5)
+    const bool flipX = curl.corner == PageCurl::TopRight || curl.corner == PageCurl::BottomRight;
+    const bool flipY = curl.corner == PageCurl::BottomRight || curl.corner == PageCurl::BottomLeft;
+    const double extentU = std::clamp(curl.width, 1, 100) / 100.0 * w;
+    const double extentV = std::clamp(curl.height, 1, 100) / 100.0 * h;
+    // Längs (along) der Rolle und quer dazu (across, Rollrichtung)
+    const double alongExtent = curl.vertical ? extentU : extentV;
+    const double acrossExtent = curl.vertical ? extentV : extentU;
+    constexpr double kTurn = 1.25 * M_PI; // so weit wickelt sich das Papier: etwas über die Falz zurück
+    const double overlap = std::sin(kTurn - M_PI);
+    const float bg[4] = {curl.background.r / 255.f, curl.background.g / 255.f, curl.background.b / 255.f, 1.f};
+    const float cc[3] = {curl.curlColor.r / 255.f, curl.curlColor.g / 255.f, curl.curlColor.b / 255.f};
+    // Licht schräg von der Ecke her
+    const double lightS = 0.41, lightZ = 0.91;
+
+    auto sourceAt = [&](double u, double v) {
+        const double x = flipX ? w - u : u, y = flipY ? h - v : v;
+        return b.sample(x - 0.5, y - 0.5);
+    };
+    // Rolle und Schatten an einer Stelle; inside = Bildpunkt bleibt unberührt
+    struct Look {
+        std::array<float, 4> px;
+        bool untouched;
+    };
+    auto eval = [&](double u, double v) -> Look {
+        const double along = curl.vertical ? u : v, across = curl.vertical ? v : u;
+        const double fold = along < alongExtent ? acrossExtent * (1.0 - along / alongExtent) : 0.0;
+        const double radius = fold / kTurn;
+        const double s = fold - across; // > 0: zur Ecke hin
+        if (radius < 1e-3 || s < -radius * (overlap + 0.8))
+            return {sourceAt(u, v), true};
+        if (s > radius) {
+            if (curl.transparentBackground)
+                return {{0.f, 0.f, 0.f, 0.f}, false};
+            return {{bg[0], bg[1], bg[2], bg[3]}, false};
+        }
+        double theta = -1;
+        if (s >= 0)
+            theta = M_PI - std::asin(s / radius);
+        else if (-s <= radius * overlap)
+            theta = M_PI + std::asin(-s / radius);
+        if (theta < 0) {
+            // Schlagschatten der Rolle auf dem Bild
+            const double t = (-s - radius * overlap) / (radius * 0.8);
+            const float k = float(1.0 - 0.4 * (1.0 - t) * (1.0 - t));
+            std::array<float, 4> p = sourceAt(u, v);
+            for (int c = 0; c < 3; ++c)
+                p[c] *= k;
+            return {p, false};
+        }
+        // Rückseite des Papiers, Normale (sin θ, −cos θ) in (s, z)
+        const double lambert = std::max(0.0, std::sin(theta) * lightS - std::cos(theta) * lightZ);
+        const double edge = std::abs(s) / radius; // Rand der Rolle etwas dunkler
+        const float shade = float((0.45 + 0.6 * lambert) * (1.0 - 0.25 * edge * edge * edge * edge));
+        std::array<float, 4> p{};
+        if (curl.opaque) {
+            p = {cc[0] * shade, cc[1] * shade, cc[2] * shade, 1.f};
+        } else {
+            // durchscheinend: Bild spiegelverkehrt von hinten, aufgehellt mit der Rollenfarbe
+            const double t = radius * theta; // Papierweg ab der Falz
+            const double srcAcross = fold - t;
+            const std::array<float, 4> src = curl.vertical ? sourceAt(u, srcAcross) : sourceAt(srcAcross, v);
+            for (int c = 0; c < 3; ++c)
+                p[c] = (0.5f * cc[c] + 0.5f * src[c]) * shade;
+            p[3] = 1.f;
+        }
+        return {p, false};
+    };
+
+    Buf out(b.w, b.h);
+    for (int y = 0; y < b.h; ++y)
+        for (int x = 0; x < b.w; ++x) {
+            const double u = flipX ? w - (x + 0.5) : x + 0.5, v = flipY ? h - (y + 0.5) : y + 0.5;
+            const Look centre = eval(u, v);
+            if (centre.untouched) {
+                out.at(x, y) = b.at(x, y);
+                continue;
+            }
+            // Kanten glätten: 3 × 3 Unterabtastung
+            std::array<float, 4> acc{};
+            for (int sy = -1; sy <= 1; ++sy)
+                for (int sx = -1; sx <= 1; ++sx) {
+                    const Look l = eval(u + sx / 3.0, v + sy / 3.0);
+                    const std::array<float, 4> p = l.untouched ? sourceAt(u + sx / 3.0, v + sy / 3.0) : l.px;
+                    for (int c = 0; c < 4; ++c)
+                        acc[c] += p[c] / 9.f;
+                }
+            out.at(x, y) = acc;
+        }
+    return out.image();
 }
 
 // --- Künstlerische Striche -------------------------------------------------------------------

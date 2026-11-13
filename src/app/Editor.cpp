@@ -14,6 +14,7 @@
 #include <functional>
 #include "Outline.h"
 #include "TableObject.h"
+#include "TextObject.h"
 
 #include "GroupObject.h"
 #include "PathOps.h"
@@ -369,6 +370,28 @@ NodeId Editor::importGroup(std::unique_ptr<GroupObject> group, bool centerOnPage
     return addObject(std::move(group), label);
 }
 
+QList<NodeId> Editor::importObjects(std::unique_ptr<GroupObject> group, const QString& label)
+{
+    const NodeId layer = activeLayer();
+    if (layer == InvalidNodeId || !group || group->childCount() == 0)
+        return {};
+    // Wie Einfügen und Gruppierung aufheben, aber in einem Schritt
+    Transaction tx(*m_doc, label);
+    const NodeId groupId = tx.insert(layer, -1, std::move(group));
+    const Node* inserted = m_doc->find(groupId);
+    int index = inserted->indexInParent();
+    QList<NodeId> ids;
+    while (inserted->childCount() > 0) {
+        const NodeId child = inserted->child(0)->id();
+        tx.move(child, layer, index++);
+        ids.append(child);
+    }
+    tx.remove(groupId);
+    tx.commit();
+    setSelection(ids);
+    return ids;
+}
+
 NodeId Editor::importImage(const QImage& image, std::optional<QPointF> center)
 {
     return image.isNull() ? InvalidNodeId : importImage(imagepool::encoded(imagepool::addImage(image)), center);
@@ -538,9 +561,7 @@ void Editor::setSelectionOutlinePen(const Style& pen)
     Transaction tx(*m_doc, tr("Konturstift"));
     for (NodeId id : ids)
         tx.modifySubtree<DrawObject>(id, [&](DrawObject& o) {
-            Style s = o.style();
-            apply(s);
-            o.setStyle(s);
+            o.editStyle([&](Style& s) { apply(s); });
         });
     tx.commit();
 }
@@ -564,9 +585,7 @@ void Editor::setSelectionOutlineShape(std::optional<int> dash, std::optional<int
     Transaction tx(*m_doc, startArrow || endArrow ? tr("Pfeilspitze") : tr("Linienstil"));
     for (NodeId id : ids) {
         tx.modifySubtree<DrawObject>(id, [&](DrawObject& o) {
-            Style s = o.style();
-            apply(s);
-            o.setStyle(s);
+            o.editStyle([&](Style& s) { apply(s); });
         });
     }
     tx.commit();
@@ -583,11 +602,11 @@ void Editor::setSelectionStrokeWidth(double width)
     Transaction tx(*m_doc, tr("Konturbreite"));
     for (NodeId id : ids) {
         tx.modifySubtree<DrawObject>(id, [width](DrawObject& o) {
-            Style s = o.style();
-            s.strokeWidth = width;
-            if (!s.stroke) // Breite wählen schaltet die Kontur ein
-                s.stroke = Color(0, 0, 0);
-            o.setStyle(s);
+            o.editStyle([&](Style& s) {
+                s.strokeWidth = width;
+                if (!s.stroke) // Breite wählen schaltet die Kontur ein
+                    s.stroke = Color(0, 0, 0);
+            });
         });
     }
     tx.commit();
@@ -599,8 +618,14 @@ void Editor::setObjectProperty(const QString& id, const QVariant& value, const Q
     if (ids.isEmpty())
         return;
     Transaction tx(*m_doc, label);
-    for (NodeId objectId : ids)
-        tx.modify<DrawObject>(objectId, [&](DrawObject& o) { o.setPropertyValue(id, value); });
+    for (NodeId objectId : ids) {
+        auto apply = [&](DrawObject& o) { o.setPropertyValue(id, value); };
+        // Überblendung über den ganzen Pfad verschiebt Start und Ende mit
+        if (node_cast<BlendObject>(m_doc->find(objectId)))
+            tx.modifySubtree<DrawObject>(objectId, apply);
+        else
+            tx.modify<DrawObject>(objectId, apply);
+    }
     tx.commit();
 }
 
@@ -791,6 +816,22 @@ void Editor::reorder(Transaction& tx, NodeId parent, const QList<NodeId>& order)
     }
 }
 
+namespace {
+
+// Nächste sichtbare, nicht gesperrte Ebene derselben Seite darüber (up) bzw. darunter
+const Layer* neighbourLayer(const Node* layer, bool up)
+{
+    const Node* page = layer->parent();
+    for (int i = layer->indexInParent() + (up ? 1 : -1); i >= 0 && i < page->childCount(); i += up ? 1 : -1) {
+        const auto* l = node_cast<Layer>(page->child(i));
+        if (l && l->visible() && !l->locked())
+            return l;
+    }
+    return nullptr;
+}
+
+} // namespace
+
 bool Editor::canArrange(Arrange how) const
 {
     const QList<NodeId> ids = topLevelSelection();
@@ -823,11 +864,15 @@ bool Editor::canArrange(Arrange how) const
                 otherLayer = otherLayer || unselectedAt(i);
             break;
         case Arrange::ForwardOne:
-            otherLayer = unselectedAt(index + 1);
+        case Arrange::BackOne: {
+            // Ganz oben bzw. unten in der Ebene geht es in die nächste Ebene weiter
+            const bool up = how == Arrange::ForwardOne;
+            bool blocked = false;
+            for (int i = index + (up ? 1 : -1); i >= 0 && i < parent->childCount(); i += up ? 1 : -1)
+                blocked = blocked || unselectedAt(i);
+            otherLayer = blocked || (node_cast<Layer>(parent) && neighbourLayer(parent, up));
             break;
-        case Arrange::BackOne:
-            otherLayer = unselectedAt(index - 1);
-            break;
+        }
         case Arrange::Reverse:
             break;
         }
@@ -866,8 +911,35 @@ void Editor::arrangeSelection(Arrange how)
                 tx.move(id, target->id(), target->childCount());
         }
     }
+    // Eins nach vorn/hinten: wer schon zuoberst bzw. zuunterst in seiner Ebene liegt, wechselt in
+    // die nächste Ebene der Seite (dort zuunterst bzw. zuoberst), so geht es durch den ganzen Stapel
+    QList<NodeId> stay = ids;
+    if (how == Arrange::ForwardOne || how == Arrange::BackOne) {
+        const bool up = how == Arrange::ForwardOne;
+        QHash<NodeId, QList<NodeId>> crossing; // Zielebene -> Objekte in Stapelreihenfolge
+        for (NodeId id : ids) {
+            const Node* n = m_doc->find(id);
+            const Node* parent = n->parent();
+            if (!node_cast<Layer>(parent))
+                continue;
+            bool blocked = false;
+            for (int i = n->indexInParent() + (up ? 1 : -1); i >= 0 && i < parent->childCount(); i += up ? 1 : -1)
+                blocked = blocked || !ids.contains(parent->child(i)->id());
+            if (blocked)
+                continue;
+            if (const Layer* target = neighbourLayer(parent, up)) {
+                crossing[target->id()].append(id);
+                stay.removeAll(id);
+            }
+        }
+        for (auto it = crossing.cbegin(); it != crossing.cend(); ++it) {
+            int at = up ? 0 : m_doc->find(it.key())->childCount();
+            for (NodeId id : it.value())
+                tx.move(id, it.key(), at++);
+        }
+    }
     QList<NodeId> parents;
-    for (NodeId id : ids) {
+    for (NodeId id : stay) {
         const NodeId p = m_doc->find(id)->parent()->id();
         if (!parents.contains(p))
             parents.append(p);
@@ -880,9 +952,9 @@ void Editor::arrangeSelection(Arrange how)
         for (int i = 0; i < parent->childCount(); ++i) {
             const NodeId id = parent->child(i)->id();
             order.append(id);
-            (ids.contains(id) ? chosen : rest).append(id);
+            (stay.contains(id) ? chosen : rest).append(id);
         }
-        auto selected = [&ids](NodeId id) { return ids.contains(id); };
+        auto selected = [&stay](NodeId id) { return stay.contains(id); };
         switch (how) {
         case Arrange::ToPageFront:
         case Arrange::ToLayerFront:
@@ -958,24 +1030,35 @@ void Editor::placeSelectionRelativeTo(NodeId target, bool inFront)
 bool Editor::canCombineSelection() const
 {
     const QList<NodeId> ids = topLevelSelection();
-    return std::count_if(ids.begin(), ids.end(), [this](NodeId id) { return !m_doc->findAs<GroupObject>(id); }) >= 2;
+    return ids.size() >= 2; // Gruppen zählen mit ihrem Inhalt
 }
 
 void Editor::combineSelection()
 {
-    QList<NodeId> ids;
-    for (NodeId id : topLevelSelection()) {
-        if (!m_doc->findAs<GroupObject>(id))
-            ids.append(id);
-    }
-    if (ids.size() < 2)
+    // Gruppen werden mit ihrem Inhalt kombiniert (z.B. Text, der in Kurven umgewandelt eine Gruppe
+    // je Farbe ergibt); vorher blieb der Befehl dann ohne Wirkung
+    const QList<NodeId> ids = topLevelSelection();
+    QList<const DrawObject*> leaves;
+    std::function<void(const DrawObject*)> collect = [&](const DrawObject* o) {
+        if (node_cast<GroupObject>(o)) {
+            for (int i = 0; i < o->childCount(); ++i)
+                if (const auto* c = node_cast<DrawObject>(o->child(i)))
+                    collect(c);
+        } else {
+            leaves << o;
+        }
+    };
+    for (NodeId id : ids)
+        collect(m_doc->findAs<DrawObject>(id));
+    if (ids.size() < 2 || leaves.isEmpty())
         return;
     // Alle Linienzüge in einem Kurvenobjekt (Seitenkoordinaten); Füllung und Kontur vom
     // obersten Objekt
     QList<SubPath> paths;
-    for (NodeId id : ids)
-        paths += CurveObject::fromPath(m_doc->findAs<DrawObject>(id)->path())->subPaths();
-    const DrawObject* top = m_doc->findAs<DrawObject>(ids.last());
+    for (const DrawObject* o : std::as_const(leaves))
+        paths += CurveObject::fromPath(o->path())->subPaths();
+    const DrawObject* top = leaves.last();
+    const DrawObject* topLevel = m_doc->findAs<DrawObject>(ids.last());
     auto combined = std::make_unique<CurveObject>(paths);
     combined->setStyle(top->style());
     combined->copyEffects(*top);
@@ -983,19 +1066,115 @@ void Editor::combineSelection()
     Transaction tx(*m_doc, tr("Kombinieren"));
     for (int i = 0; i + 1 < ids.size(); ++i)
         tx.remove(ids[i]);
-    const NodeId parent = top->parent()->id();
-    const int index = top->indexInParent();
+    const NodeId parent = topLevel->parent()->id();
+    const int index = topLevel->indexInParent();
     tx.remove(ids.last());
     const NodeId id = tx.insert(parent, index, std::move(combined));
     tx.commit();
     setSelection({id});
 }
 
+namespace {
+
+// Grafiktext lässt sich in Zeilen, Wörter oder Zeichen teilen
+bool textBreaksApart(const DrawObject* o)
+{
+    const auto* t = node_cast<TextObject>(o);
+    if (!t || t->kind() != TextObject::Kind::Artistic || t->onPath())
+        return false;
+    // ohne Satz geprüft (läuft bei jeder Auswahländerung): mehr als ein sichtbares Zeichen
+    const QString text = t->plainText();
+    return std::count_if(text.begin(), text.end(), [](QChar c) { return !c.isSpace(); }) > 1;
+}
+
+// Pinsel oder Sprühdose: lässt sich in Teile und Rückgrat trennen
+bool hasMediaPieces(const DrawObject* o)
+{
+    const auto* c = node_cast<CurveObject>(o);
+    return c && c->media().hasPieces();
+}
+
+} // namespace
+
+// Teile eines Pinsel- oder Sprühstrichs als Gruppe farbiger Kurven (Seitenkoordinaten wie das Original)
+static std::unique_ptr<GroupObject> mediaPiecesGroup(const CurveObject& curve)
+{
+    auto group = std::make_unique<GroupObject>();
+    group->setName(curve.name());
+    for (const ArtPiece& piece : curve.mediaPieces()) {
+        std::unique_ptr<CurveObject> c = CurveObject::fromPath(piece.path);
+        c->setTransform(curve.transform());
+        Style s;
+        s.fill = Fill::solid(piece.color);
+        s.stroke.reset();
+        c->setStyle(s);
+        attachDetachedChild(*group, std::move(c));
+    }
+    return group;
+}
+
+bool Editor::applyMediaToSelection(const ArtisticMedia& media, const QString& label)
+{
+    if (!media.isActive())
+        return false;
+    Transaction tx(*m_doc, label);
+    QList<NodeId> result;
+    // Der Strich ist eine Fläche in der bisherigen Konturfarbe
+    auto strokeStyle = [](const Style& old) {
+        Style s = old;
+        s.fill = Fill::solid(old.stroke.value_or(old.fill.representativeColor().value_or(Color(0, 0, 0))));
+        s.stroke.reset();
+        return s;
+    };
+    for (NodeId id : topLevelSelection()) {
+        const DrawObject* o = m_doc->findAs<DrawObject>(id);
+        if (!o)
+            continue;
+        if (const auto* curve = node_cast<CurveObject>(o)) {
+            const bool wasMedia = curve->media().isActive();
+            const Style style = wasMedia ? curve->style() : strokeStyle(curve->style());
+            ArtisticMedia m = media;
+            if (wasMedia && m.kind == ArtisticMedia::Kind::Pressure && m.pressure.isEmpty())
+                m.pressure = curve->media().pressure;
+            tx.modify<CurveObject>(id, [m, style](CurveObject& c) {
+                c.setMedia(m);
+                c.setStyle(style);
+            });
+            result.append(id);
+            continue;
+        }
+        // Grundformen werden zur Kurve mit dem Strich
+        if (node_cast<GroupObject>(o) || node_cast<ImageObject>(o) || node_cast<TextObject>(o) || node_cast<TableObject>(o)
+            || o->localPath().isEmpty()) {
+            result.append(id);
+            continue;
+        }
+        std::unique_ptr<CurveObject> curve = CurveObject::fromPath(o->localPath());
+        curve->setTransform(o->transform());
+        curve->setStyle(strokeStyle(o->style()));
+        curve->setName(o->name());
+        curve->setMedia(media);
+        const NodeId parent = o->parent()->id();
+        const int index = o->indexInParent();
+        tx.remove(id);
+        result.append(tx.insert(parent, index, std::move(curve)));
+    }
+    if (tx.isEmpty())
+        return false;
+    tx.commit();
+    setSelection(result);
+    return true;
+}
+
 bool Editor::canBreakApartSelection() const
 {
     for (NodeId id : topLevelSelection()) {
         const auto* c = m_doc->findAs<CurveObject>(id);
-        if (c && c->subPaths().size() > 1)
+        if ((c && c->subPaths().size() > 1) || textBreaksApart(m_doc->findAs<DrawObject>(id)) || hasMediaPieces(c))
+            return true;
+        // Strg+K trennt auch Überblendung, Kontur, Extrusion und Blockschatten (separateEffects)
+        const auto* o = m_doc->findAs<DrawObject>(id);
+        if (o && (node_cast<BlendObject>(o) || o->contour().active || o->extrusion().active || o->blockShadow().active))
             return true;
     }
     return false;
@@ -1006,13 +1185,35 @@ void Editor::breakApartSelection()
     QList<NodeId> targets;
     for (NodeId id : topLevelSelection()) {
         const auto* c = m_doc->findAs<CurveObject>(id);
-        if (c && c->subPaths().size() > 1)
+        if ((c && c->subPaths().size() > 1) || textBreaksApart(m_doc->findAs<DrawObject>(id)) || hasMediaPieces(c))
             targets.append(id);
     }
-    // Jeder Linienzug wird ein eigenes Objekt mit Lage, Stil und Medien des Originals
+    // Jeder Linienzug wird ein eigenes Objekt mit Lage, Stil und Medien des Originals;
+    // Grafiktext zerfällt in Zeilen, Wörter oder Zeichen (bleibt Text)
     replaceObjects(targets, [](const DrawObject& o) -> Replacement {
-        const auto& c = static_cast<const CurveObject&>(o);
         std::vector<std::unique_ptr<DrawObject>> out;
+        if (const auto* t = node_cast<TextObject>(&o)) {
+            for (std::unique_ptr<TextObject>& piece : t->breakApart())
+                out.push_back(std::move(piece));
+            if (out.empty())
+                return std::nullopt;
+            return out;
+        }
+        const auto& c = static_cast<const CurveObject&>(o);
+        if (c.media().hasPieces()) {
+            // Pinsel/Sprühdose: Gruppe der Teile und das Rückgrat als gewöhnliche Linie
+            out.push_back(mediaPiecesGroup(c));
+            auto spine = std::make_unique<CurveObject>(c.subPaths());
+            spine->setTransform(c.transform());
+            Style s;
+            s.fill = Fill::none();
+            s.stroke = Color(0, 0, 0);
+            s.strokeWidth = 0.2;
+            spine->setStyle(s);
+            spine->setName(c.name());
+            out.push_back(std::move(spine));
+            return out;
+        }
         for (const SubPath& s : c.subPaths()) {
             auto piece = std::make_unique<CurveObject>(QList<SubPath>{s});
             piece->setTransform(c.transform());
@@ -1060,6 +1261,46 @@ void Editor::duplicateSelectionWith(const QTransform& m, const QString& label)
     }
     tx.commit();
     setSelection(copies);
+}
+
+void Editor::duplicateInPlace()
+{
+    if (topLevelSelection(true).isEmpty())
+        return;
+    remember(tr("An Ort und Stelle duplizieren"), [this] { duplicateInPlace(); });
+    duplicateSelectionWith(QTransform(), tr("An Ort und Stelle duplizieren"));
+}
+
+void Editor::transformSelectionStamped(const QList<QTransform>& stamps, const QTransform& final, bool finalAsCopy,
+                                       const QString& label)
+{
+    const QList<NodeId> ids = topLevelSelection(true);
+    if (ids.isEmpty())
+        return;
+    Transaction tx(*m_doc, label);
+    auto insertCopies = [&](const QTransform& m) {
+        QList<NodeId> copies;
+        for (NodeId id : ids) {
+            const Node* original = m_doc->find(id);
+            std::unique_ptr<Node> copy = serial::fromJson(serial::toJson(*original, serial::Ids::Drop), serial::Ids::Drop);
+            if (auto* obj = node_cast<DrawObject>(copy.get()))
+                obj->applyTransform(m);
+            copies.append(tx.insert(original->parent()->id(), -1, std::move(copy)));
+        }
+        return copies;
+    };
+    for (const QTransform& m : stamps)
+        insertCopies(m);
+    QList<NodeId> selected = ids;
+    if (finalAsCopy) {
+        selected = insertCopies(final);
+    } else if (!final.isIdentity()) {
+        // gesperrte Objekte nicht verschieben (wie transformSelection)
+        for (NodeId id : topLevelSelection())
+            tx.modifySubtree<DrawObject>(id, [&final](DrawObject& o) { o.applyTransform(final); });
+    }
+    tx.commit();
+    setSelection(selected);
 }
 
 void Editor::repeatLast()
@@ -1376,6 +1617,36 @@ NodeId Editor::blendObjects(NodeId from, NodeId to, int steps)
     return id;
 }
 
+bool Editor::blendAlongPath(NodeId blendId, NodeId pathId)
+{
+    const auto* blend = m_doc->findAs<BlendObject>(blendId);
+    const DrawObject* guide = m_doc->findAs<DrawObject>(pathId);
+    if (!blend || !guide || blendId == pathId || isLocked(blendId) || isLocked(pathId) || guide->parent() == blend
+        || node_cast<BlendObject>(guide) || guide->path().isEmpty())
+        return false;
+    Transaction tx(*m_doc, tr("Überblendung an Pfad"));
+    // Ein bisheriger Pfad kommt als eigenes Objekt neben die Überblendung
+    if (const DrawObject* old = blend->pathObject())
+        tx.move(old->id(), blend->parent()->id(), blend->indexInParent());
+    tx.move(pathId, blendId, 2);
+    tx.commit();
+    setSelection({blendId});
+    return true;
+}
+
+bool Editor::detachBlendPath(NodeId blendId)
+{
+    const auto* blend = m_doc->findAs<BlendObject>(blendId);
+    if (!blend || !blend->pathObject() || isLocked(blendId))
+        return false;
+    Transaction tx(*m_doc, tr("Vom Pfad lösen"));
+    const NodeId pathId = blend->pathObject()->id();
+    tx.move(pathId, blend->parent()->id(), blend->indexInParent());
+    tx.commit();
+    setSelection({blendId});
+    return true;
+}
+
 void Editor::setObjectContour(NodeId id, const ContourEffect& c, const QString& label)
 {
     const DrawObject* o = m_doc->findAs<DrawObject>(id);
@@ -1412,6 +1683,41 @@ void Editor::setSelectionExtrusion(const Extrusion& e, const QString& label)
     for (NodeId id : topLevelSelection())
         if (m_doc->findAs<DrawObject>(id)->extrusion() != e)
             tx.modify<DrawObject>(id, [&e](DrawObject& d) { d.setExtrusion(e); });
+    if (!tx.isEmpty())
+        tx.commit();
+}
+
+NodeId Editor::insertGenerated(std::unique_ptr<DrawObject> object, NodeId above, const QList<NodeId>& replaced, const QString& label)
+{
+    const Node* anchor = m_doc->find(above);
+    if (!object || !anchor || !anchor->parent())
+        return InvalidNodeId;
+    Transaction tx(*m_doc, label);
+    const NodeId id = tx.insert(anchor->parent()->id(), anchor->indexInParent() + 1, std::move(object));
+    for (NodeId r : replaced)
+        if (m_doc->find(r) && !isLocked(r))
+            tx.remove(r);
+    tx.commit();
+    setSelection({id});
+    return id;
+}
+
+void Editor::setObjectBlockShadow(NodeId id, const BlockShadow& s, const QString& label)
+{
+    const DrawObject* o = m_doc->findAs<DrawObject>(id);
+    if (!o || isLocked(id) || o->blockShadow() == s)
+        return;
+    Transaction tx(*m_doc, label);
+    tx.modify<DrawObject>(id, [&s](DrawObject& d) { d.setBlockShadow(s); });
+    tx.commit();
+}
+
+void Editor::setSelectionBlockShadow(const BlockShadow& s, const QString& label)
+{
+    Transaction tx(*m_doc, label);
+    for (NodeId id : topLevelSelection())
+        if (!isLocked(id) && m_doc->findAs<DrawObject>(id)->blockShadow() != s)
+            tx.modify<DrawObject>(id, [&s](DrawObject& d) { d.setBlockShadow(s); });
     if (!tx.isEmpty())
         tx.commit();
 }
@@ -1463,48 +1769,91 @@ bool Editor::separateEffects()
         const NodeId parent = o->parent()->id();
         const int index = o->indexInParent();
         if (const auto* blend = node_cast<BlendObject>(o)) {
-            // Gruppe aus Start, Zwischenstufen (Kurven), Ende
+            // Gruppe aus Pfad, Start, Zwischenstufen (Kurven), Ende in Zeichenreihenfolge
             const NodeId group = tx.insert(parent, index, std::make_unique<GroupObject>());
             const NodeId startId = blend->start() ? blend->start()->id() : InvalidNodeId;
             const NodeId endId = blend->end() ? blend->end()->id() : InvalidNodeId;
-            const auto steps = blend->intermediates();
-            if (startId)
-                tx.move(startId, group, -1);
+            const NodeId pathId = blend->pathObject() ? blend->pathObject()->id() : InvalidNodeId;
+            const bool reversed = blend->reversed();
+            auto steps = blend->intermediates();
+            if (reversed)
+                std::reverse(steps.begin(), steps.end());
+            if (pathId)
+                tx.move(pathId, group, -1);
+            if (const NodeId first = reversed ? endId : startId)
+                tx.move(first, group, -1);
             for (const auto& s : steps) {
                 auto c = std::make_unique<CurveObject>(s->subPaths());
                 c->setStyle(s->style());
                 tx.insert(group, -1, std::move(c));
             }
-            if (endId)
-                tx.move(endId, group, -1);
+            if (const NodeId last = reversed ? startId : endId)
+                tx.move(last, group, -1);
             tx.remove(id);
             result << group;
             any = true;
             continue;
         }
-        if (o->contour().active || o->extrusion().active) {
+        if (o->contour().active || o->extrusion().active || o->blockShadow().active) {
             const NodeId group = tx.insert(parent, index, std::make_unique<GroupObject>());
-            if (o->extrusion().active)
-                for (const auto& [poly, color] : Canvas::extrusionFaces(*o, o->extrusion())) {
-                    QPainterPath p;
-                    p.addPolygon(poly);
-                    p.closeSubpath();
-                    tx.insert(group, -1, curveFrom(p, Color::fromQColor(color), Color::fromQColor(color.darker(130)), 0.1));
+            // Blockschatten zuhinterst als eine Kurve in seiner Farbe
+            if (o->blockShadow().active) {
+                const QPainterPath shadow = Canvas::blockShadowShape(*o, o->blockShadow());
+                if (!shadow.isEmpty()) {
+                    auto c = curveFrom(shadow, o->blockShadow().color, std::nullopt, 0.0);
+                    c->setName(tr("Blockschatten"));
+                    tx.insert(group, -1, std::move(c));
                 }
+            }
+            // Gedrehte Extrusion: die Vorderfläche wird mit dem Körper gedreht (projektiv verzerrt),
+            // Flächen vor ihr kommen über das Objekt
+            const bool rotated = o->extrusion().active && o->extrusion().isRotated();
+            const QTransform face = rotated ? o->extrusion().faceTransform(o->boundingRect().center()) : QTransform();
+            QList<Canvas::ExtrusionFace> faces;
+            if (o->extrusion().active)
+                faces = Canvas::extrusionModel(*o, o->extrusion());
+            auto insertFaces = [&](bool front) {
+                for (const Canvas::ExtrusionFace& f : std::as_const(faces)) {
+                    if (f.front != front)
+                        continue;
+                    QPainterPath p;
+                    p.addPolygon(f.polygon);
+                    p.closeSubpath();
+                    tx.insert(group, -1, curveFrom(p, Color::fromQColor(f.color), Color::fromQColor(f.color.darker(130)), 0.1));
+                }
+            };
+            insertFaces(false);
             QList<Canvas::ContourStep> steps;
             if (o->contour().active)
                 steps = Canvas::contourSteps(*o, o->contour());
             for (const Canvas::ContourStep& s : std::as_const(steps))
                 if (!s.front)
-                    tx.insert(group, -1, curveFrom(s.path, s.fill, s.stroke, o->style().strokeWidth));
-            tx.move(id, group, -1);
-            tx.modify<DrawObject>(id, [](DrawObject& d) {
-                d.setContour(ContourEffect());
-                d.setExtrusion(Extrusion());
-            });
+                    tx.insert(group, -1, curveFrom(face.map(s.path), s.fill, s.stroke, o->style().strokeWidth));
+            if (rotated && !face.isAffine()) {
+                // Perspektivisch verzerrt: als Kurve mit Stil und übrigen Effekten
+                auto curve = CurveObject::fromPath(face.map(o->path()));
+                curve->setStyle(o->style());
+                curve->copyEffects(*o);
+                curve->setContour(ContourEffect());
+                curve->setExtrusion(Extrusion());
+                curve->setBlockShadow(BlockShadow());
+                curve->setName(o->name());
+                tx.insert(group, -1, std::move(curve));
+                tx.remove(id);
+            } else {
+                tx.move(id, group, -1);
+                tx.modify<DrawObject>(id, [rotated, face](DrawObject& d) {
+                    d.setContour(ContourEffect());
+                    d.setExtrusion(Extrusion());
+                    d.setBlockShadow(BlockShadow());
+                    if (rotated)
+                        d.applyTransform(face);
+                });
+            }
             for (const Canvas::ContourStep& s : std::as_const(steps))
                 if (s.front)
-                    tx.insert(group, -1, curveFrom(s.path, s.fill, s.stroke, o->style().strokeWidth));
+                    tx.insert(group, -1, curveFrom(face.map(s.path), s.fill, s.stroke, o->style().strokeWidth));
+            insertFaces(true);
             result << group;
             any = true;
             continue;
@@ -1693,11 +2042,11 @@ void Editor::setObjectStroke(NodeId id, const std::optional<Color>& color, const
         return;
     Transaction tx(*m_doc, label);
     tx.modifySubtree<DrawObject>(id, [&color](DrawObject& o) {
-        Style s = o.style();
-        s.stroke = color;
-        if (color && s.strokeWidth <= 0)
-            s.strokeWidth = 0.2;
-        o.setStyle(s);
+        o.editStyle([&](Style& s) {
+            s.stroke = color;
+            if (color && s.strokeWidth <= 0)
+                s.strokeWidth = 0.2;
+        });
     });
     tx.commit();
 }
@@ -1784,18 +2133,18 @@ void Editor::copyProperties(const DrawObject& src, const QList<NodeId>& targets,
     Transaction tx(*m_doc, tr("Eigenschaften kopieren"));
     for (NodeId id : targets) {
         tx.modifySubtree<DrawObject>(id, [&](DrawObject& o) {
-            Style s = o.style();
-            if (what & CopyOutlinePen) {
-                s.strokeWidth = from.strokeWidth;
-                s.dash = from.dash;
-                s.startArrow = from.startArrow;
-                s.endArrow = from.endArrow;
-            }
-            if (what & CopyOutlineColor)
-                s.stroke = from.stroke;
-            if (what & CopyFill)
-                s.fill = from.fill;
-            o.setStyle(s);
+            o.editStyle([&](Style& s) {
+                if (what & CopyOutlinePen) {
+                    s.strokeWidth = from.strokeWidth;
+                    s.dash = from.dash;
+                    s.startArrow = from.startArrow;
+                    s.endArrow = from.endArrow;
+                }
+                if (what & CopyOutlineColor)
+                    s.stroke = from.stroke;
+                if (what & CopyFill)
+                    s.fill = from.fill;
+            });
             if ((what & CopyText) && textFormat) {
                 if (auto* t = node_cast<TextObject>(&o)) {
                     QList<TextParagraph> paragraphs = t->paragraphs();
@@ -2094,6 +2443,19 @@ void Editor::transformSelectionCopies(const QTransform& m, int copies, const QSt
     setSelection(current);
 }
 
+bool Editor::canGroupSelection() const
+{
+    return topLevelSelection().size() >= 2;
+}
+
+bool Editor::canUngroupSelection() const
+{
+    for (NodeId id : topLevelSelection())
+        if (m_doc->findAs<GroupObject>(id))
+            return true;
+    return false;
+}
+
 void Editor::groupSelection()
 {
     const QList<NodeId> ids = topLevelSelection();
@@ -2144,9 +2506,7 @@ void Editor::setSelectionFill(const Fill& fill)
     Transaction tx(*m_doc, fill.isGradient() ? tr("Farbverlauf") : tr("Füllung"));
     for (NodeId id : ids) {
         tx.modifySubtree<DrawObject>(id, [&fill](DrawObject& o) {
-            Style s = o.style();
-            s.fill = fill;
-            o.setStyle(s);
+            o.editStyle([&](Style& s) { s.fill = fill; });
         });
     }
     tx.commit();
@@ -2172,6 +2532,16 @@ void Editor::setSelectionEffect(Effect effect, const std::function<void(Ramp&)>&
         if (r != o->effect(effect))
             tx.modify<DrawObject>(id, [effect, r](DrawObject& d) { d.setEffect(effect, r); });
     }
+    if (!tx.isEmpty())
+        tx.commit();
+}
+
+void Editor::setSelectionBlendMode(BlendMode mode)
+{
+    Transaction tx(*m_doc, tr("Mischmodus"));
+    for (NodeId id : topLevelSelection())
+        if (m_doc->findAs<DrawObject>(id)->blendMode() != mode)
+            tx.modify<DrawObject>(id, [mode](DrawObject& d) { d.setBlendMode(mode); });
     if (!tx.isEmpty())
         tx.commit();
 }
@@ -2640,8 +3010,10 @@ void Editor::convertSelectionToCurves()
             const Ramp textAlpha = text->transparency();
             const bool shaped = text->hasEnvelope();
             auto curveFor = [&](const TextObject::Piece& piece) {
-                std::unique_ptr<CurveObject> c = shaped ? std::make_unique<CurveObject>(pathops::fitPath(piece.path))
-                                                        : CurveObject::fromPath(piece.path);
+                // Kurven füllen gerade-ungerade: überlappende Konturen (variable Schriften) erst vereinigen
+                const QPainterPath glyphs = pathops::withoutOverlaps(piece.path, 0.002); // mm
+                std::unique_ptr<CurveObject> c = shaped ? std::make_unique<CurveObject>(pathops::fitPath(glyphs))
+                                                        : CurveObject::fromPath(glyphs);
                 c->setTransform(textTransform);
                 Style s = textStyle;
                 if (piece.color)
@@ -2663,20 +3035,9 @@ void Editor::convertSelectionToCurves()
             }
             continue;
         }
-        if (existing && existing->media().kind == ArtisticMedia::Kind::Sprayer) {
-            // Sprühdose: jedes versprühte Objekt eine Kurve in seiner Farbe, zusammen eine Gruppe
-            auto group = std::make_unique<GroupObject>();
-            group->setName(o->name());
-            for (const SubPath& sp : existing->subPaths())
-                for (const pathops::SprayPiece& piece : pathops::sprayPieces(CurveObject(QList<SubPath>{sp}).spinePath(), existing->media())) {
-                    std::unique_ptr<CurveObject> c = CurveObject::fromPath(piece.path);
-                    c->setTransform(o->transform());
-                    Style s;
-                    s.fill = Fill::solid(piece.color);
-                    s.stroke.reset();
-                    c->setStyle(s);
-                    attachDetachedChild(*group, std::move(c));
-                }
+        if (existing && existing->media().hasPieces()) {
+            // Sprühdose und Pinsel: jedes Teil eine Kurve in seiner Farbe, zusammen eine Gruppe
+            std::unique_ptr<GroupObject> group = mediaPiecesGroup(*existing);
             tx.remove(id);
             result.append(tx.insert(parent, index, std::move(group)));
             continue;
@@ -2737,9 +3098,7 @@ void Editor::setSelectionStroke(std::optional<Color> color)
     Transaction tx(*m_doc, tr("Kontur"));
     for (NodeId id : ids) {
         tx.modifySubtree<DrawObject>(id, [&color](DrawObject& o) {
-            Style s = o.style();
-            s.stroke = color;
-            o.setStyle(s);
+            o.editStyle([&](Style& s) { s.stroke = color; });
         });
     }
     tx.commit();
@@ -2800,6 +3159,169 @@ void Editor::setPageSize(const QSizeF& size, bool allPages)
             tx.modify<Page>(m_doc->page(i).id(), resize);
     } else {
         tx.modify<Page>(currentPage().id(), resize);
+    }
+    tx.commit();
+}
+
+void Editor::renamePage(int index, const QString& name)
+{
+    if (index < 0 || index >= m_doc->pageCount() || m_doc->page(index).name() == name)
+        return;
+    Transaction tx(*m_doc, tr("Seite umbenennen"));
+    tx.modify<Page>(m_doc->page(index).id(), [&name](Page& p) { p.setName(name); });
+    tx.commit();
+}
+
+void Editor::insertPages(int index, int count)
+{
+    if (count <= 0)
+        return;
+    index = std::clamp(index, 0, m_doc->pageCount());
+    Transaction tx(*m_doc, count == 1 ? tr("Seite einfügen") : tr("Seiten einfügen"));
+    const QSizeF size = currentPage().size();
+    for (int i = 0; i < count; ++i)
+        tx.insert(m_doc->root().id(), index + 1 + i, createPage(size, tr("Ebene 1")));
+    tx.commit();
+    setCurrentPageIndex(index);
+}
+
+int Editor::duplicatePage(int index, bool withContent, bool after)
+{
+    if (index < 0 || index >= m_doc->pageCount())
+        return -1;
+    const Page& source = m_doc->page(index);
+    std::unique_ptr<Node> copy = serial::fromJson(serial::toJson(source, serial::Ids::Drop), serial::Ids::Drop);
+    if (!copy)
+        return -1;
+    if (!withContent) {
+        // Nur die Ebenen: Kopie mit leeren Ebenen gleicher Eigenschaften neu aufbauen
+        auto empty = std::make_unique<Page>();
+        empty->readProperties(serial::properties(source));
+        for (int l = 0; l < source.childCount(); ++l) {
+            auto layer = std::make_unique<Layer>();
+            layer->readProperties(serial::properties(*source.child(l)));
+            attachDetachedChild(*empty, std::move(layer));
+        }
+        copy = std::move(empty);
+    }
+    const int target = after ? index + 1 : index;
+    Transaction tx(*m_doc, tr("Seite duplizieren"));
+    tx.insert(m_doc->root().id(), target + 1, std::move(copy));
+    tx.commit();
+    clearSelection();
+    setCurrentPageIndex(target);
+    return target;
+}
+
+void Editor::movePage(int from, int to)
+{
+    const int count = m_doc->pageCount();
+    if (from < 0 || from >= count || to < 0 || to >= count || from == to)
+        return;
+    const NodeId current = currentPage().id();
+    const NodeId moved = m_doc->page(from).id();
+    Transaction tx(*m_doc, tr("Seite verschieben"));
+    // +1: Kind 0 der Wurzel ist die Masterseite
+    tx.move(moved, m_doc->root().id(), to + 1);
+    // Aktuelle Seite folgt ihrer Seite, bevor das Dokument die Änderung meldet
+    const int oldIndex = m_currentPage;
+    m_currentPage = std::max(0, m_doc->pageIndex(current));
+    tx.commit();
+    if (m_currentPage != oldIndex)
+        emit currentPageChanged(m_currentPage);
+}
+
+bool Editor::isPageLandscape(int index) const
+{
+    if (index < 0 || index >= m_doc->pageCount())
+        return false;
+    const QSizeF s = m_doc->page(index).size();
+    return s.width() > s.height();
+}
+
+void Editor::setPageOrientation(int index, bool landscape)
+{
+    if (index < 0 || index >= m_doc->pageCount() || isPageLandscape(index) == landscape)
+        return;
+    const QSizeF s = m_doc->page(index).size();
+    if (std::abs(s.width() - s.height()) < 1e-9)
+        return;
+    Transaction tx(*m_doc, tr("Seitenausrichtung"));
+    tx.modify<Page>(m_doc->page(index).id(), [&s](Page& p) { p.setSize(s.transposed()); });
+    tx.commit();
+}
+
+bool Editor::moveObjectsToPage(const QList<NodeId>& ids, int pageIndex, const QPointF& shift, const QString& label)
+{
+    if (pageIndex < 0 || pageIndex >= m_doc->pageCount())
+        return false;
+    const Page& target = m_doc->page(pageIndex);
+    QList<NodeId> moving;
+    for (NodeId id : ids) {
+        const Node* n = m_doc->find(id);
+        const Page* p = m_doc->pageOf(id);
+        // Nur oberste Objekte normaler Seiten; Masterseite und Zielseite bleiben, wie sie sind
+        if (n && node_cast<Layer>(n->parent()) && p && !p->master() && p != &target)
+            moving.append(id);
+    }
+    if (moving.isEmpty())
+        return false;
+    const NodeId fallback = topEditableLayer(target);
+    Transaction tx(*m_doc, label);
+    for (NodeId id : moving) {
+        // Gleichnamige Ebene der Zielseite, sonst die oberste bearbeitbare
+        const QString layerName = m_doc->find(id)->parent()->name();
+        NodeId layer = fallback;
+        for (int l = 0; l < target.childCount(); ++l) {
+            auto* candidate = node_cast<Layer>(target.child(l));
+            if (candidate && !candidate->locked() && candidate->name() == layerName) {
+                layer = candidate->id();
+                break;
+            }
+        }
+        if (layer == InvalidNodeId)
+            continue;
+        if (!shift.isNull())
+            tx.modifySubtree<DrawObject>(id, [&shift](DrawObject& o) { o.applyTransform(xform::translation(shift)); });
+        tx.move(id, layer, -1);
+    }
+    if (tx.isEmpty())
+        return false;
+    tx.commit();
+    setCurrentPageIndex(pageIndex);
+    setSelection(moving);
+    return true;
+}
+
+void Editor::resizePage(int index, const QRectF& area)
+{
+    if (index < 0 || index >= m_doc->pageCount() || area.width() < 1.0 || area.height() < 1.0)
+        return;
+    const QPointF shift = -area.topLeft();
+    Transaction tx(*m_doc, tr("Seitengrösse"));
+    auto resize = [&](const Page& page) {
+        tx.modify<Page>(page.id(), [&](Page& p) {
+            p.setSize(area.size());
+            for (Guide& g : p.guides())
+                g.anchor += shift;
+        });
+        if (shift.isNull())
+            return;
+        for (int l = 0; l < page.childCount(); ++l) {
+            const Node* layer = page.child(l);
+            for (int i = 0; i < layer->childCount(); ++i) {
+                if (node_cast<DrawObject>(layer->child(i)))
+                    tx.modifySubtree<DrawObject>(layer->child(i)->id(),
+                                                 [&shift](DrawObject& o) { o.applyTransform(xform::translation(shift)); });
+            }
+        }
+    };
+    if (m_pageSizeForAllPages) {
+        resize(m_doc->masterPage());
+        for (int i = 0; i < m_doc->pageCount(); ++i)
+            resize(m_doc->page(i));
+    } else {
+        resize(m_doc->page(index));
     }
     tx.commit();
 }

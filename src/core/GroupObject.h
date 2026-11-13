@@ -19,6 +19,7 @@ public:
 
     void applyTransform(const QTransform& m) override;
     void setStyle(const Style& s) override;
+    void editStyle(const std::function<void(Style&)>& fn) override;
 };
 
 } // namespace vek

@@ -1,0 +1,76 @@
+# macOS-Fassung: universelles Programm (Apple-Chip und Intel) als Disk-Image
+name: macOS
+
+on:
+  push:
+    branches: [main]
+    tags: ['v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  QT_VERSION: 6.10.3
+
+jobs:
+  build:
+    runs-on: macos-15
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Qt-Cache
+        id: qt-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/Qt
+          key: qt-${{ env.QT_VERSION }}-macos-imageformats
+
+      - name: Qt installieren (aqtinstall)
+        if: steps.qt-cache.outputs.cache-hit != 'true'
+        run: |
+          python3 -m venv ~/aqt
+          ~/aqt/bin/pip install aqtinstall
+          ~/aqt/bin/aqt install-qt mac desktop "$QT_VERSION" clang_64 -m qtimageformats -O ~/Qt
+
+      - name: Werkzeuge
+        run: brew install ninja
+
+      - name: Konfigurieren
+        run: |
+          QT_DIR=$(echo ~/Qt/"$QT_VERSION"/macos)
+          echo "QT_DIR=$QT_DIR" >> "$GITHUB_ENV"
+          cmake -S . -B build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DCMAKE_PREFIX_PATH="$QT_DIR" \
+            -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+
+      - name: Bauen
+        run: cmake --build build --parallel
+
+      - name: Tests
+        # Vorerst nur Bericht: macOS-Abweichungen (Schriften, Pfade) sollen den Build nicht blockieren
+        continue-on-error: true
+        run: ctest --test-dir build --output-on-failure --timeout 1800
+
+      - name: Paket
+        run: |
+          chmod +x packaging/macos/package-macos.sh
+          packaging/macos/package-macos.sh build "$QT_DIR"
+          lipo -info build/TANGENTA.app/Contents/MacOS/TANGENTA
+
+      - name: Startprobe
+        # Startet das fertige Paket ohne Bildschirm und prüft, dass es nicht sofort abstürzt
+        run: |
+          QT_QPA_PLATFORM=offscreen build/TANGENTA.app/Contents/MacOS/TANGENTA &
+          pid=$!
+          sleep 15
+          kill -0 "$pid"
+          kill "$pid"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: TANGENTA-macos
+          path: build/TANGENTA-*-macos.dmg
+          if-no-files-found: error

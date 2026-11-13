@@ -43,6 +43,9 @@ public:
     }
 
     void commit();
+    // Wie commit(), aber ohne Rückgängig-Schritt und ohne das Dokument als geändert zu markieren
+    // (reine Ansichtseinstellungen, die mit der Datei gespeichert werden)
+    void commitWithoutUndo();
     void rollback();
     bool isEmpty() const { return m_set.changes.empty(); }
 

@@ -6,6 +6,8 @@
 #include "Editor.h"
 #include "ExpressionSpinBox.h"
 #include "ArtisticMediaTool.h"
+#include "MediaDocker.h"
+#include "MediaLibrary.h"
 #include "CutTools.h"
 #include "Outline.h"
 #include "PathOps.h"
@@ -43,6 +45,7 @@
 #include <QVBoxLayout>
 
 #include <cmath>
+#include <tuple>
 
 namespace vek {
 
@@ -60,14 +63,27 @@ const PagePreset kPagePresets[] = {
 // Konturbreiten in mm; 0 = keine Kontur
 // Liste
 const double kOutlineWidths[] = {0.0, 0.076, 0.1, 0.2, 0.25, 0.5, 0.75, 1.0, 1.5, 2.0, 2.5, 3.0, 4.0, 5.0, 10.0};
+// dazu die üblichen Stufen in Punkt
+const double kOutlineWidthsPt[] = {0.5, 0.75, 1.0, 1.5, 2.0, 3.0, 4.0, 8.0, 10.0, 12.0, 16.0, 24.0, 36.0};
+constexpr int kUnitPt = 4;
 
-QString formatWidth(double w)
+// Konturbreite w (mm) in der Einheit unit
+QString formatWidth(double w, int unit = 0)
 {
     if (w <= 0.0)
         return PropertyBar::tr("Keine");
     if (std::abs(w - 0.076) < 1e-6)
         return PropertyBar::tr("Haarlinie");
-    return QStringLiteral("%1 mm").arg(QLocale().toString(w, 'f', w < 0.1 ? 3 : 2));
+    const double v = w / Options::unitInMm(unit);
+    int decimals = v < 0.1 ? 3 : 2;
+    if (unit == 3 || unit == 1)
+        decimals = 3; // Zoll, cm
+    QString text = QLocale().toString(v, 'f', decimals);
+    if (unit == kUnitPt || unit == 5) {
+        // Punkt/Pixel: unnötige Nullen weg (0,75 pt, 2 pt)
+        text = QLocale().toString(std::round(v * 1000.0) / 1000.0, 'g', 6);
+    }
+    return QStringLiteral("%1 %2").arg(text, Options::unitSymbol(unit));
 }
 
 double normalizedCcw(double clockwise)
@@ -101,6 +117,11 @@ PropertyBar::PropertyBar(Editor& editor, Canvas& canvas, QWidget* parent)
     connect(&m_editor, &Editor::guideSelectionChanged, this, &PropertyBar::sync);
     connect(&m_canvas, &Canvas::toolChanged, this, &PropertyBar::sync);
     connect(&m_canvas, &Canvas::toolStateChanged, this, &PropertyBar::sync);
+    // Neue eigene Striche erscheinen gleich in den Listen
+    connect(&MediaLibrary::instance(), &MediaLibrary::changed, this, [this] {
+        if (m_canvas.toolId() == ToolId::ArtisticMedia)
+            refresh();
+    }, Qt::QueuedConnection);
     connect(&m_editor, &Editor::currentPageChanged, this, &PropertyBar::refresh);
     rebuild();
 }
@@ -128,6 +149,8 @@ QString PropertyBar::layoutSignature() const
         return QStringLiteral("contour");
     if (m_canvas.toolId() == ToolId::Extrude)
         return QStringLiteral("extrude");
+    if (m_canvas.toolId() == ToolId::BlockShadow)
+        return QStringLiteral("blockshadow");
     if (m_canvas.toolId() == ToolId::Distort)
         return QStringLiteral("distort:%1").arg(Options::instance().integer(QStringLiteral("ws/tools/distort/mode")));
     if (m_canvas.toolId() == ToolId::Envelope)
@@ -245,7 +268,7 @@ void PropertyBar::buildSections()
         buildMeshSection();
     } else if (m_signature.startsWith(QLatin1String("shadow:"))) {
         buildShadowSection();
-    } else if (m_signature == QLatin1String("contour") || m_signature == QLatin1String("extrude")
+    } else if (m_signature == QLatin1String("contour") || m_signature == QLatin1String("extrude") || m_signature == QLatin1String("blockshadow")
                || m_signature.startsWith(QLatin1String("distort:")) || m_signature == QLatin1String("envelope")) {
         buildInteractiveSection();
     } else if (m_signature == QLatin1String("shaping")) {
@@ -312,18 +335,55 @@ void PropertyBar::buildSections()
         hint->setEnabled(false);
         m_row->addWidget(hint);
     } else if (m_signature == QLatin1String("smartfill")) {
-        // Smart-Füllung: Füllfarbe und ob die neue Fläche eine Kontur bekommt
+        // Smart-Füllung: Füllung und Kontur der neuen Fläche (Vorgabe, Angeben, Keine), Lücken
+        auto modeBox = [this](const QString& key, const QString& tip) {
+            auto* box = new QComboBox(m_host);
+            box->setToolTip(tip);
+            box->setObjectName(key.section(QLatin1Char('/'), -1)); // fillMode, outlineMode
+            box->addItems({tr("Vorgabe"), tr("Angeben"), tr("Keine")});
+            box->setCurrentIndex(std::clamp(Options::instance().integer(key), 0, 2));
+            m_row->addWidget(box);
+            return box;
+        };
+        m_row->addWidget(new QLabel(tr("Füllung:"), m_host));
+        QComboBox* fillMode = modeBox(QStringLiteral("ws/tools/smartFill/fillMode"), tr("Füllung der neuen Fläche"));
         auto* fill = new ColorButton(tr("Füllfarbe der Smart-Füllung"), m_host);
         fill->setToolTip(tr("Füllfarbe"));
         fill->setColor(Color::fromHex(Options::instance().text(QStringLiteral("ws/tools/smartFill/fill"))).value_or(Color(255, 210, 77)));
+        fill->setEnabled(fillMode->currentIndex() == 1);
         connect(fill, &ColorButton::colorChanged, this,
                 [](const Color& c) { Options::instance().set(QStringLiteral("ws/tools/smartFill/fill"), c.toHex()); });
-        m_row->addWidget(new QLabel(tr("Füllung:"), m_host));
+        connect(fillMode, &QComboBox::activated, this, [fill](int i) {
+            Options::instance().set(QStringLiteral("ws/tools/smartFill/fillMode"), i);
+            fill->setEnabled(i == 1);
+        });
         m_row->addWidget(fill);
-        QToolButton* outline = addButton(QStringLiteral("tool-outline"), tr("Kontur (Vorgabe) anlegen"), {});
-        outline->setCheckable(true);
-        outline->setChecked(Options::instance().flag(QStringLiteral("ws/tools/smartFill/outline")));
-        connect(outline, &QToolButton::toggled, this, [](bool on) { Options::instance().set(QStringLiteral("ws/tools/smartFill/outline"), on); });
+        addSeparator();
+        m_row->addWidget(new QLabel(tr("Kontur:"), m_host));
+        QComboBox* outlineMode = modeBox(QStringLiteral("ws/tools/smartFill/outlineMode"), tr("Kontur der neuen Fläche"));
+        QDoubleSpinBox* width = addField(m_row, QStringLiteral("tool-outline"), tr("Konturbreite"), QStringLiteral(" mm"), 3,
+                                         [] { return Options::instance().number(QStringLiteral("ws/tools/smartFill/outlineWidth")); },
+                                         [](double v) { Options::instance().set(QStringLiteral("ws/tools/smartFill/outlineWidth"), v); });
+        width->setRange(0.0, 100.0);
+        auto* outline = new ColorButton(tr("Konturfarbe der Smart-Füllung"), m_host);
+        outline->setToolTip(tr("Konturfarbe"));
+        outline->setColor(Color::fromHex(Options::instance().text(QStringLiteral("ws/tools/smartFill/outlineColor"))).value_or(Color(0, 0, 0)));
+        connect(outline, &ColorButton::colorChanged, this,
+                [](const Color& c) { Options::instance().set(QStringLiteral("ws/tools/smartFill/outlineColor"), c.toHex()); });
+        m_row->addWidget(outline);
+        width->setEnabled(outlineMode->currentIndex() == 1);
+        outline->setEnabled(outlineMode->currentIndex() == 1);
+        connect(outlineMode, &QComboBox::activated, this, [width, outline](int i) {
+            Options::instance().set(QStringLiteral("ws/tools/smartFill/outlineMode"), i);
+            width->setEnabled(i == 1);
+            outline->setEnabled(i == 1);
+        });
+        addSeparator();
+        m_row->addWidget(new QLabel(tr("Lücke:"), m_host));
+        QDoubleSpinBox* gap = addField(m_row, QString(), tr("Lücken bis zu dieser Breite gelten als geschlossen"), QStringLiteral(" mm"), 2,
+                                       [] { return Options::instance().number(QStringLiteral("ws/tools/smartFill/gap")); },
+                                       [](double v) { Options::instance().set(QStringLiteral("ws/tools/smartFill/gap"), v); });
+        gap->setRange(0.0, 10.0);
         auto* hint = new QLabel(tr("In eine umschlossene Fläche klicken"), m_host);
         hint->setEnabled(false);
         m_row->addWidget(hint);
@@ -482,6 +542,9 @@ QDoubleSpinBox* PropertyBar::addField(QBoxLayout* into, const QString& iconName,
     spin->setKeyboardTracking(false);
     spin->setButtonSymbols(QAbstractSpinBox::NoButtons);
     spin->setFixedWidth(unitOutside ? 52 : 84);
+    // Längen in der Dokumenteinheit (Einheiten-Liste ohne Auswahl, Lineale)
+    if (suffix == QStringLiteral(" mm"))
+        spin->followDocumentUnit();
     // Übereinander gestapelte Felder (Lage, Grösse, Eckenradien) flacher, damit zwei Zeilen
     // nicht höher werden als nötig
     spin->setProperty("stacked", into != m_row);
@@ -537,7 +600,7 @@ void PropertyBar::buildPageSection()
     m_row->addWidget(preset);
     auto pageSize = [this] { return m_editor.currentPage().size(); };
     auto apply = [this](const QSizeF& s) {
-        m_editor.setPageSize(s, m_allPages);
+        m_editor.setPageSize(s, m_editor.pageSizeForAllPages());
         m_canvas.fitPage();
     };
     connect(preset, &QComboBox::activated, this, [=, this](int index) {
@@ -594,26 +657,35 @@ void PropertyBar::buildPageSection()
 
     // Seitengrösse für alle Seiten oder nur für die aktuelle
     QToolButton* all = addButton(QStringLiteral("pages-all"), tr("Alle Seiten"), [this] {
-        m_allPages = true;
+        m_editor.setPageSizeForAllPages(true);
         refresh();
     });
     QToolButton* current = addButton(QStringLiteral("page-current"), tr("Aktuelle Seite"), [this] {
-        m_allPages = false;
+        m_editor.setPageSizeForAllPages(false);
         refresh();
     });
     all->setCheckable(true);
     current->setCheckable(true);
     m_refreshers.append([=, this] {
-        all->setChecked(m_allPages);
-        current->setChecked(!m_allPages);
+        all->setChecked(m_editor.pageSizeForAllPages());
+        current->setChecked(!m_editor.pageSizeForAllPages());
     });
 
     addSeparator();
     m_row->addWidget(new QLabel(tr("Einheiten:"), m_host));
+    // Einheit des Dokuments: Lineale und alle Längenfelder (Lage, Grösse, Abstände, Kontur)
     auto* units = new QComboBox(m_host);
-    units->addItem(tr("Millimeter"));
-    units->setToolTip(tr("Masseinheit; weitere Einheiten folgen"));
+    units->setObjectName(QStringLiteral("documentUnits"));
+    units->addItems(Options::unitNames());
+    units->setToolTip(tr("Masseinheit für Lineale und Zahlenfelder"));
     m_row->addWidget(units);
+    connect(units, &QComboBox::activated, this, [](int index) {
+        Options::instance().apply({{QStringLiteral("doc/rulers/units"), index}, {QStringLiteral("doc/rulers/unitsV"), index}});
+    });
+    m_refreshers.append([units] {
+        const QSignalBlocker block(units);
+        units->setCurrentIndex(Options::instance().rulerUnit(true));
+    });
 
     addSeparator();
     QDoubleSpinBox* nudge = addField(m_row, QStringLiteral("nudge"), tr("Verschiebungsabstand (Pfeiltasten)"),
@@ -724,6 +796,59 @@ void PropertyBar::buildInteractiveSection()
         addButton(QStringLiteral("fx-clear"), tr("Kontur löschen"), [this] { m_editor.setSelectionContour(ContourEffect(), tr("Kontur löschen")); });
         return;
     }
+    if (m_signature == QLatin1String("blockshadow")) {
+        // Blockschatten: Tiefe, Richtung, Farbe, Vergrössern, Vereinfachen, Löcher entfernen
+        auto current = [selected] {
+            if (selected() && selected()->blockShadow().active)
+                return selected()->blockShadow();
+            BlockShadow s;
+            if (const std::optional<Color> c = Color::fromHex(Options::instance().text(QStringLiteral("ws/tools/blockShadow/color"))))
+                s.color = *c;
+            return s;
+        };
+        auto change = [this, current](const std::function<void(BlockShadow&)>& fn) {
+            BlockShadow s = current();
+            s.active = true;
+            fn(s);
+            m_editor.setSelectionBlockShadow(s, tr("Blockschatten"));
+        };
+        QDoubleSpinBox* depth = addField(m_row, QStringLiteral("extrude-depth"), tr("Tiefe des Blockschattens"), QStringLiteral(" mm"), 2,
+                                         [current] { return current().depth(); },
+                                         [change](double v) { change([v](BlockShadow& s) { s.setPolar(v, s.angle()); }); });
+        depth->setRange(0, 10000);
+        QDoubleSpinBox* angle = addField(m_row, QStringLiteral("shadow-angle"), tr("Richtung des Blockschattens"), QStringLiteral(" °"), 1,
+                                         [current] { return current().angle(); },
+                                         [change](double v) { change([v](BlockShadow& s) { s.setPolar(s.depth(), v); }); });
+        angle->setRange(-360, 360);
+        addButton(QStringLiteral("shadow-color"), tr("Farbe des Blockschattens"), [this, current, change] {
+            if (const std::optional<Color> col = ColorDialog::getColor(m_host, tr("Farbe des Blockschattens"), current().color)) {
+                Options::instance().set(QStringLiteral("ws/tools/blockShadow/color"), col->toHex());
+                change([col](BlockShadow& s) { s.color = *col; });
+            }
+        });
+        addSeparator();
+        QDoubleSpinBox* expand = addField(m_row, QStringLiteral("contour-offset"), tr("Blockschatten vergrössern"), QStringLiteral(" mm"), 2,
+                                          [current] { return current().expand; },
+                                          [change](double v) { change([v](BlockShadow& s) { s.expand = v; }); });
+        expand->setRange(0, 500);
+        auto toggle = [this, current, change](const QString& iconName, const QString& tip, bool BlockShadow::*member) {
+            QToolButton* b = addButton(iconName, tip, {});
+            b->setCheckable(true);
+            connect(b, &QToolButton::toggled, this, [change, member](bool on) { change([on, member](BlockShadow& s) { s.*member = on; }); });
+            m_refreshers.append([b, current, member] {
+                const QSignalBlocker block(b);
+                b->setChecked(current().*member);
+            });
+        };
+        toggle(QStringLiteral("shape-simplify"), tr("Vereinfachen: Teil unter dem Objekt weglassen"), &BlockShadow::simplify);
+        toggle(QStringLiteral("shape-boundary"), tr("Löcher entfernen"), &BlockShadow::removeHoles);
+        toggle(QStringLiteral("outline-width"), tr("Kontur des Objekts einbeziehen"), &BlockShadow::useOutline);
+        addSeparator();
+        addButton(QStringLiteral("break-apart"), tr("Blockschatten trennen (Strg+K)"), [this] { m_editor.separateEffects(); });
+        addButton(QStringLiteral("fx-clear"), tr("Blockschatten löschen"),
+                  [this] { m_editor.setSelectionBlockShadow(BlockShadow(), tr("Blockschatten löschen")); });
+        return;
+    }
     if (m_signature == QLatin1String("extrude")) {
         auto current = [selected] { return selected() && selected()->extrusion().active ? selected()->extrusion() : Extrusion(); };
         auto change = [this, current](const std::function<void(Extrusion&)>& fn) {
@@ -756,6 +881,40 @@ void PropertyBar::buildInteractiveSection()
             shade->setChecked(current().shade);
         });
         addSeparator();
+        // Drehung im Raum: Kugel zum Ziehen und Winkel x/y/z
+        auto rotateChange = [this, current](const std::function<void(Extrusion&)>& fn) {
+            Extrusion e = current();
+            e.active = true;
+            fn(e);
+            m_editor.setSelectionExtrusion(e, tr("Extrusion drehen"));
+        };
+        auto* ball = new ExtrusionTrackball(m_host);
+        ball->setToolTip(tr("Extrusion drehen: Kugel ziehen (Umschalt: um die Blickachse)"));
+        m_row->addWidget(ball);
+        connect(ball, &ExtrusionTrackball::rotationChanged, this, [rotateChange](double x, double y, double z) {
+            rotateChange([x, y, z](Extrusion& e) {
+                e.rotX = x;
+                e.rotY = y;
+                e.rotZ = z;
+            });
+        });
+        m_refreshers.append([ball, current] { ball->setRotation(current().rotX, current().rotY, current().rotZ); });
+        QBoxLayout* angles = addStack();
+        QDoubleSpinBox* rx = addField(angles, tr("X:"), tr("Drehung um die waagrechte Achse (kippen)"), QStringLiteral(" °"), 1,
+                                      [current] { return current().rotX; },
+                                      [rotateChange](double v) { rotateChange([v](Extrusion& e) { e.rotX = v; }); });
+        QDoubleSpinBox* ry = addField(angles, tr("Y:"), tr("Drehung um die senkrechte Achse (schwenken)"), QStringLiteral(" °"), 1,
+                                      [current] { return current().rotY; },
+                                      [rotateChange](double v) { rotateChange([v](Extrusion& e) { e.rotY = v; }); });
+        QDoubleSpinBox* rz = addField(m_row, tr("Z:"), tr("Drehung in der Ebene"), QStringLiteral(" °"), 1,
+                                      [current] { return current().rotZ; },
+                                      [rotateChange](double v) { rotateChange([v](Extrusion& e) { e.rotZ = v; }); });
+        for (QDoubleSpinBox* a : {rx, ry, rz})
+            a->setRange(-360, 360);
+        addButton(QStringLiteral("frame-reset"), tr("Drehung zurücksetzen"), [rotateChange] {
+            rotateChange([](Extrusion& e) { e.rotX = e.rotY = e.rotZ = 0.0; });
+        });
+        addSeparator();
         addButton(QStringLiteral("fx-clear"), tr("Extrusion löschen"), [this] { m_editor.setSelectionExtrusion(Extrusion(), tr("Extrusion löschen")); });
         return;
     }
@@ -776,6 +935,21 @@ void PropertyBar::buildInteractiveSection()
                                          [] { return Options::instance().number(QStringLiteral("ws/tools/distort/frequency")); },
                                          [](double v) { Options::instance().set(QStringLiteral("ws/tools/distort/frequency"), int(v)); });
             f->setRange(2, 100);
+            // Zickzack-Optionen wie gewohnt: Zufällig, Glatt, Lokal
+            const QList<std::pair<QString, QString>> toggles{
+                {QStringLiteral("random"), tr("Zufällig")}, {QStringLiteral("smooth"), tr("Glatt")}, {QStringLiteral("local"), tr("Lokal")}};
+            const QStringList tips{tr("Zufällige Verzerrung: die Amplitude schwankt"), tr("Glatte Verzerrung: Wellen statt Zacken"),
+                                   tr("Lokale Verzerrung: die Amplitude nimmt vom Mittelpunkt nach aussen ab")};
+            for (int i = 0; i < toggles.size(); ++i) {
+                const QString key = QStringLiteral("ws/tools/distort/") + toggles[i].first;
+                QToolButton* b = addButton(QString(), tips[i], {});
+                b->setObjectName(QStringLiteral("distort-") + toggles[i].first);
+                b->setText(toggles[i].second);
+                b->setToolButtonStyle(Qt::ToolButtonTextOnly);
+                b->setCheckable(true);
+                b->setChecked(Options::instance().flag(key));
+                connect(b, &QToolButton::toggled, this, [key](bool on) { Options::instance().set(key, on); });
+            }
         }
         auto* hint = new QLabel(tr("Vom Objekt wegziehen; die Länge bestimmt die Stärke"), m_host);
         hint->setEnabled(false);
@@ -793,7 +967,7 @@ void PropertyBar::buildInteractiveSection()
     m_row->addWidget(presets);
     connect(presets, &QComboBox::activated, this, [this, shapes, presets](int i) {
         if (i > 0 && i - 1 < shapes.size())
-            m_editor.applyEnvelopeShape(shapes[i - 1].second, false, EnvelopeTool::mode(), false);
+            m_editor.applyEnvelopeShape(shapes[i - 1].second, false, EnvelopeTool::mode(), false, EnvelopeDocker::mapping());
         presets->setCurrentIndex(0);
     });
     addSeparator();
@@ -807,9 +981,27 @@ void PropertyBar::buildInteractiveSection()
         group->addButton(b, i);
     }
     connect(group, &QButtonGroup::idClicked, this, [this](int i) { EnvelopeDocker::setMode(m_editor, Envelope::Mode(i)); });
+    // Zuordnungsmodus
+    auto* mapping = new QComboBox(m_host);
+    mapping->setToolTip(tr("Zuordnungsmodus"));
+    using M = Envelope::Mapping;
+    for (const auto& [m, text] : {std::pair{M::Standard, tr("Frei")}, std::pair{M::Horizontal, tr("Horizontal")},
+                                  std::pair{M::Original, tr("Original")}, std::pair{M::Putty, tr("Kitt")},
+                                  std::pair{M::Vertical, tr("Vertikal")}})
+        mapping->addItem(text, int(m));
+    m_row->addWidget(mapping);
+    connect(mapping, &QComboBox::activated, this,
+            [this, mapping] { EnvelopeDocker::setMapping(m_editor, Envelope::Mapping(mapping->currentData().toInt())); });
+    m_refreshers.append([this, mapping] {
+        const QList<const DrawObject*> sel = m_editor.selectedObjects();
+        const Envelope::Mapping m = sel.size() == 1 && sel.first()->hasEnvelope() ? sel.first()->envelopes().last().mapping
+                                                                                  : EnvelopeDocker::mapping();
+        const QSignalBlocker block(mapping);
+        mapping->setCurrentIndex(std::max(0, mapping->findData(int(m))));
+    });
     addSeparator();
     addButton(QStringLiteral("env-new"), tr("Neue Hülle hinzufügen"), [this] {
-        m_editor.applyEnvelopeShape({}, false, EnvelopeTool::mode(), true);
+        m_editor.applyEnvelopeShape({}, false, EnvelopeTool::mode(), true, EnvelopeDocker::mapping());
     });
     addButton(QStringLiteral("env-from"), tr("Hülle aus Objekt erstellen"), [this] {
         if (m_editor.selection().isEmpty())
@@ -817,7 +1009,7 @@ void PropertyBar::buildInteractiveSection()
         m_canvas.setTool(ToolId::Pick);
         m_canvas.pickTool().beginPickTarget([this](NodeId source) {
             if (const DrawObject* o = m_editor.document().findAs<DrawObject>(source))
-                m_editor.applyEnvelopeShape(o->path(), true, EnvelopeTool::mode(), false);
+                m_editor.applyEnvelopeShape(o->path(), true, EnvelopeTool::mode(), false, EnvelopeDocker::mapping());
             m_canvas.setTool(ToolId::Envelope);
         });
     });
@@ -846,12 +1038,29 @@ void PropertyBar::buildShadowSection()
     auto* presets = new QComboBox(m_host);
     presets->setToolTip(tr("Voreinstellungen"));
     presets->addItems({tr("Voreinstellung …"), tr("Flach unten rechts"), tr("Flach unten links"), tr("Leuchten (Mitte)"),
-                       tr("Perspektive unten rechts"), tr("Perspektive unten links"), tr("Perspektive oben")});
+                       tr("Perspektive unten rechts"), tr("Perspektive unten links"), tr("Perspektive oben"), tr("Innenkante"),
+                       tr("Inneres Leuchten"), tr("Innen oben links"), tr("Innen oben rechts"), tr("Innen unten links"),
+                       tr("Innen unten rechts")});
     m_row->addWidget(presets);
     connect(presets, &QComboBox::activated, this, [change, presets](int i) {
         if (i == 0)
             return;
+        if (i >= 7) {
+            // Innenschatten: rundum (Kante, Leuchten) oder an zwei Innenkanten
+            change([i](DropShadow& s) {
+                s.inner = true;
+                s.perspective = false;
+                s.fade = 0;
+                const double d = 1.5;
+                s.offset = i == 9 ? QPointF(d, d) : i == 10 ? QPointF(-d, d) : i == 11 ? QPointF(d, -d) : i == 12 ? QPointF(-d, -d) : QPointF(0, 0);
+                s.feather = i == 7 ? 2.0 : i == 8 ? 5.0 : 1.5;
+                s.opacity = i == 8 ? 60.0 : 50.0;
+            }, tr("Innenschatten"));
+            presets->setCurrentIndex(0);
+            return;
+        }
         change([i](DropShadow& s) {
+            s.inner = false;
             s.perspective = i >= 4;
             s.fromTop = i == 6;
             s.offset = i == 1 ? QPointF(2, 2) : i == 2 ? QPointF(-2, 2) : QPointF(0, 0);
@@ -862,6 +1071,22 @@ void PropertyBar::buildShadowSection()
             s.fade = s.perspective ? 50 : 0;
         }, tr("Hinterlegter Schatten"));
         presets->setCurrentIndex(0);
+    });
+    // Art: hinterlegt (unter dem Objekt) oder innen (im Objekt)
+    auto* kind = new QComboBox(m_host);
+    kind->setToolTip(tr("Schattenart"));
+    kind->addItems({tr("Hinterlegter Schatten"), tr("Innenschatten")});
+    m_row->addWidget(kind);
+    connect(kind, &QComboBox::activated, this, [change](int i) {
+        change([i](DropShadow& s) {
+            s.inner = i == 1;
+            if (s.inner)
+                s.perspective = false;
+        }, i == 1 ? tr("Innenschatten") : tr("Hinterlegter Schatten"));
+    });
+    m_refreshers.append([kind, current] {
+        const QSignalBlocker b(kind);
+        kind->setCurrentIndex(current().inner ? 1 : 0);
     });
     addSeparator();
     const bool perspective = m_signature == QLatin1String("shadow:2");
@@ -892,6 +1117,13 @@ void PropertyBar::buildShadowSection()
         if (const std::optional<Color> c = ColorDialog::getColor(m_host, tr("Schattenfarbe"), current().color))
             change([c](DropShadow& s) { s.color = *c; }, tr("Schattenfarbe"));
     });
+    QComboBox* mode = createBlendModeCombo(m_host, tr("Mischmodus des Schattens"));
+    m_row->addWidget(mode);
+    connect(mode, &QComboBox::activated, this, [change, mode](int i) {
+        const BlendMode m = BlendMode(mode->itemData(i).toInt());
+        change([m](DropShadow& s) { s.blend = m; }, tr("Mischmodus des Schattens"));
+    });
+    m_refreshers.append([mode, current] { setBlendModeComboValue(mode, current().blend); });
     addSeparator();
     addButton(QStringLiteral("fx-clear"), tr("Schatten löschen"), [this] { m_editor.setSelectionShadow(DropShadow(), tr("Schatten löschen")); });
 }
@@ -1078,30 +1310,42 @@ void PropertyBar::buildMediaSection()
 {
     ArtisticMediaTool& tool = m_canvas.mediaTool();
     using Kind = ArtisticMedia::Kind;
-    // Arten; Pinsel, Sprühdose und Druck folgen
     struct Mode {
         const char* icon;
         QString text;
-        std::optional<Kind> kind;
+        Kind kind;
     };
     const Mode modes[] = {
         {"media-preset", tr("Voreinstellung"), Kind::Preset},
-        {"media-brush", tr("Pinsel – folgt"), std::nullopt},
+        {"media-brush", tr("Pinsel"), Kind::Brush},
         {"media-sprayer", tr("Sprühdose"), Kind::Sprayer},
         {"media-calligraphy", tr("Kalligrafisch"), Kind::Calligraphy},
         {"media-pressure", tr("Druck (Stift oder Pfeil auf/ab beim Zeichnen)"), Kind::Pressure},
     };
     for (const Mode& m : modes) {
-        const std::optional<Kind> kind = m.kind;
+        const Kind kind = m.kind;
         QToolButton* b = addButton(QString::fromLatin1(m.icon), m.text, [&tool, kind, this] {
             ArtisticMedia media = tool.media();
-            media.kind = *kind;
+            if (media.kind == kind)
+                return;
+            // Pinsel und Sprühdose beginnen mit dem ersten Eintrag ihrer Bibliothek
+            if (kind == Kind::Brush || kind == Kind::Sprayer) {
+                const MediaLibrary& lib = MediaLibrary::instance();
+                const QList<MediaStroke> list = kind == Kind::Brush ? lib.brushes() : lib.sprayers();
+                const double width = media.width;
+                media = list.value(0).media;
+                media.width = width;
+            } else {
+                media.art.clear();
+                media.artName.clear();
+            }
+            media.kind = kind;
             tool.setMedia(media);
             m_canvas.notifyToolState();
         });
+        b->setObjectName(QStringLiteral("mediaMode%1").arg(int(kind)));
         b->setCheckable(true);
-        b->setEnabled(kind.has_value());
-        m_refreshers.append([b, &tool, kind] { b->setChecked(kind && tool.media().kind == *kind); });
+        m_refreshers.append([b, &tool, kind] { b->setChecked(tool.media().kind == kind); });
     }
     addSeparator();
     QDoubleSpinBox* smoothing = addField(m_row, QStringLiteral("smoothing"), tr("Freihandglättung"), QString(), 0,
@@ -1110,59 +1354,146 @@ void PropertyBar::buildMediaSection()
     smoothing->setRange(0, 100);
     addSpinButtons(smoothing, 5);
     addSeparator();
-    QDoubleSpinBox* width = addField(m_row, QStringLiteral("media-width"), tr("Strichbreite"), QStringLiteral(" mm"), 1,
+    const Kind current = tool.media().kind;
+    QDoubleSpinBox* width = addField(m_row, QStringLiteral("media-width"),
+                                     current == Kind::Sprayer ? tr("Grösse der Objekte") : tr("Strichbreite"), QStringLiteral(" mm"), 1,
                                      [&tool] { return tool.media().width; }, [&tool](double v) {
                                          ArtisticMedia media = tool.media();
                                          media.width = std::max(0.05, v);
                                          tool.setMedia(media);
                                      });
+    width->setObjectName(QStringLiteral("mediaWidth"));
     width->setMinimum(0.05);
     addSpinButtons(width, 0.5);
 
-    if (tool.media().kind == Kind::Pressure)
-        return;
-    if (tool.media().kind == Kind::Sprayer) {
-        // Sprühliste, Abstand, zufällig drehen und mischen
-        addSeparator();
-        auto* lists = new QComboBox(m_host);
-        lists->setToolTip(tr("Sprühliste"));
-        for (int i = 0; i < pathops::sprayListCount(); ++i)
-            lists->addItem(pathops::sprayListName(i));
-        m_row->addWidget(lists);
-        connect(lists, &QComboBox::activated, this, [&tool](int i) {
+    // Änderung einer Einstellung des Werkzeugs (gilt auch für die gewählten Medienkurven)
+    auto change = [&tool](const std::function<void(ArtisticMedia&)>& fn) {
+        ArtisticMedia media = tool.media();
+        fn(media);
+        tool.setMedia(media);
+    };
+    // Auswahlliste mit Vorschaubildern aus der Bibliothek (Pinsel bzw. Sprühlisten); eigene
+    // Einträge kommen beim Auffrischen dazu
+    auto libraryCombo = [&, this](const QString& name, const QString& tip, bool brushes) {
+        auto* combo = new QComboBox(m_host);
+        combo->setObjectName(name);
+        combo->setToolTip(tip);
+        combo->setIconSize(QSize(96, 20));
+        combo->setMinimumWidth(150);
+        m_row->addWidget(combo);
+        auto revision = std::make_shared<int>(-1);
+        auto entries = std::make_shared<QList<MediaStroke>>();
+        connect(combo, &QComboBox::activated, this, [&tool, entries, this](int i) {
+            if (i < 0 || i >= entries->size())
+                return;
+            const MediaStroke& s = entries->at(i);
             ArtisticMedia media = tool.media();
-            media.sprayList = i;
+            media.art = s.media.art;
+            media.artName = s.media.artName;
+            media.sprayList = s.media.sprayList;
+            media.artAspect = s.media.artAspect;
+            if (media.kind == ArtisticMedia::Kind::Brush)
+                media.brushRepeat = s.media.brushRepeat;
             tool.setMedia(media);
+            MediaLibrary::instance().noteUsed(MediaStroke{s.name, media, false});
+            m_canvas.notifyToolState();
         });
-        m_refreshers.append([lists, &tool] {
-            const QSignalBlocker block(lists);
-            lists->setCurrentIndex(tool.media().sprayList);
+        m_refreshers.append([combo, &tool, revision, entries, brushes, this] {
+            const MediaLibrary& lib = MediaLibrary::instance();
+            const QSignalBlocker block(combo);
+            if (*revision != lib.revision()) {
+                *revision = lib.revision();
+                *entries = brushes ? lib.brushes() : lib.sprayers();
+                combo->clear();
+                for (const MediaStroke& s : std::as_const(*entries))
+                    combo->addItem(mediaStrokeIcon(s.media, combo->iconSize(), devicePixelRatioF()), s.name);
+            }
+            const ArtisticMedia& m = tool.media();
+            int found = -1;
+            for (int i = 0; i < entries->size() && found < 0; ++i) {
+                const ArtisticMedia& e = entries->at(i).media;
+                if (m.art.isEmpty() ? (e.art.isEmpty() && e.sprayList == m.sprayList) : (e.artName == m.artName && e.art == m.art))
+                    found = i;
+            }
+            combo->setCurrentIndex(found);
         });
-        QDoubleSpinBox* spacing = addField(m_row, QStringLiteral("contour-offset"), tr("Abstand der Objekte"), QStringLiteral(" mm"), 1,
-                                           [&tool] { return tool.media().spacing; }, [&tool](double v) {
-                                               ArtisticMedia media = tool.media();
-                                               media.spacing = std::max(0.2, v);
-                                               tool.setMedia(media);
-                                           });
-        spacing->setRange(0.2, 500);
-        for (const auto& [icon, text, rotate] : {std::tuple{QStringLiteral("ft-rotate"), tr("Zufällig drehen"), true},
-                                                 std::tuple{QStringLiteral("blend-steps"), tr("Zufällige Reihenfolge"), false}}) {
-            QToolButton* b = addButton(icon, text, {});
-            b->setCheckable(true);
-            const bool r = rotate;
-            connect(b, &QToolButton::toggled, this, [&tool, r](bool on) {
-                ArtisticMedia media = tool.media();
-                (r ? media.randomRotate : media.randomOrder) = on;
-                tool.setMedia(media);
-            });
-            m_refreshers.append([b, &tool, r] {
-                const QSignalBlocker block(b);
-                b->setChecked(r ? tool.media().randomRotate : tool.media().randomOrder);
-            });
-        }
+    };
+
+    if (current == Kind::Pressure)
+        return;
+    if (current == Kind::Brush) {
+        addSeparator();
+        libraryCombo(QStringLiteral("brushList"), tr("Pinselstrich"), true);
+        QToolButton* repeat = addButton(QStringLiteral("edit-repeat"), tr("Vorlage wiederholen statt strecken"), {});
+        repeat->setObjectName(QStringLiteral("brushRepeat"));
+        repeat->setCheckable(true);
+        connect(repeat, &QToolButton::toggled, this, [change](bool on) { change([on](ArtisticMedia& m) { m.brushRepeat = on; }); });
+        m_refreshers.append([repeat, &tool] {
+            const QSignalBlocker block(repeat);
+            repeat->setChecked(tool.media().brushRepeat);
+        });
         return;
     }
-    if (tool.media().kind == Kind::Calligraphy) {
+    if (current == Kind::Sprayer) {
+        // Sprühliste, Grössenvariation, Abstand, Anzahl je Tupfer, Drehung, Versatz, Reihenfolge
+        addSeparator();
+        libraryCombo(QStringLiteral("sprayList"), tr("Sprühliste"), false);
+        QDoubleSpinBox* variation = addField(m_row, QStringLiteral("xf-size"), tr("Grössenvariation"), QStringLiteral(" %"), 0,
+                                             [&tool] { return tool.media().sizeVariation; },
+                                             [change](double v) { change([v](ArtisticMedia& m) { m.sizeVariation = std::clamp(v, 0.0, 100.0); }); });
+        variation->setObjectName(QStringLiteral("sprayVariation"));
+        variation->setRange(0, 100);
+        addSeparator();
+        QDoubleSpinBox* spacing = addField(m_row, QStringLiteral("contour-offset"), tr("Abstand der Tupfer"), QStringLiteral(" mm"), 1,
+                                           [&tool] { return tool.media().spacing; },
+                                           [change](double v) { change([v](ArtisticMedia& m) { m.spacing = std::max(0.2, v); }); });
+        spacing->setObjectName(QStringLiteral("spraySpacing"));
+        spacing->setRange(0.2, 500);
+        QDoubleSpinBox* count = addField(m_row, QStringLiteral("blend-steps"), tr("Objekte je Tupfer"), QString(), 0,
+                                         [&tool] { return double(tool.media().dabCount); },
+                                         [change](double v) { change([v](ArtisticMedia& m) { m.dabCount = std::clamp(int(std::lround(v)), 1, 50); }); });
+        count->setObjectName(QStringLiteral("sprayCount"));
+        count->setRange(1, 50);
+        addSpinButtons(count, 1);
+        addSeparator();
+        QToolButton* rotate = addButton(QStringLiteral("ft-rotate"), tr("Zufällig drehen (sonst entlang des Pfads)"), {});
+        rotate->setObjectName(QStringLiteral("sprayRotate"));
+        rotate->setCheckable(true);
+        connect(rotate, &QToolButton::toggled, this, [change](bool on) { change([on](ArtisticMedia& m) { m.randomRotate = on; }); });
+        m_refreshers.append([rotate, &tool] {
+            const QSignalBlocker block(rotate);
+            rotate->setChecked(tool.media().randomRotate);
+        });
+        auto* offsetMode = new QComboBox(m_host);
+        offsetMode->setObjectName(QStringLiteral("sprayOffsetMode"));
+        offsetMode->setToolTip(tr("Versatz quer zum Pfad"));
+        offsetMode->addItems({tr("Kein Versatz"), tr("Abwechselnd"), tr("Zufällig")});
+        m_row->addWidget(offsetMode);
+        connect(offsetMode, &QComboBox::activated, this,
+                [change](int i) { change([i](ArtisticMedia& m) { m.offsetMode = ArtisticMedia::Offset(std::clamp(i, 0, 2)); }); });
+        m_refreshers.append([offsetMode, &tool] {
+            const QSignalBlocker block(offsetMode);
+            offsetMode->setCurrentIndex(int(tool.media().offsetMode));
+        });
+        QDoubleSpinBox* offset = addField(m_row, QString(), tr("Versatz in % der Grösse"), QStringLiteral(" %"), 0,
+                                          [&tool] { return tool.media().offset; },
+                                          [change](double v) { change([v](ArtisticMedia& m) { m.offset = std::clamp(v, 0.0, 1000.0); }); });
+        offset->setObjectName(QStringLiteral("sprayOffset"));
+        offset->setRange(0, 1000);
+        auto* order = new QComboBox(m_host);
+        order->setObjectName(QStringLiteral("sprayOrder"));
+        order->setToolTip(tr("Reihenfolge der Objekte"));
+        order->addItems({tr("Zufällig"), tr("Der Reihe nach"), tr("Nach Richtung")});
+        m_row->addWidget(order);
+        connect(order, &QComboBox::activated, this,
+                [change](int i) { change([i](ArtisticMedia& m) { m.order = ArtisticMedia::Order(std::clamp(i, 0, 2)); }); });
+        m_refreshers.append([order, &tool] {
+            const QSignalBlocker block(order);
+            order->setCurrentIndex(int(tool.media().order));
+        });
+        return;
+    }
+    if (current == Kind::Calligraphy) {
         addField(m_row, QStringLiteral("media-angle"), tr("Federwinkel"), QStringLiteral(" °"), 1,
                  [&tool] { return tool.media().angle; }, [&tool](double v) {
                      ArtisticMedia media = tool.media();
@@ -1174,26 +1505,14 @@ void PropertyBar::buildMediaSection()
     // Strichformen als Vorschaubilder, wie die Liste "Originale"
     addSeparator();
     auto* presets = new QComboBox(m_host);
+    presets->setObjectName(QStringLiteral("presetList"));
     presets->setToolTip(tr("Strichform"));
     presets->setIconSize(QSize(96, 20));
     for (int i = 0; i < pathops::mediaPresetCount(); ++i) {
-        const qreal dpr = devicePixelRatioF();
-        QPixmap pix(presets->iconSize() * dpr);
-        pix.setDevicePixelRatio(dpr);
-        pix.fill(Qt::transparent);
-        QPainter p(&pix);
-        p.setRenderHint(QPainter::Antialiasing);
-        QPainterPath spine(QPointF(6, 11));
-        spine.cubicTo(QPointF(30, 0), QPointF(60, 22), QPointF(90, 9));
         ArtisticMedia sample;
         sample.kind = Kind::Preset;
         sample.preset = i;
-        sample.width = 7.0;
-        p.setPen(Qt::NoPen);
-        p.setBrush(QColor(0x30, 0x30, 0x30));
-        p.drawPath(pathops::mediaOutline(spine, sample));
-        p.end();
-        presets->addItem(QIcon(pix), QString());
+        presets->addItem(mediaStrokeIcon(sample, presets->iconSize(), devicePixelRatioF()), QString());
         presets->setItemData(i, pathops::mediaPresetName(i), Qt::ToolTipRole);
     }
     m_row->addWidget(presets);
@@ -1388,6 +1707,31 @@ void PropertyBar::buildNodeSection()
             m_refreshers.append([b, &shape, c] { b->setEnabled(shape.canRun(c)); });
         }
     }
+    // Gewählte Knoten transformieren: Rahmen zum Skalieren bzw. Drehen/Neigen, Spiegeln
+    addSeparator();
+    using T = ShapeTool::NodeTransform;
+    const QList<std::tuple<T, QString, QString>> modes = {
+        {T::Scale, QStringLiteral("ft-scale"), tr("Knoten strecken und skalieren")},
+        {T::Rotate, QStringLiteral("ft-rotate"), tr("Knoten drehen oder neigen")}};
+    for (const auto& entry : modes) {
+        const T mode = std::get<0>(entry);
+        QToolButton* b = addButton(std::get<1>(entry), std::get<2>(entry), {});
+        b->setObjectName(mode == T::Scale ? QStringLiteral("nodeScale") : QStringLiteral("nodeRotate"));
+        b->setCheckable(true);
+        connect(b, &QToolButton::clicked, this, [&shape, mode](bool on) { shape.setNodeTransform(on ? mode : T::None); });
+        m_refreshers.append([b, &shape, mode] {
+            b->setEnabled(shape.canTransformNodes());
+            b->setChecked(shape.nodeTransform() == mode);
+        });
+    }
+    QToolButton* mirrorH = addButton(QStringLiteral("mirror-h"), tr("Knoten waagrecht spiegeln"),
+                                     [&shape] { shape.reflectNodes(Qt::Horizontal); });
+    QToolButton* mirrorV = addButton(QStringLiteral("mirror-v"), tr("Knoten senkrecht spiegeln"),
+                                     [&shape] { shape.reflectNodes(Qt::Vertical); });
+    m_refreshers.append([mirrorH, mirrorV, &shape] {
+        mirrorH->setEnabled(shape.canTransformNodes());
+        mirrorV->setEnabled(shape.canTransformNodes());
+    });
     addSeparator();
     auto* count = new QLabel(m_host);
     m_row->addWidget(count);
@@ -1542,7 +1886,7 @@ void PropertyBar::buildTypeSection(const QList<PropertyDescriptor>& descriptors)
             auto* edit = new QLineEdit(m_host);
             edit->setPlaceholderText(d.label);
             edit->setToolTip(d.label);
-            edit->setFixedWidth(70);
+            edit->setFixedWidth(d.textWidth);
             m_row->addWidget(edit);
             connect(edit, &QLineEdit::editingFinished, this, [this, d, edit, value] {
                 if (edit->text() != value(d.id).toString())
@@ -1555,10 +1899,7 @@ void PropertyBar::buildTypeSection(const QList<PropertyDescriptor>& descriptors)
             break;
         }
         case K::Action:
-            addButton(d.icon, d.label, [this, d] {
-                Q_UNUSED(d);
-                // Befehle ohne Wert kommen mit den ersten Objekttypen, die welche brauchen
-            });
+            addButton(d.icon, d.label, [this, d] { emit objectActionRequested(d.id); });
             break;
         }
     }
@@ -1773,6 +2114,17 @@ void PropertyBar::buildEffectSection(Effect effect)
         endSpin->setEnabled(gradient);
     });
     if (!blur) {
+        // Mischmodus der Transparenz
+        addSeparator();
+        QComboBox* mode = createBlendModeCombo(m_host, tr("Mischmodus"));
+        m_row->addWidget(mode);
+        connect(mode, &QComboBox::activated, this, [this, mode](int i) {
+            m_editor.setSelectionBlendMode(BlendMode(mode->itemData(i).toInt()));
+        });
+        m_refreshers.append([this, mode] {
+            const QList<const DrawObject*> objects = m_editor.selectedObjects();
+            setBlendModeComboValue(mode, objects.isEmpty() ? BlendMode::Normal : objects.first()->blendMode());
+        });
         // Mustertransparenz: Muster wählen
         QToolButton* choose = addButton(QStringLiteral("fill-pattern"), tr("Muster der Transparenz wählen …"), [this, current, label] {
             const Ramp r = current();
@@ -2005,6 +2357,10 @@ void PropertyBar::buildOutlineSection()
     combo->setMinimumWidth(100);
     for (double w : kOutlineWidths)
         combo->addItem(formatWidth(w), w);
+    combo->insertSeparator(combo->count());
+    for (double pt : kOutlineWidthsPt)
+        combo->addItem(formatWidth(pt * Options::unitInMm(kUnitPt), kUnitPt), pt * Options::unitInMm(kUnitPt));
+    combo->setMaxVisibleItems(combo->count());
     m_row->addWidget(combo);
 
     auto apply = [this](double w) {
@@ -2015,12 +2371,12 @@ void PropertyBar::buildOutlineSection()
     };
     connect(combo, &QComboBox::activated, this, [=, this](int index) { apply(combo->itemData(index).toDouble()); });
     connect(combo->lineEdit(), &QLineEdit::editingFinished, this, [=, this] {
-        QString text = combo->currentText();
-        text.remove(QStringLiteral("mm")).replace(QLatin1Char(','), QLatin1Char('.'));
-        bool ok = false;
-        const double w = text.trimmed().toDouble(&ok);
-        if (ok)
-            apply(w);
+        // Ausdruck in der Dokumenteinheit, eine angehängte Einheit ("2 pt") wird umgerechnet
+        const QString text = combo->currentText().trimmed();
+        if (text == formatWidth(0.0) || text == formatWidth(0.076))
+            return; // unverändert (Keine, Haarlinie)
+        if (const std::optional<double> w = evaluateLength(text, Options::instance().rulerUnit(true)))
+            apply(*w);
     });
     m_refreshers.append([this, combo] {
         const QList<const DrawObject*> objects = m_editor.selectedObjects();
@@ -2028,7 +2384,7 @@ void PropertyBar::buildOutlineSection()
             return;
         const Style& s = objects.first()->style();
         const QSignalBlocker block(combo);
-        combo->setEditText(formatWidth(s.stroke ? s.strokeWidth : 0.0));
+        combo->setEditText(formatWidth(s.stroke ? s.strokeWidth : 0.0, Options::instance().rulerUnit(true)));
     });
 
     // Unschärfe gilt für jedes Objekt, auch Gruppen (wie der Gausssche Weichzeichner in Inkscape)

@@ -24,6 +24,7 @@ public:
     void mouseMove(QMouseEvent* event, const QPointF& doc) override;
     void mouseRelease(QMouseEvent* event, const QPointF& doc) override;
     bool keyPress(QKeyEvent* event) override;
+    bool claimsKey(const QKeyEvent* event) const override;
     void paintOverlay(QPainter& p) override;
 
     const ArtisticMedia& media() const { return m_media; }

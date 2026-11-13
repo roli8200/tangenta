@@ -8,6 +8,7 @@
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPixmap>
+#include <QRadialGradient>
 #include <QtMath>
 
 #include <cmath>
@@ -246,6 +247,87 @@ void ExtrudeTool::paintOverlay(QPainter& p)
     p.restore();
 }
 
+ExtrusionTrackball::ExtrusionTrackball(QWidget* parent) : QWidget(parent)
+{
+    setFixedSize(30, 30);
+    setCursor(Qt::SizeAllCursor);
+}
+
+void ExtrusionTrackball::setRotation(double x, double y, double z)
+{
+    if (m_dragging)
+        return;
+    m_x = x;
+    m_y = y;
+    m_z = z;
+    update();
+}
+
+void ExtrusionTrackball::paintEvent(QPaintEvent*)
+{
+    QPainter p(this);
+    p.setRenderHint(QPainter::Antialiasing);
+    const QRectF r = QRectF(rect()).adjusted(1.5, 1.5, -1.5, -1.5);
+    QRadialGradient g(r.center() - QPointF(r.width() * 0.2, r.height() * 0.2), r.width() * 0.75);
+    g.setColorAt(0, QColor(0xfa, 0xfa, 0xfa));
+    g.setColorAt(1, QColor(0x9a, 0xa8, 0xb8));
+    p.setPen(QPen(QColor(0x50, 0x58, 0x60), 1));
+    p.setBrush(g);
+    p.drawEllipse(r);
+    // Vorderfläche als gedrehtes Quadrat (rot, wenn sie zum Betrachter zeigt)
+    Extrusion e;
+    e.rotX = m_x;
+    e.rotY = m_y;
+    e.rotZ = m_z;
+    double m[3][3];
+    e.rotation(m);
+    const double k = r.width() * 0.3;
+    QPolygonF face;
+    for (const QPointF& c : {QPointF(-1, -1), QPointF(1, -1), QPointF(1, 1), QPointF(-1, 1)})
+        face << r.center() + QPointF(m[0][0] * c.x() + m[0][1] * c.y(), m[1][0] * c.x() + m[1][1] * c.y()) * k;
+    const bool facing = m[2][2] > 0; // Normale (0,0,-1) zeigt nach vorn
+    p.setPen(QPen(facing ? QColor(0xc0, 0x20, 0x20) : QColor(0x60, 0x60, 0x60), 1.5));
+    p.setBrush(facing ? QColor(0xe0, 0x50, 0x40, 160) : QColor(0x90, 0x90, 0x90, 120));
+    p.drawPolygon(face);
+}
+
+void ExtrusionTrackball::mousePressEvent(QMouseEvent* e)
+{
+    if (e->button() != Qt::LeftButton)
+        return;
+    m_dragging = true;
+    m_press = e->position().toPoint();
+    m_startX = m_x;
+    m_startY = m_y;
+    m_startZ = m_z;
+}
+
+void ExtrusionTrackball::mouseMoveEvent(QMouseEvent* e)
+{
+    if (!m_dragging)
+        return;
+    const QPoint d = e->position().toPoint() - m_press;
+    auto wrap = [](double a) { return std::remainder(a, 360.0); };
+    if (e->modifiers() & Qt::ShiftModifier) {
+        m_z = wrap(m_startZ + d.x() * kDegreesPerPixel);
+    } else {
+        // Nach oben ziehen kippt die Oberkante nach hinten, nach rechts die rechte Seite
+        m_x = wrap(m_startX - d.y() * kDegreesPerPixel);
+        m_y = wrap(m_startY + d.x() * kDegreesPerPixel);
+    }
+    update();
+}
+
+void ExtrusionTrackball::mouseReleaseEvent(QMouseEvent* e)
+{
+    if (e->button() != Qt::LeftButton || !m_dragging)
+        return;
+    mouseMoveEvent(e);
+    m_dragging = false;
+    if (e->position().toPoint() != m_press)
+        emit rotationChanged(m_x, m_y, m_z);
+}
+
 // --- Verzerren -------------------------------------------------------------------------------
 
 DistortTool::Mode DistortTool::mode()
@@ -258,7 +340,18 @@ void DistortTool::activate()
     m_canvas.setCursor(Qt::CrossCursor);
 }
 
-QList<SubPath> DistortTool::distort(const QList<SubPath>& paths, Mode mode, double amount, int frequency, const QPointF& c)
+DistortTool::ZipperOptions DistortTool::zipperOptions()
+{
+    const Options& opt = Options::instance();
+    ZipperOptions z;
+    z.smooth = opt.flag(QStringLiteral("ws/tools/distort/smooth"));
+    z.random = opt.flag(QStringLiteral("ws/tools/distort/random"));
+    z.local = opt.flag(QStringLiteral("ws/tools/distort/local"));
+    return z;
+}
+
+QList<SubPath> DistortTool::distort(const QList<SubPath>& paths, Mode mode, double amount, int frequency, const QPointF& c,
+                                    const ZipperOptions& zipper)
 {
     QList<SubPath> out;
     if (mode == Mode::PushPull) {
@@ -284,24 +377,84 @@ QList<SubPath> DistortTool::distort(const QList<SubPath>& paths, Mode mode, doub
     for (const QPolygonF& poly : path.toSubpathPolygons())
         for (const QPointF& p : poly)
             rmax = std::max(rmax, QLineF(c, p).length());
-    for (const QPolygonF& poly : path.toSubpathPolygons()) {
+    // Abtastung: Wirbel fein über die abgeflachte Linie; Zickzack mit "Frequenz" Zacken je
+    // Segment der Kurve (Knoten zu Knoten), gleichmässig nach Bogenlänge. Vorher galt die Frequenz
+    // je abgeflachtem Polygonstück: ein Kreis bekam hunderte Zacken.
+    QList<std::pair<QPolygonF, bool>> samples;
+    if (mode == Mode::Zipper) {
+        const int perSeg = std::max(2, frequency);
+        for (const SubPath& src : paths) {
+            const int n = int(src.nodes.size());
+            const int segs = src.closed ? n : n - 1;
+            if (n < 2)
+                continue;
+            QPolygonF dense;
+            for (int k = 0; k < segs; ++k) {
+                const CurveNode& a = src.nodes[k];
+                const CurveNode& b = src.nodes[(k + 1) % n];
+                auto at = [&](double t) {
+                    if (!b.curveIn)
+                        return a.point + (b.point - a.point) * t;
+                    const double u = 1.0 - t;
+                    return u * u * u * a.point + 3 * u * u * t * b.c1 + 3 * u * t * t * b.c2 + t * t * t * b.point;
+                };
+                // Bogenlänge tabellieren, dann gleich lange Stücke
+                constexpr int kFine = 64;
+                QList<double> acc{0.0};
+                QPointF last = at(0.0);
+                for (int f = 1; f <= kFine; ++f) {
+                    const QPointF q = at(double(f) / kFine);
+                    acc << acc.last() + QLineF(last, q).length();
+                    last = q;
+                }
+                for (int j = 0; j < perSeg; ++j) {
+                    const double target = acc.last() * j / perSeg;
+                    int f = 0;
+                    while (f + 1 < acc.size() && acc[f + 1] < target)
+                        ++f;
+                    const double span = f + 1 < acc.size() ? acc[f + 1] - acc[f] : 0.0;
+                    const double t = (f + (span > 1e-12 ? (target - acc[f]) / span : 0.0)) / kFine;
+                    dense << at(t);
+                }
+            }
+            if (!src.closed)
+                dense << src.nodes.last().point;
+            samples << std::make_pair(dense, src.closed);
+        }
+    } else {
+        for (const QPolygonF& poly : path.toSubpathPolygons()) {
+            QPolygonF dense;
+            for (int i = 0; i + 1 < poly.size(); ++i)
+                for (int k = 0; k < 8; ++k)
+                    dense << poly[i] + (poly[i + 1] - poly[i]) * (double(k) / 8);
+            if (!poly.isClosed() && !poly.isEmpty())
+                dense << poly.last();
+            samples << std::make_pair(dense, poly.isClosed());
+        }
+    }
+    for (const auto& [dense, closed] : std::as_const(samples)) {
         SubPath sp;
-        sp.closed = poly.isClosed();
-        QPolygonF dense;
-        const int perSeg = mode == Mode::Zipper ? std::max(2, frequency) : 8;
-        for (int i = 0; i + 1 < poly.size(); ++i)
-            for (int k = 0; k < perSeg; ++k)
-                dense << poly[i] + (poly[i + 1] - poly[i]) * (double(k) / perSeg);
-        if (!sp.closed && !poly.isEmpty())
-            dense << poly.last();
+        sp.closed = closed;
+        QList<QPointF> tangents; // Richtung der unverzerrten Linie (für glatte Wellen)
+        quint32 rng = zipper.seed * 2654435761u + quint32(out.size()) * 40503u + 1u;
         for (int i = 0; i < dense.size(); ++i) {
             QPointF p = dense[i];
             if (mode == Mode::Zipper) {
-                const QPointF next = dense[(i + 1) % dense.size()], prev = dense[(i - 1 + dense.size()) % dense.size()];
+                const int n = int(dense.size());
+                const QPointF next = dense[sp.closed ? (i + 1) % n : std::min(i + 1, n - 1)];
+                const QPointF prev = dense[sp.closed ? (i - 1 + n) % n : std::max(i - 1, 0)];
                 QPointF t = next - prev;
                 const double len = std::max(1e-9, std::hypot(t.x(), t.y()));
                 const QPointF nrm(-t.y() / len, t.x() / len);
-                p += nrm * amount * ((i % 2) ? 1.0 : -1.0);
+                tangents << t / len;
+                double a = amount;
+                if (zipper.random) {
+                    rng = rng * 1664525u + 1013904223u;
+                    a *= 0.2 + 0.8 * double(rng >> 8) / double(1u << 24);
+                }
+                if (zipper.local)
+                    a *= std::max(0.0, 1.0 - QLineF(c, p).length() / rmax);
+                p += nrm * a * ((i % 2) ? 1.0 : -1.0);
             } else {
                 const double r = QLineF(c, p).length();
                 const double a = qDegreesToRadians(amount) * (1.0 - r / rmax);
@@ -309,6 +462,23 @@ QList<SubPath> DistortTool::distort(const QList<SubPath>& paths, Mode mode, doub
                 p = c + QPointF(d.x() * std::cos(a) - d.y() * std::sin(a), d.x() * std::sin(a) + d.y() * std::cos(a));
             }
             sp.nodes << CurveNode{p};
+        }
+        if (mode == Mode::Zipper && zipper.smooth && sp.nodes.size() > 1) {
+            // Wellen: Knoten auf den Spitzen, Tangenten parallel zur Linie; 0.3642 der Strecke
+            // ergibt eine sinusähnliche Halbwelle
+            const int n = int(sp.nodes.size());
+            const int segs = sp.closed ? n : n - 1;
+            for (int k = 0; k < segs; ++k) {
+                const int j = (k + 1) % n;
+                const double h = 0.3642 * QLineF(dense[k], dense[j]).length();
+                CurveNode& to = sp.nodes[j];
+                to.curveIn = true;
+                to.c1 = sp.nodes[k].point + tangents[k] * h;
+                to.c2 = to.point - tangents[j] * h;
+                to.kind = NodeKind::Smooth;
+            }
+            if (!sp.closed)
+                sp.nodes.first().kind = NodeKind::Smooth;
         }
         if (sp.nodes.size() > 1)
             out << sp;
@@ -361,7 +531,8 @@ void DistortTool::mouseRelease(QMouseEvent* event, const QPointF& doc)
     if (QLineF(m_press, doc).length() < m_canvas.pixelsToDoc(2.0))
         return;
     const QList<SubPath> result =
-        distort(m_original, mode(), amountFor(doc), Options::instance().integer(QStringLiteral("ws/tools/distort/frequency")), m_center);
+        distort(m_original, mode(), amountFor(doc), Options::instance().integer(QStringLiteral("ws/tools/distort/frequency")),
+                mode() == Mode::Zipper ? m_press : m_center, zipperOptions());
     m_canvas.editor().replaceObjectWithCurve(m_target, result, QObject::tr("Verzerren"));
     m_canvas.update();
 }
@@ -371,7 +542,8 @@ void DistortTool::paintOverlay(QPainter& p)
     if (!m_dragging)
         return;
     const QList<SubPath> result =
-        distort(m_original, mode(), amountFor(m_current), Options::instance().integer(QStringLiteral("ws/tools/distort/frequency")), m_center);
+        distort(m_original, mode(), amountFor(m_current), Options::instance().integer(QStringLiteral("ws/tools/distort/frequency")),
+                mode() == Mode::Zipper ? m_press : m_center, zipperOptions());
     p.save();
     p.setRenderHint(QPainter::Antialiasing);
     p.setPen(QPen(Canvas::previewColor(), 1.0));
@@ -541,6 +713,8 @@ void EnvelopeTool::refresh()
         if (box.width() <= 1e-6 || box.height() <= 1e-6)
             return;
         m_env = Envelope::rectangle(box, mode());
+        m_env.mapping = Envelope::Mapping(std::clamp(Options::instance().integer(QStringLiteral("ws/tools/envelope/mapping")), 0,
+                                                     int(Envelope::Mapping::Vertical)));
     }
     m_toPage = o->transform();
     m_target = o->id();

@@ -1,4 +1,4 @@
-# Baut die Windows-Pakete von TANGENTA:
+﻿# Baut die Windows-Pakete von TANGENTA:
 #   build\packages\TANGENTA-<version>-x64.msi        (msiexec /i ... /qn INSTALLFOLDER=...)
 #   build\packages\TANGENTA-<version>-x64-setup.exe  (Setup mit /quiet, /passive, InstallFolder=...)
 #
@@ -53,6 +53,8 @@ function Id([string]$prefix, [string]$path) {
     return $prefix + $hash.Substring(0, 24)
 }
 function Esc([string]$s) { return [Security.SecurityElement]::Escape($s) }
+# Fremdformate, die TANGENTA öffnet (MainWindow::vectorImportSuffixes): erscheinen unter «Öffnen mit»
+$openWith = @('cdr', 'cmx', 'svg', 'ai', 'eps', 'ps', 'dxf', 'pdf')
 $sb = New-Object Text.StringBuilder
 function Emit-Directory([string]$dir, [string]$indent) {
     foreach ($file in Get-ChildItem -LiteralPath $dir -File | Sort-Object Name) {
@@ -63,11 +65,27 @@ function Emit-Directory([string]$dir, [string]$indent) {
         if ($rel -eq 'tangenta.exe') {
             [void]$sb.AppendLine("$indent    <Shortcut Id=`"StartMenu`" Directory=`"ProgramMenuFolder`" Name=`"TANGENTA`" Description=`"Vektorgrafik`" WorkingDirectory=`"INSTALLFOLDER`" Icon=`"TangentaIcon`" Advertise=`"yes`" />")
             [void]$sb.AppendLine("$indent  </File>")
-            [void]$sb.AppendLine("$indent  <ProgId Id=`"TANGENTA.Document`" Description=`"TANGENTA-Zeichnung`" Icon=`"TangentaIcon`" Advertise=`"yes`">")
+            # Eigenes Format fest verknüpft (nicht angekündigt), gleiche ProgIds wie MainWindow::registerFileTypes
+            [void]$sb.AppendLine("$indent  <ProgId Id=`"Tangenta.Document`" Description=`"TANGENTA-Zeichnung`" Icon=`"MainExe`" IconIndex=`"0`">")
             [void]$sb.AppendLine("$indent    <Extension Id=`"vek`" ContentType=`"application/x-tangenta`">")
-            [void]$sb.AppendLine("$indent      <Verb Id=`"open`" Command=`"Öffnen`" Argument=`"&quot;%1&quot;`" />")
+            [void]$sb.AppendLine("$indent      <Verb Id=`"open`" Command=`"Öffnen`" TargetFile=`"MainExe`" Argument=`"&quot;%1&quot;`" />")
             [void]$sb.AppendLine("$indent    </Extension>")
             [void]$sb.AppendLine("$indent  </ProgId>")
+            # Fremdformate nur unter «Öffnen mit», das bisherige Standardprogramm bleibt
+            [void]$sb.AppendLine("$indent  <ProgId Id=`"Tangenta.Import`" Description=`"Zeichnung (TANGENTA)`" Icon=`"MainExe`" IconIndex=`"0`" />")
+            [void]$sb.AppendLine("$indent  <RegistryValue Root=`"HKLM`" Key=`"Software\Classes\Tangenta.Import\shell\open\command`" Type=`"string`" Value=`"&quot;[#MainExe]&quot; &quot;%1&quot;`" />")
+            foreach ($ext in $openWith) {
+                [void]$sb.AppendLine("$indent  <RegistryValue Root=`"HKLM`" Key=`"Software\Classes\.$ext\OpenWithProgids`" Name=`"Tangenta.Import`" Type=`"string`" Value=`"`" />")
+            }
+            # Eintrag in Einstellungen > Apps > Standard-Apps
+            $cap = 'Software\TANGENTA\Capabilities'
+            [void]$sb.AppendLine("$indent  <RegistryValue Root=`"HKLM`" Key=`"$cap`" Name=`"ApplicationName`" Type=`"string`" Value=`"TANGENTA`" />")
+            [void]$sb.AppendLine("$indent  <RegistryValue Root=`"HKLM`" Key=`"$cap`" Name=`"ApplicationDescription`" Type=`"string`" Value=`"Vektorgrafik`" />")
+            [void]$sb.AppendLine("$indent  <RegistryValue Root=`"HKLM`" Key=`"$cap\FileAssociations`" Name=`".vek`" Type=`"string`" Value=`"Tangenta.Document`" />")
+            foreach ($ext in $openWith) {
+                [void]$sb.AppendLine("$indent  <RegistryValue Root=`"HKLM`" Key=`"$cap\FileAssociations`" Name=`".$ext`" Type=`"string`" Value=`"Tangenta.Import`" />")
+            }
+            [void]$sb.AppendLine("$indent  <RegistryValue Root=`"HKLM`" Key=`"Software\RegisteredApplications`" Name=`"TANGENTA`" Type=`"string`" Value=`"$cap`" />")
         } else {
             [void]$sb.AppendLine("$indent  </File>")
         }

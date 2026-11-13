@@ -304,7 +304,7 @@ TextFlow::Caret TextFlow::caret(int position) const
     const QTextLine line = m_layouts[std::size_t(l.block)]->lineAt(l.index);
     const double u = TextObject::kUnitsPerMm;
     const double x = line.cursorToX(std::clamp(position, 0, m_endPosition) - m_blockStart[std::size_t(l.block)]);
-    return Caret{l.frame, QPointF(x / u, line.y() / u), line.height() / u};
+    return Caret{l.frame, QPointF(x / u, line.y() / u), line.height() / u, (line.y() + line.ascent()) / u};
 }
 
 int TextFlow::positionAt(int frame, const QPointF& local) const

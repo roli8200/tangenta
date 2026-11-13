@@ -58,6 +58,8 @@ private:
     QPointF m_start;
     QPointF m_current;
     QList<QPointF> m_stroke;
+    double m_fitSlack = 0.0;    // zusätzliche Abweichung der Kurvenanpassung (Freihandglättung)
+    double m_cornerSlack = 0.0; // zusätzlicher Eckenwinkel in Grad (Freihandglättung)
     EndNode m_continue;       // Fortsetzung einer bestehenden Kurve
     EndNode m_lastEnd;        // Ende der zuletzt gezeichneten Linie (für Doppelklick)
 };

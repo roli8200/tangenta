@@ -10,6 +10,7 @@
 #include "PerfectShape.h"
 #include "TextObject.h"
 #include "DimensionObject.h"
+#include "QrCodeObject.h"
 #include "TableObject.h"
 #include "CloneObject.h"
 #include "SuperClipObject.h"
@@ -45,6 +46,7 @@ QHash<QString, Factory>& registry()
         t.insert(QStringLiteral("polygon"), [] { return std::make_unique<PolygonObject>(); });
         t.insert(QStringLiteral("text"), [] { return std::make_unique<TextObject>(); });
         t.insert(QStringLiteral("dimension"), [] { return std::make_unique<DimensionObject>(); });
+        t.insert(QStringLiteral("qrcode"), [] { return std::make_unique<QrCodeObject>(); });
         t.insert(QStringLiteral("table"), [] { return std::make_unique<TableObject>(); });
         t.insert(QStringLiteral("clone"), [] { return std::make_unique<CloneObject>(); });
         t.insert(QStringLiteral("superclip"), [] { return std::make_unique<SuperClipObject>(); });

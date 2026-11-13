@@ -1,6 +1,7 @@
 #include "TransformDocker.h"
 
 #include "Editor.h"
+#include "ExpressionSpinBox.h"
 #include "Icons.h"
 
 #include <QButtonGroup>
@@ -52,8 +53,8 @@ TransformDocker::TransformDocker(Editor& editor, QWidget* parent) : QWidget(pare
     auto* fields = new QGridLayout;
     m_labelA = new QLabel(this);
     m_labelB = new QLabel(this);
-    m_a = new QDoubleSpinBox(this);
-    m_b = new QDoubleSpinBox(this);
+    m_a = new ExpressionSpinBox(this);
+    m_b = new ExpressionSpinBox(this);
     for (QDoubleSpinBox* s : {m_a, m_b}) {
         s->setRange(-100000, 100000);
         s->setDecimals(3);

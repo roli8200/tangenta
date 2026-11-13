@@ -35,10 +35,6 @@ if(KIND STREQUAL "cdr")
             "#include <QByteArray>\n#include <QJsonDocument>\n#include <QJsonObject>\n#include <QJsonValue>\n#include <QString>\n#include <QStringList>\n#include <cctype>\n#include <cstdlib>\n#include <cstring>\n#include <utility>")
         replace_region(${f} "static void processNameForEncoding(" "  if (!bRes)" cdrparser-colour.inc)
         replace_region(${f} "  boost::property_tree::ptree pt;" "void libcdr::CDRParser::_skipX3Optional(" cdrparser-json.inc)
-        # unsigned long ist unter Windows 32 Bit: "Position + Länge" läuft bei beschädigten Dateien
-        # über und gibt vor, 4 GB lägen bereit. "Länge < Rest" kann nicht überlaufen.
-        replace_line(${SOURCE}/src/lib/CDRInternalStream.cpp "if ((m_offset+numBytes) < m_buffer.size())"
-            "if (numBytes < m_buffer.size() - m_offset) // TANGENTA: ohne Überlauf")
         replace_line(${SOURCE}/src/lib/CDRInternalStream.cpp "      for (unsigned long i=0; i<have; i++)\n        m_buffer.push_back(out[i]);"
             "      m_buffer.insert(m_buffer.end(), out, out + have); // TANGENTA: blockweise statt Byte für Byte")
         # CMYK-Bilder: Little CMS rechnet mit Gleitkomma-Eingabe jedes Pixel einzeln ohne Tabelle
@@ -53,6 +49,18 @@ if(KIND STREQUAL "cdr")
             "  unsigned m_parentId;\n  unsigned m_fontWeight = 0; // TANGENTA\n  int m_fontItalic = -1;\n  CDRStyle()")
         replace_line(${SOURCE}/src/lib/CDRTypes.h "      m_fontName = override.m_fontName;\n    }"
             "      m_fontName = override.m_fontName;\n    }\n    if (override.m_fontWeight)\n      m_fontWeight = override.m_fontWeight;\n    if (override.m_fontItalic >= 0)\n      m_fontItalic = override.m_fontItalic;")
+        # Ab Version 2022 steht hinter der Füllungsnummer ein Block "Wert, 16, Kennung (16 Bytes)";
+        # ohne ihn zu überspringen ist jede Füllung leer
+        replace_line(${SOURCE}/src/lib/CDRParser.cpp "  unsigned fillId = readU32(input);
+  if (m_version >= 1300)
+    input->seek(8, librevenge::RVNG_SEEK_CUR);"
+            "  unsigned fillId = readU32(input);
+  if (m_version >= 1300)
+  {
+    readU32(input);
+    if (readU32(input) == 16) // TANGENTA: Kennungsblock neuerer Fassungen
+      input->seek(24, librevenge::RVNG_SEEK_CUR);
+  }")
         # CDR5 speichert ein Byte je Zeichen; Bit 0 der Zeichenflags bedeutet dort nicht "zwei Bytes"
         replace_line(${SOURCE}/src/lib/CDRParser.cpp "charDescriptions.push_back((unsigned char)((readU16(input) >> 3) & 0xff));"
             "charDescriptions.push_back((unsigned char)((readU16(input) >> 3) & 0xfe)); // TANGENTA")
@@ -70,6 +78,12 @@ if(KIND STREQUAL "cdr")
             "    librevenge::RVNGPropertyList textFrameProps;\n${trafo}")
         replace_line(${SOURCE}/src/lib/CDRContentCollector.cpp "            spanProps.insert(\"style:font-name\", j.m_style.m_fontName);"
             "            spanProps.insert(\"style:font-name\", j.m_style.m_fontName);\n          if (j.m_style.m_fontWeight >= 0x1000) // TANGENTA\n            spanProps.insert(\"fo:font-weight\", \"bold\");\n          if (j.m_style.m_fontItalic > 0)\n            spanProps.insert(\"fo:font-style\", \"italic\");")
+        # Text: Kontur und fehlende Füllung (weisser Text mit farbigem Umriss)
+        file(READ ${PATCHES}/text-outline.inc outline)
+        replace_line(${SOURCE}/src/lib/CDRContentCollector.cpp "            spanProps.insert(\"fo:color\", m_ps.getRGBColorString(j.m_style.m_fillStyle.color1));
+"
+            "            spanProps.insert(\"fo:color\", m_ps.getRGBColorString(j.m_style.m_fillStyle.color1));
+${outline}")
     endif()
 elseif(KIND STREQUAL "revenge")
     set(f ${SOURCE}/src/lib/RVNGBinaryData.cpp)

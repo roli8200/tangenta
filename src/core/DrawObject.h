@@ -1,5 +1,7 @@
 #pragma once
 
+#include "BitmapEffect.h"
+#include "Blend.h"
 #include "Node.h"
 #include "Property.h"
 #include "Effects.h"
@@ -14,6 +16,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 
 namespace vek {
 
@@ -45,6 +48,14 @@ public:
     void setTransform(const QTransform& t) { m_transform = t; }
     const Style& style() const { return m_style; }
     virtual void setStyle(const Style& s) { m_style = s; }
+    // Stil ändern: fn bekommt den aktuellen Stil. Eine Gruppe führt fn an jedem Kind einzeln aus,
+    // deren übrige Werte (z.B. die Füllung beim Ändern der Kontur) bleiben so erhalten.
+    virtual void editStyle(const std::function<void(Style&)>& fn)
+    {
+        Style s = m_style;
+        fn(s);
+        setStyle(s);
+    }
     // Unschärfe wie der Gausssche Weichzeichner in Inkscape: Standardabweichung in mm,
     // 0 = scharf. Gilt für jedes Objekt samt Füllung und Kontur, bei Gruppen für den Inhalt.
     // Nur am Bildschirm/beim Ausgeben; die Pfade bleiben unverändert. Kann verlaufen (blurRamp).
@@ -56,17 +67,24 @@ public:
     const Ramp& transparency() const { return m_transparency; }
     const Ramp& effect(Effect e) const { return e == Effect::Blur ? m_blur : m_transparency; }
     void setEffect(Effect e, const Ramp& ramp) { (e == Effect::Blur ? m_blur : m_transparency) = ramp; }
+    // Mischmodus (Transparenzwerkzeug): wie das Objekt samt Transparenz mit dem Untergrund
+    // verrechnet wird; Normal = einfach darüber
+    BlendMode blendMode() const { return m_blendMode; }
+    void setBlendMode(BlendMode mode) { m_blendMode = mode; }
     // Unschärfe und Transparenz von other übernehmen (Umwandeln, Kombinieren)
     void copyEffects(const DrawObject& other)
     {
         m_blur = other.m_blur;
         m_transparency = other.m_transparency;
+        m_blendMode = other.m_blendMode;
         m_lens = other.m_lens;
         m_bevel = other.m_bevel;
         m_shadow = other.m_shadow;
         m_contour = other.m_contour;
         m_extrusion = other.m_extrusion;
+        m_blockShadow = other.m_blockShadow;
         m_envelopes = other.m_envelopes;
+        m_bitmapEffects = other.m_bitmapEffects;
     }
     // Hüllen (Effekte > Hülle), nacheinander auf die lokale Geometrie angewendet; die letzte ist
     // die, die man bearbeitet ("Neue Hülle" legt eine weitere darüber)
@@ -79,6 +97,9 @@ public:
     void setContour(const ContourEffect& c) { m_contour = c; }
     const Extrusion& extrusion() const { return m_extrusion; }
     void setExtrusion(const Extrusion& e) { m_extrusion = e; }
+    // Blockschatten (Hilfsmittel 'Blockschatten')
+    const BlockShadow& blockShadow() const { return m_blockShadow; }
+    void setBlockShadow(const BlockShadow& s) { m_blockShadow = s; }
     const DropShadow& shadow() const { return m_shadow; }
     void setShadow(const DropShadow& s) { m_shadow = s; }
     // Effekte > Linse und Effekte > Abschrägung
@@ -86,19 +107,27 @@ public:
     void setLens(const Lens& l) { m_lens = l; }
     const Bevel& bevel() const { return m_bevel; }
     void setBevel(const Bevel& b) { m_bevel = b; }
+    // Effektstapel nicht-destruktiver Bitmap-Effekte (Weichzeichnen, Rahmen, …): beim Zeichnen
+    // wird das Objekt gerastert und der Stapel der Reihe nach angewendet
+    const QList<BitmapEffect>& bitmapEffects() const { return m_bitmapEffects; }
+    void setBitmapEffects(const QList<BitmapEffect>& effects) { m_bitmapEffects = effects; }
+    bool hasBitmapEffects() const { return fx::anyActive(m_bitmapEffects); }
     // Effekt löschen: Unschärfe, Transparenz, Linse, Abschrägung weg
     void clearEffects()
     {
         m_blur = Ramp();
         m_transparency = Ramp();
+        m_blendMode = BlendMode::Normal;
         m_lens = Lens();
         m_bevel = Bevel();
         m_shadow = DropShadow();
         m_contour = ContourEffect();
         m_extrusion = Extrusion();
+        m_blockShadow = BlockShadow();
         m_envelopes.clear();
+        m_bitmapEffects.clear();
     }
-    bool hasEffects() const { return m_blur.isActive() || m_transparency.type != Ramp::Type::None || m_lens.isActive() || m_bevel.isActive() || m_shadow.active || m_contour.active || m_extrusion.active || !m_envelopes.isEmpty(); }
+    bool hasEffects() const { return !m_bitmapEffects.isEmpty() || m_blur.isActive() || m_transparency.type != Ramp::Type::None || m_blendMode != BlendMode::Normal || m_lens.isActive() || m_bevel.isActive() || m_shadow.active || m_contour.active || m_extrusion.active || m_blockShadow.active || !m_envelopes.isEmpty(); }
     // Gesperrt: lässt sich auswählen, aber weder verschieben noch ändern
     bool locked() const { return m_locked; }
     void setLocked(bool locked) { m_locked = locked; }
@@ -149,12 +178,15 @@ private:
     Style m_style;
     Ramp m_blur;
     Ramp m_transparency;
+    BlendMode m_blendMode = BlendMode::Normal;
     Lens m_lens;
     Bevel m_bevel;
     DropShadow m_shadow;
     ContourEffect m_contour;
     Extrusion m_extrusion;
+    BlockShadow m_blockShadow;
     QList<Envelope> m_envelopes;
+    QList<BitmapEffect> m_bitmapEffects;
     struct EnvelopeCache {
         QList<Envelope> envelopes;
         QList<std::pair<QPainterPath, QPainterPath>> paths; // lokal -> verformt

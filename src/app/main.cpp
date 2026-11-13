@@ -3,6 +3,7 @@
 #include "UiScale.h"
 
 #include <QApplication>
+#include <QFileOpenEvent>
 #include <QIcon>
 #include <QTimer>
 
@@ -28,9 +29,32 @@ int main(int argc, char* argv[])
     vek::MainWindow window;
     const QStringList args = QApplication::arguments();
     window.show();
+#ifdef Q_OS_MACOS
+    // Finder übergibt Dateien (Doppelklick, aufs Dock-Symbol ziehen) als Ereignis statt als Argument
+    struct FileOpenFilter : QObject {
+        vek::MainWindow* window = nullptr;
+        bool opened = false;
+        bool eventFilter(QObject* watched, QEvent* event) override
+        {
+            if (event->type() != QEvent::FileOpen)
+                return QObject::eventFilter(watched, event);
+            opened = true;
+            window->openFile(static_cast<QFileOpenEvent*>(event)->file());
+            return true;
+        }
+    } fileOpen;
+    fileOpen.window = &window;
+    app.installEventFilter(&fileOpen);
+#endif
     if (args.size() > 1)
         window.openFile(args.at(1));
     else
-        QTimer::singleShot(0, &window, [&window] { window.applyStartup(); });
+        QTimer::singleShot(0, &window, [&] {
+#ifdef Q_OS_MACOS
+            if (fileOpen.opened)
+                return;
+#endif
+            window.applyStartup();
+        });
     return QApplication::exec();
 }

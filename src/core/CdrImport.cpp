@@ -218,6 +218,9 @@ public:
                                    num(p, "tangenta:box-w") * kMm, num(p, "tangenta:box-h") * kMm);
         }
         m_paragraphs.clear();
+        m_textStroke.reset();
+        m_textStrokeWidth = 0.0;
+        m_textNoFill = false;
         m_inText = true;
     }
     void endTextObject() override
@@ -235,9 +238,13 @@ public:
         if (!any)
             return;
         std::unique_ptr<TextObject> text = m_textMatrix ? placedText(largest) : framedText(largest);
+        // Läufe ohne Füllung haben keine eigene Farbe und zeigen die (leere) Füllung des Objekts;
+        // die Kontur der Zeichen wird die Kontur des Textobjekts
         vek::Style st;
-        st.fill = Fill::solid(Color(0, 0, 0));
-        st.stroke.reset();
+        st.fill = m_textNoFill ? Fill::none() : Fill::solid(Color(0, 0, 0));
+        st.stroke = m_textStroke;
+        if (m_textStroke)
+            st.strokeWidth = std::max(m_textStrokeWidth * kMm, 0.076);
         text->setStyle(st);
         TextObject* raw = text.get();
         attachDetachedChild(*parent(), std::move(text));
@@ -254,9 +261,21 @@ public:
         // oder Zeilen versteckt
         const double lineMm = largest * 25.4 / 72.0 * 1.3;
         const double needed = lineMm * double(m_paragraphs.size());
-        text->setFrameSize(QSizeF(std::max(m_textFrame.width() * 1.04, lineMm), std::max(m_textFrame.height(), needed) * 1.15));
+        text->setFrameSize(QSizeF(std::max(m_textFrame.width() * widthSlack(), lineMm), std::max(m_textFrame.height(), needed) * 1.15));
         text->setTransform(QTransform::fromTranslate(m_textFrame.left(), m_textFrame.top()));
         return text;
+    }
+
+    // Luft in der Rahmenbreite: Mit den Originalschriften bricht der Text genau wie in der Datei um
+    // (sonst passt z. B. eine Adresszeile knapp und läuft in die Nachbarspalte); nur Ersatzschriften
+    // mit anderer Laufweite bekommen etwas mehr Platz, damit sie nicht zusätzlich umbrechen
+    double widthSlack() const
+    {
+        for (const TextParagraph& par : std::as_const(m_paragraphs))
+            for (const TextRun& run : par.runs)
+                if (!run.text.trimmed().isEmpty() && fontmatch::installedFamily(run.format.family).isEmpty())
+                    return 1.04;
+        return 1.002;
     }
 
     // Text mit der Abbildung aus der Datei: Drehung, Stauchung und Spiegelung bleiben erhalten.
@@ -269,7 +288,7 @@ public:
             text->setParagraphs(m_paragraphs);
             const double lineMm = largest * 25.4 / 72.0 * 1.3;
             const double needed = lineMm * double(m_paragraphs.size());
-            text->setFrameSize(QSizeF(std::max(m_textBox->width() * 1.04, lineMm), std::max(m_textBox->height(), needed) * 1.15));
+            text->setFrameSize(QSizeF(std::max(m_textBox->width() * widthSlack(), lineMm), std::max(m_textBox->height(), needed) * 1.15));
             text->setTransform(QTransform::fromTranslate(m_textBox->left(), m_textBox->top()) * *m_textMatrix);
             return text;
         }
@@ -328,9 +347,16 @@ public:
             family = raw;
         m_rawFont.insert(family, raw.isEmpty() ? family : raw);
         const double size = num(p, "fo:font-size", 12.0); // in Punkt
+        const bool noFill = flag(p, "tangenta:fill-none");
         m_format = CharFormat(family, size > 0 ? size : 12.0, bold || str(p, "fo:font-weight") == QLatin1String("bold"),
                               italic || str(p, "fo:font-style") == QLatin1String("italic"), false,
-                              color(str(p, "fo:color")).value_or(Color(0, 0, 0)));
+                              noFill ? std::nullopt : std::optional<Color>(color(str(p, "fo:color")).value_or(Color(0, 0, 0))));
+        m_textNoFill = m_textNoFill || noFill;
+        // Breite 0 heisst bei Text: keine Kontur (so steht es auch bei gewöhnlichem Text in der Datei)
+        if (const auto c = color(str(p, "tangenta:stroke-color")); c && !m_textStroke && num(p, "tangenta:stroke-width") > 0.0) {
+            m_textStroke = *c;
+            m_textStrokeWidth = num(p, "tangenta:stroke-width");
+        }
     }
     void closeSpan() override {}
     void insertText(const librevenge::RVNGString& text) override { append(QString::fromUtf8(text.cstr())); }
@@ -569,6 +595,9 @@ private:
     QRectF m_textFrame;
     std::optional<QTransform> m_textMatrix;
     std::optional<QRectF> m_textBox;
+    std::optional<Color> m_textStroke; // Kontur der Zeichen
+    double m_textStrokeWidth = 0.0;    // in Zoll
+    bool m_textNoFill = false;
     QList<TextParagraph> m_paragraphs;
     TextParagraph m_paragraph;
     CharFormat m_format;

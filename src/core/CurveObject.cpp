@@ -4,6 +4,7 @@
 
 #include <QJsonArray>
 #include <QLineF>
+#include <QSet>
 
 #include <algorithm>
 #include <cmath>
@@ -91,6 +92,16 @@ QPainterPath CurveObject::localPath() const
     for (const SubPath& s : m_paths)
         result.addPath(pathops::mediaOutline(CurveObject(QList<SubPath>{s}).spinePath(), m_media));
     return result;
+}
+
+ArtItem CurveObject::mediaPieces() const
+{
+    ArtItem out;
+    if (!m_media.hasPieces())
+        return out;
+    for (const SubPath& s : m_paths)
+        out += pathops::mediaPieces(CurveObject(QList<SubPath>{s}).spinePath(), m_media);
+    return out;
 }
 
 QList<PropertyDescriptor> CurveObject::propertyDescriptors() const
@@ -266,6 +277,31 @@ void CurveObject::moveNodes(const QList<NodeRef>& nodes, const QPointF& delta)
         const NodeRef nx = next(r);
         if (nx.isValid() && node(nx).curveIn)
             m_paths[nx.path].nodes[nx.node].c1 += delta;
+    }
+}
+
+void CurveObject::transformNodes(const QList<NodeRef>& nodes, const QTransform& m)
+{
+    // Wie beim Vorbild: beide Steuerpunkte jedes Kurvensegments, das an einem gewählten Knoten hängt,
+    // gehen mit (ein einzelner um 180° gedrehter Eckknoten ergibt so eine Schlaufe). Jedes Segment nur einmal;
+    // es ist über seinen Endknoten benannt (dort liegen c1 und c2).
+    QSet<std::pair<int, int>> segments;
+    auto addSegment = [this, &segments](NodeRef end) {
+        if (end.isValid() && hasSegmentInto(end) && node(end).curveIn)
+            segments.insert({end.path, end.node});
+    };
+    for (NodeRef r : nodes) {
+        if (!isValid(r))
+            continue;
+        CurveNode& n = m_paths[r.path].nodes[r.node];
+        n.point = m.map(n.point);
+        addSegment(r);
+        addSegment(next(r));
+    }
+    for (const auto& [path, index] : segments) {
+        CurveNode& n = m_paths[path].nodes[index];
+        n.c1 = m.map(n.c1);
+        n.c2 = m.map(n.c2);
     }
 }
 
@@ -504,53 +540,16 @@ void CurveObject::writeProperties(QJsonObject& out) const
 {
     DrawObject::writeProperties(out);
     out[QStringLiteral("paths")] = pathsToJson(m_paths);
-    if (m_media.isActive()) {
-        static const char* kinds[] = {"none", "preset", "calligraphy", "pressure", "sprayer"};
-        QJsonObject m{
-            {QStringLiteral("kind"), QLatin1String(kinds[int(m_media.kind)])},
-            {QStringLiteral("preset"), m_media.preset},
-            {QStringLiteral("width"), m_media.width},
-            {QStringLiteral("angle"), m_media.angle},
-        };
-        if (m_media.kind == ArtisticMedia::Kind::Pressure) {
-            QJsonArray p;
-            for (double v : m_media.pressure)
-                p << v;
-            m[QStringLiteral("pressure")] = p;
-        }
-        if (m_media.kind == ArtisticMedia::Kind::Sprayer) {
-            m[QStringLiteral("spray")] = m_media.sprayList;
-            m[QStringLiteral("spacing")] = m_media.spacing;
-            m[QStringLiteral("randomRotate")] = m_media.randomRotate;
-            m[QStringLiteral("randomOrder")] = m_media.randomOrder;
-            m[QStringLiteral("seed")] = qint64(m_media.seed);
-        }
-        out[QStringLiteral("media")] = m;
-    }
+    if (m_media.isActive())
+        out[QStringLiteral("media")] = media::toJson(m_media);
 }
 
 void CurveObject::readProperties(const QJsonObject& in)
 {
     DrawObject::readProperties(in);
     m_media = ArtisticMedia();
-    if (in.contains(QStringLiteral("media"))) {
-        const QJsonObject m = in.value(QStringLiteral("media")).toObject();
-        const QString kind = m.value(QStringLiteral("kind")).toString();
-        m_media.kind = kind == QLatin1String("calligraphy") ? ArtisticMedia::Kind::Calligraphy
-                       : kind == QLatin1String("pressure")  ? ArtisticMedia::Kind::Pressure
-                       : kind == QLatin1String("sprayer")   ? ArtisticMedia::Kind::Sprayer
-                                                            : ArtisticMedia::Kind::Preset;
-        for (const QJsonValue& v : m.value(QStringLiteral("pressure")).toArray())
-            m_media.pressure << std::clamp(v.toDouble(), 0.0, 1.0);
-        m_media.sprayList = std::clamp(m.value(QStringLiteral("spray")).toInt(), 0, pathops::sprayListCount() - 1);
-        m_media.spacing = std::max(0.2, m.value(QStringLiteral("spacing")).toDouble(8.0));
-        m_media.randomRotate = m.value(QStringLiteral("randomRotate")).toBool(true);
-        m_media.randomOrder = m.value(QStringLiteral("randomOrder")).toBool(true);
-        m_media.seed = quint32(m.value(QStringLiteral("seed")).toInteger(1));
-        m_media.preset = std::clamp(m.value(QStringLiteral("preset")).toInt(), 0, pathops::mediaPresetCount() - 1);
-        m_media.width = std::max(0.05, m.value(QStringLiteral("width")).toDouble(10.0));
-        m_media.angle = m.value(QStringLiteral("angle")).toDouble();
-    }
+    if (in.contains(QStringLiteral("media")))
+        m_media = media::fromJson(in.value(QStringLiteral("media")).toObject());
     m_paths = pathsFromJson(in.value(QStringLiteral("paths")).toArray());
 }
 

@@ -32,6 +32,26 @@ public:
     static int maxSharpness(Kind kind, int points);
     static int clampSharpness(Kind kind, int points, int sharpness);
 
+    // Formwerkzeug: symmetrisch gezogene Knoten. Ecken (Sternspitzen) und Seitenmitten
+    // (Einbuchtungen) liegen je auf einem Ring; Faktor auf dessen Radius und Drehung in Grad.
+    // Beim Polygon werden gezogene Seitenmitten zu glatten Kurvenknoten (geschwungenes Polygon).
+    struct NodeShape {
+        double outerScale = 1.0;
+        double outerTwist = 0.0;
+        double innerScale = 1.0;
+        double innerTwist = 0.0;
+        bool innerMoved() const { return innerScale != 1.0 || innerTwist != 0.0; }
+        bool isDefault() const { return *this == NodeShape{}; }
+        friend bool operator==(const NodeShape&, const NodeShape&) = default;
+    };
+    const NodeShape& nodeShape() const { return m_nodeShape; }
+    void setNodeShape(const NodeShape& s) { m_nodeShape = s; }
+    // Knoten für das Formwerkzeug (lokal), 2 * points: gerade Indizes Ecken, ungerade Seitenmitten.
+    // Komplexe Sterne haben keine (leer).
+    QList<QPointF> shapeNodes() const;
+    // Grundradius eines Rings (Anteil der Halbachsen) ohne NodeShape
+    double baseRadius(bool inner) const;
+
     QList<PropertyDescriptor> propertyDescriptors() const override;
     QVariant propertyValue(const QString& id) const override;
     bool setPropertyValue(const QString& id, const QVariant& value) override;
@@ -44,6 +64,7 @@ private:
     Kind m_kind = Kind::Polygon;
     int m_points = 5;
     int m_sharpness = 53;
+    NodeShape m_nodeShape;
 };
 
 } // namespace vek

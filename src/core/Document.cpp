@@ -171,6 +171,12 @@ void Document::commitChanges(ChangeSet set)
     emitChanged(wasModified);
 }
 
+void Document::commitWithoutUndo()
+{
+    // Änderungen sind schon angewendet; nur melden, Verlauf und Speicherzustand bleiben
+    emitChanged(isModified());
+}
+
 bool Document::mergeUndo(std::size_t mark, const QString& label)
 {
     if (m_inTransaction)

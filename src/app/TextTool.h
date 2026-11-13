@@ -94,6 +94,8 @@ public:
     void replaceRange(int start, int length, const QString& text);
 
 private:
+    // Rahmen der Arbeitskopie auf Lage und Grösse im Dokument bringen (Eigenschaftsleiste, Ausrichten)
+    void syncFrames();
     void startEditing(std::unique_ptr<TextObject> proto, NodeId target, const QList<TextFrameGeometry>& frames);
     void stopEditing();
     const TextFlow& flow() const;

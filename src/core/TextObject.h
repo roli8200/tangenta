@@ -164,6 +164,11 @@ public:
     static Qt::Alignment toQtAlignment(TextParagraph::Align align);
     static TextParagraph::Align fromQtAlignment(Qt::Alignment align);
 
+    // Kombination aufheben (Grafiktext): mehrere Zeilen -> ein Objekt je Zeile, sonst je Wort,
+    // sonst je Zeichen. Die Teile stehen genau dort, wo sie im Original standen, mit Stil,
+    // Effekten und Zeichenformaten. Leer, wenn sich nichts weiter teilen lässt.
+    std::vector<std::unique_ptr<TextObject>> breakApart() const;
+
     void writeProperties(QJsonObject& out) const override;
     void readProperties(const QJsonObject& in) override;
 

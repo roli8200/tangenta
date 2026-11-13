@@ -111,7 +111,7 @@ void forEachObject(const Document& doc, const OutPage& page, const std::function
 
 bool hasTransparency(const DrawObject& o)
 {
-    return o.transparency().isActive() || o.blur() > 0 || o.shadow().active || o.lens().isActive();
+    return o.transparency().isActive() || o.blendMode() != BlendMode::Normal || o.blur() > 0 || o.shadow().active || o.lens().isActive();
 }
 
 QString psString(const QString& text)
@@ -205,12 +205,13 @@ int permissions(const PdfSettings& s)
     return int(qint32(p));
 }
 
-// ICC-Profil aus Ghostscript: in der Windows-Bibliothek eingebaut (%rom%), unter Linux als Datei
+// ICC-Profil aus Ghostscript: in der Windows-Bibliothek eingebaut (%rom%), unter Linux und macOS als Datei
 QString iccProfile(const QString& name)
 {
 #ifndef Q_OS_WIN
     QStringList dirs{QStringLiteral("/usr/share/color/icc/ghostscript"), QStringLiteral("/usr/local/share/color/icc/ghostscript")};
-    for (const QString& root : {QStringLiteral("/usr/share/ghostscript"), QStringLiteral("/usr/local/share/ghostscript")})
+    for (const QString& root : {QStringLiteral("/usr/share/ghostscript"), QStringLiteral("/usr/local/share/ghostscript"),
+                                QStringLiteral("/opt/homebrew/share/ghostscript"), QStringLiteral("/opt/local/share/ghostscript")})
         for (const QString& version : QDir(root).entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name | QDir::Reversed))
             dirs << root + QLatin1Char('/') + version + QStringLiteral("/iccprofiles");
     for (const QString& dir : std::as_const(dirs))

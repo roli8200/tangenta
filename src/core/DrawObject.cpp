@@ -144,6 +144,8 @@ void DrawObject::writeProperties(QJsonObject& out) const
         out[QStringLiteral("blur")] = m_blur.from;
     if (m_transparency.type != Ramp::Type::None)
         out[QStringLiteral("transparency")] = m_transparency.toJson();
+    if (m_blendMode != BlendMode::Normal)
+        out[QStringLiteral("blend")] = blending::id(m_blendMode);
     if (m_locked)
         out[QStringLiteral("locked")] = true;
     if (m_lens.isActive())
@@ -156,11 +158,19 @@ void DrawObject::writeProperties(QJsonObject& out) const
         out[QStringLiteral("contour")] = m_contour.toJson();
     if (m_extrusion.active)
         out[QStringLiteral("extrusion")] = m_extrusion.toJson();
+    if (m_blockShadow.active)
+        out[QStringLiteral("blockShadow")] = m_blockShadow.toJson();
     if (!m_envelopes.isEmpty()) {
         QJsonArray list;
         for (const Envelope& e : m_envelopes)
             list.append(e.toJson());
         out[QStringLiteral("envelopes")] = list;
+    }
+    if (!m_bitmapEffects.isEmpty()) {
+        QJsonArray list;
+        for (const BitmapEffect& e : m_bitmapEffects)
+            list.append(e.toJson());
+        out[QStringLiteral("bitmapEffects")] = list;
     }
 }
 
@@ -180,16 +190,23 @@ void DrawObject::readProperties(const QJsonObject& in)
         setBlur(in.value(QStringLiteral("blur")).toDouble(0.0));
     m_transparency = in.contains(QStringLiteral("transparency")) ? Ramp::fromJson(in.value(QStringLiteral("transparency")))
                                                                   : Ramp();
+    m_blendMode = blending::fromId(in.value(QStringLiteral("blend")).toString()).value_or(BlendMode::Normal);
     m_locked = in.value(QStringLiteral("locked")).toBool(false);
     m_lens = in.contains(QStringLiteral("lens")) ? Lens::fromJson(in.value(QStringLiteral("lens")).toObject()) : Lens();
     m_bevel = in.contains(QStringLiteral("bevel")) ? Bevel::fromJson(in.value(QStringLiteral("bevel")).toObject()) : Bevel();
     m_shadow = in.contains(QStringLiteral("shadow")) ? DropShadow::fromJson(in.value(QStringLiteral("shadow")).toObject()) : DropShadow();
     m_contour = in.contains(QStringLiteral("contour")) ? ContourEffect::fromJson(in.value(QStringLiteral("contour")).toObject()) : ContourEffect();
     m_extrusion = in.contains(QStringLiteral("extrusion")) ? Extrusion::fromJson(in.value(QStringLiteral("extrusion")).toObject()) : Extrusion();
+    m_blockShadow = in.contains(QStringLiteral("blockShadow")) ? BlockShadow::fromJson(in.value(QStringLiteral("blockShadow")).toObject())
+                                                               : BlockShadow();
     m_envelopes.clear();
     for (const QJsonValue& v : in.value(QStringLiteral("envelopes")).toArray())
         if (const Envelope e = Envelope::fromJson(v.toObject()); e.isActive())
             m_envelopes.append(e);
+    m_bitmapEffects.clear();
+    for (const QJsonValue& v : in.value(QStringLiteral("bitmapEffects")).toArray())
+        if (BitmapEffect e = BitmapEffect::fromJson(v.toObject()); !e.id.isEmpty())
+            m_bitmapEffects.append(e);
 }
 
 } // namespace vek

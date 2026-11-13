@@ -6,9 +6,15 @@
 #include "TableObject.h"
 #include "TextObject.h"
 
+#include <QEvent>
+#include <QTimer>
+#include <QAbstractItemView>
+#include <QCompleter>
 #include <QFontDatabase>
+#include <QLineEdit>
 #include <QSettings>
 #include <QSignalBlocker>
+#include <QStringListModel>
 
 #include <functional>
 
@@ -28,37 +34,101 @@ bool isSymbolFont(const QString& family)
 
 FontBox::FontBox(const Editor& editor, QWidget* parent) : QComboBox(parent), m_editor(editor)
 {
-    setEditable(false);
+    // Eingabefeld zum Suchen: Treffer irgendwo im Namen, ohne Gross-/Kleinschreibung
+    setEditable(true);
+    setInsertPolicy(QComboBox::NoInsert);
     setMaxVisibleItems(20);
+    m_names = new QStringListModel(this);
+    auto* completer = new QCompleter(m_names, this);
+    completer->setCaseSensitivity(Qt::CaseInsensitive);
+    completer->setFilterMode(Qt::MatchContains);
+    completer->setCompletionMode(QCompleter::PopupCompletion);
+    completer->setMaxVisibleItems(20);
+    setCompleter(completer);
     rebuild();
-    connect(this, &QComboBox::activated, this, [this](int index) {
-        const QString family = itemData(index).toString();
-        if (family.isEmpty())
-            return;
-        noteUsed(family);
-        emit familyActivated(family);
-        rebuild();
-        setCurrentFamily(family);
-    });
+    connect(this, &QComboBox::activated, this, [this](int index) { choose(itemData(index).toString()); });
+    connect(completer, qOverload<const QString&>(&QCompleter::activated), this, [this](const QString& family) { choose(family); });
+    connect(lineEdit(), &QLineEdit::editingFinished, this, [this] { takeTyped(); });
+    // Passen mehrere Schriften ("Poppins" -> Poppins, Poppins Black …), bleibt die Trefferliste offen.
+    // Ein Klick daneben schliesst sie nur und kommt nicht beim Ziel an; editingFinished folgte dann
+    // nie und die nächsten Eingaben landeten im Schriftfeld. Darum gilt beim Schliessen der Liste
+    // ein genau getippter Name, und der Fokus geht zurück.
+    completer->popup()->installEventFilter(this);
+}
+
+bool FontBox::eventFilter(QObject* watched, QEvent* event)
+{
+    if (watched == completer()->popup() && event->type() == QEvent::Hide)
+        QTimer::singleShot(0, this, [this] {
+            if (!completer()->popup()->isVisible() && !exactMatch(lineEdit()->text()).isEmpty()) {
+                takeTyped();
+                lineEdit()->clearFocus();
+            }
+        });
+    return QComboBox::eventFilter(watched, event);
+}
+
+QString FontBox::exactMatch(const QString& text) const
+{
+    const QString typed = text.trimmed();
+    return m_names->stringList().contains(typed) ? typed : familyIgnoringCase(typed);
+}
+
+void FontBox::takeTyped()
+{
+    // Getippter Name einer vorhandenen Schrift wählt sie, alles andere zeigt wieder die aktuelle
+    const QString match = exactMatch(lineEdit()->text());
+    if (!match.isEmpty() && match != m_current)
+        choose(match);
+    else
+        setCurrentFamily(m_current);
+}
+
+void FontBox::choose(const QString& family)
+{
+    if (family.isEmpty())
+        return;
+    noteUsed(family);
+    m_current = family;
+    emit familyActivated(family);
+    rebuild();
+    setCurrentFamily(family);
+}
+
+QString FontBox::familyIgnoringCase(const QString& name) const
+{
+    for (const QString& f : m_names->stringList())
+        if (f.compare(name, Qt::CaseInsensitive) == 0)
+            return f;
+    return {};
 }
 
 QString FontBox::currentFamily() const
 {
-    return currentData().toString();
+    return m_current;
 }
 
 void FontBox::setCurrentFamily(const QString& family)
 {
     const QSignalBlocker block(this);
+    // Den Eintrag in der alphabetischen Liste wählen (den letzten Treffer), nicht den in
+    // "zuletzt benutzt": So öffnet sich die Liste an der Stelle der Schrift. Gross-/Kleinschreibung
+    // zählt nicht, Namen aus Dateien weichen darin oft ab.
     int index = -1;
-    for (int i = 0; i < count() && index < 0; ++i)
+    for (int i = count() - 1; i >= 0 && index < 0; --i)
         if (itemData(i).toString() == family)
+            index = i;
+    for (int i = count() - 1; i >= 0 && index < 0; --i)
+        if (itemData(i).toString().compare(family, Qt::CaseInsensitive) == 0)
             index = i;
     if (index < 0 && !family.isEmpty()) {
         insertItem(0, family, family);
         index = 0;
     }
+    m_current = family;
     setCurrentIndex(index);
+    if (index >= 0 && view())
+        view()->scrollTo(model()->index(index, 0));
 }
 
 void FontBox::rebuild()
@@ -77,8 +147,13 @@ void FontBox::rebuild()
         add(f);
     if (!recent.isEmpty())
         insertSeparator(count());
-    for (const QString& f : families(m_editor.document()))
+    QStringList all = families(m_editor.document());
+    for (const QString& f : all)
         add(f);
+    for (const QString& f : recent)
+        if (!all.contains(f))
+            all << f;
+    m_names->setStringList(all);
     if (!current.isEmpty())
         setCurrentFamily(current);
 }

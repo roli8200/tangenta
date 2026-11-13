@@ -66,6 +66,7 @@ public:
         int frame = -1; // -1 = im Überlauf, nicht sichtbar
         QPointF top;
         double height = 0.0;
+        double baseline = 0.0; // Grundlinie der Zeile (y)
     };
     Caret caret(int position) const;
     // Textposition an einer Stelle im Rahmen

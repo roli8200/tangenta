@@ -1,5 +1,9 @@
 #include "ColorPalette.h"
 
+#include <QApplication>
+#include <QDrag>
+#include <QMimeData>
+
 #include "Palette.h"
 
 #include <QFrame>
@@ -322,13 +326,38 @@ void ColorPalette::mousePressEvent(QMouseEvent* e)
         scrollBy(1);
         return;
     }
-    const int i = swatchAt(pos);
-    if (i >= 0)
-        choose(i, e->button());
+    // Gewählt wird beim Loslassen, damit ein Farbfeld auch gezogen werden kann
+    m_pressed = swatchAt(pos);
+    m_pressButton = e->button();
+    m_pressPos = pos;
+}
+
+void ColorPalette::mouseReleaseEvent(QMouseEvent* e)
+{
+    const int i = m_pressed;
+    m_pressed = -1;
+    if (i >= 0 && e->button() == m_pressButton)
+        choose(i, m_pressButton);
 }
 
 void ColorPalette::mouseMoveEvent(QMouseEvent* e)
 {
+    if (m_pressed >= 0 && m_pressButton == Qt::LeftButton && (e->buttons() & Qt::LeftButton)
+        && (e->position().toPoint() - m_pressPos).manhattanLength() >= QApplication::startDragDistance()) {
+        const std::optional<Color> c = m_colors[static_cast<std::size_t>(m_pressed)];
+        m_pressed = -1;
+        if (c) {
+            auto* drag = new QDrag(this);
+            auto* mime = new QMimeData;
+            mime->setColorData(c->toQColor());
+            drag->setMimeData(mime);
+            QPixmap pm(Cell, Cell);
+            pm.fill(c->toQColor());
+            drag->setPixmap(pm);
+            drag->exec(Qt::CopyAction);
+        }
+        return;
+    }
     const int i = swatchAt(e->position().toPoint());
     if (i != m_hover) {
         m_hover = i;

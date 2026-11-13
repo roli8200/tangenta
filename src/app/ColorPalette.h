@@ -13,6 +13,7 @@ namespace vek {
 // Pfeilen oder dem Mausrad rollbar. Der Knopf oben klappt sie auf; dann liegen alle
 // Farben spaltenweise (von oben nach unten) nebeneinander.
 // Linksklick = Füllung, Rechtsklick = Kontur; das Feld mit dem Kreuz steht für "keine".
+// Ein Farbfeld lässt sich auf die Zeichenfläche ziehen (Objekt füllen, Verlaufsknoten färben).
 class ColorPalette : public QWidget {
     Q_OBJECT
 
@@ -41,6 +42,7 @@ protected:
     void paintEvent(QPaintEvent*) override;
     void mousePressEvent(QMouseEvent* e) override;
     void mouseMoveEvent(QMouseEvent* e) override;
+    void mouseReleaseEvent(QMouseEvent* e) override;
     void wheelEvent(QWheelEvent* e) override;
     void leaveEvent(QEvent*) override;
     void resizeEvent(QResizeEvent*) override;
@@ -60,6 +62,10 @@ private:
     std::vector<std::optional<Color>> m_colors;
     int m_first = 0;
     int m_hover = -1;
+    // Gedrücktes Farbfeld: beim Loslassen gewählt, beim Ziehen als Farbe auf die Zeichenfläche
+    int m_pressed = -1;
+    Qt::MouseButton m_pressButton = Qt::NoButton;
+    QPoint m_pressPos;
 };
 
 // Zeichnet ein Farbfeld wie in der Leiste (für Leiste und aufgeklappte Ansicht)

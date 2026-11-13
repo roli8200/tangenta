@@ -27,6 +27,7 @@ public:
     void mouseRelease(QMouseEvent* event, const QPointF& doc) override;
     void mouseDoubleClick(QMouseEvent* event, const QPointF& doc) override;
     bool keyPress(QKeyEvent* event) override;
+    bool claimsKey(const QKeyEvent* event) const override;
     void paintOverlay(QPainter& p) override;
 
     int pendingNodes() const { return int(m_nodes.size()); }

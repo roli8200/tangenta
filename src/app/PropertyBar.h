@@ -37,6 +37,8 @@ signals:
     void editBitmapRequested();
     void traceRequested(int preset, bool quick);
     void alignDialogRequested();
+    // Befehlsknopf eines Objekttyps (PropertyDescriptor::Kind::Action), z.B. "qrEdit"
+    void objectActionRequested(const QString& id);
 
 private:
     void rebuild();
@@ -105,7 +107,6 @@ private:
     QString m_signature;
     QList<std::function<void()>> m_refreshers;
     bool m_lockRatio = true;
-    bool m_allPages = true; // Seitengrösse gilt für alle Seiten oder nur die aktuelle
 };
 
 } // namespace vek

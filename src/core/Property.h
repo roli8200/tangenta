@@ -30,6 +30,7 @@ struct PropertyDescriptor {
     double maximum = 100000.0;
     bool stackWithNext = false; // mit der nächsten Eigenschaft übereinander anordnen (wie x/y)
     bool separatorBefore = false;
+    int textWidth = 70; // nur Text: Breite des Feldes in Pixeln
 };
 
 } // namespace vek

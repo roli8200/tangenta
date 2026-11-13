@@ -4,6 +4,7 @@
 #include "Options.h"
 #include "PathOps.h"
 
+#include <algorithm>
 #include <cmath>
 #include <numbers>
 
@@ -42,6 +43,44 @@ void simplify(const QList<QPointF>& in, int first, int last, double tolerance, Q
     } else {
         out.append(b);
     }
+}
+
+// Freihandglättung: Strich in gleichen Abständen (step) neu abtasten und mit einem gleitenden Mittel über
+// radius glätten. Die Enden bleiben stehen, das Fenster wird dort entsprechend kleiner. Ohne diesen Schritt
+// erzeugt das Zittern der Hand an jedem Mauspunkt einen Knick und damit eine Ecke.
+QList<QPointF> smoothStroke(const QList<QPointF>& in, double step, double radius)
+{
+    if (in.size() < 3 || step <= 0.0 || radius < step)
+        return in;
+    QList<QPointF> even{in.first()};
+    double carry = 0.0;
+    for (int i = 1; i < in.size(); ++i) {
+        const QPointF a = in[i - 1];
+        const QPointF b = in[i];
+        const double len = distance(a, b);
+        double t = step - carry;
+        while (t <= len) {
+            even.append(a + (b - a) * (t / len));
+            t += step;
+        }
+        carry = len - (t - step);
+    }
+    if (distance(even.last(), in.last()) > step * 0.25)
+        even.append(in.last());
+    else
+        even.last() = in.last();
+    const int n = int(even.size());
+    const int window = std::max(1, int(std::lround(radius / step)));
+    QList<QPointF> out;
+    out.reserve(n);
+    for (int i = 0; i < n; ++i) {
+        const int w = std::min({window, i, n - 1 - i});
+        QPointF sum;
+        for (int k = i - w; k <= i + w; ++k)
+            sum += even[k];
+        out.append(sum / double(2 * w + 1));
+    }
+    return out;
 }
 
 } // namespace
@@ -149,11 +188,18 @@ void FreehandTool::mouseRelease(QMouseEvent* event, const QPointF& doc)
     if (m_freehand) {
         m_freehand = false;
         m_stroke.append(doc);
-        QList<QPointF> points{m_stroke.first()};
-        // Freihandglättung 0..100 (50 = 1,5 px Abweichung)
-        const double smoothing = Options::instance().number(QStringLiteral("ws/tools/freehand/smoothing"));
-        simplify(m_stroke, 0, int(m_stroke.size()) - 1, m_canvas.pixelsToDoc(0.1 + smoothing / 100.0 * 2.8), points);
+        // Freihandglättung 0..100: glätten (bis 18 px Fenster), dann nur fast gerade Zwischenpunkte weglassen;
+        // die Kurvenanpassung in commit() darf mit der Glättung mehr abweichen und setzt erst bei stärkeren
+        // Knicken Ecken, braucht so weniger Knoten
+        const double smoothing = Options::instance().number(QStringLiteral("ws/tools/freehand/smoothing")) / 100.0;
+        const QList<QPointF> smooth = smoothStroke(m_stroke, m_canvas.pixelsToDoc(1.5), m_canvas.pixelsToDoc(18.0 * smoothing));
+        QList<QPointF> points{smooth.first()};
+        simplify(smooth, 0, int(smooth.size()) - 1, m_canvas.pixelsToDoc(0.1), points);
+        m_fitSlack = m_canvas.pixelsToDoc(5.0 * smoothing);
+        m_cornerSlack = 40.0 * smoothing;
         commit(points);
+        m_fitSlack = 0.0;
+        m_cornerSlack = 0.0;
         m_stroke.clear();
         return;
     }
@@ -218,8 +264,9 @@ void FreehandTool::commit(const QList<QPointF>& points)
             QList<QPointF> fit = points;
             if (close)
                 fit.removeLast();
-            path = pathops::fitPolyline(fit, close, m_canvas.pixelsToDoc(0.3 * o.number(QStringLiteral("ws/tools/freehand/straight"))),
-                                        10.0 + 6.0 * o.number(QStringLiteral("ws/tools/freehand/corner")));
+            path = pathops::fitPolyline(fit, close,
+                                        m_canvas.pixelsToDoc(0.3 * o.number(QStringLiteral("ws/tools/freehand/straight"))) + m_fitSlack,
+                                        std::min(89.0, 10.0 + 6.0 * o.number(QStringLiteral("ws/tools/freehand/corner")) + m_cornerSlack));
         } else {
             for (const QPointF& p : points)
                 path.nodes.append(CurveNode{p});

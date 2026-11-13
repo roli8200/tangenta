@@ -26,6 +26,7 @@
 #include "PipetteTools.h"
 #include "PerspectiveTool.h"
 #include "ShadowTool.h"
+#include "BlockShadowTool.h"
 #include "InteractiveTools.h"
 #include "Options.h"
 #include "SuperClipBar.h"
@@ -34,16 +35,27 @@
 #include "Outline.h"
 #include "PathOps.h"
 #include "PickTool.h"
+#include "QrCodeObject.h"
 #include "ShapeTool.h"
 #include "RectangleTool.h"
 #include "TextObject.h"
 #include "TextTool.h"
 #include "ZoomTool.h"
+#include "ObjectManager.h"
+#include "PageLayout.h"
+#include "Transaction.h"
+#include "Serialization.h"
+#include "BitmapEffect.h"
+#include <QCryptographicHash>
+#include <QJsonDocument>
 
 #include <QFile>
+#include <QHash>
+#include <QPainterPathStroker>
 #include <QFileInfo>
 #include <QImageReader>
 #include <QMimeData>
+#include <QPaintEngine>
 #include <QPaintEvent>
 #include <QScreen>
 #include <QWheelEvent>
@@ -52,6 +64,8 @@
 #include <QtMath>
 
 #include <algorithm>
+#include <array>
+#include <functional>
 #include <cmath>
 
 namespace vek {
@@ -128,6 +142,7 @@ Canvas::Canvas(Editor& editor, QWidget* parent)
     m_tools[static_cast<std::size_t>(ToolId::AttributePipette)] = std::make_unique<AttributePipetteTool>(*this);
     m_tools[static_cast<std::size_t>(ToolId::Perspective)] = std::make_unique<PerspectiveTool>(*this);
     m_tools[static_cast<std::size_t>(ToolId::DropShadow)] = std::make_unique<ShadowTool>(*this);
+    m_tools[static_cast<std::size_t>(ToolId::BlockShadow)] = std::make_unique<BlockShadowTool>(*this);
     m_tools[static_cast<std::size_t>(ToolId::Blend)] = std::make_unique<BlendTool>(*this);
     m_tools[static_cast<std::size_t>(ToolId::Contour)] = std::make_unique<ContourTool>(*this);
     m_tools[static_cast<std::size_t>(ToolId::Distort)] = std::make_unique<DistortTool>(*this);
@@ -143,8 +158,26 @@ Canvas::Canvas(Editor& editor, QWidget* parent)
     setAttribute(Qt::WA_OpaquePaintEvent);
     setAcceptDrops(true); // Bilder aus dem Dateimanager oder Browser hineinziehen
     auto refresh = [this] { update(); };
-    connect(&m_editor, &Editor::documentChanged, this, [this] { m_effectCache.clear(); });
-    connect(&m_editor, &Editor::documentReplaced, this, [this] { m_effectCache.clear(); });
+    // Mehrseitenansicht: Ansicht vor allen anderen Empfängern nachführen
+    connect(&m_editor, &Editor::documentChanged, this, &Canvas::syncLayoutOrigin);
+    connect(&m_editor, &Editor::currentPageChanged, this, [this] {
+        syncLayoutOrigin();
+        m_pageSelected = false;
+    });
+    connect(&m_editor, &Editor::documentReplaced, this, [this] {
+        m_layoutMulti = false;
+        m_pageSelected = false;
+        syncLayoutOrigin();
+    });
+    connect(&m_editor, &Editor::documentChanged, this, [this] {
+        m_effectCache.clear();
+        m_fxKeys.clear();
+    });
+    connect(&m_editor, &Editor::documentReplaced, this, [this] {
+        m_effectCache.clear();
+        m_fxKeys.clear();
+        m_fxCache.clear();
+    });
     connect(&m_editor, &Editor::documentChanged, this, refresh);
     connect(&m_editor, &Editor::guideSelectionChanged, this, refresh);
     connect(&m_editor, &Editor::selectionChanged, this, refresh);
@@ -314,7 +347,7 @@ void Canvas::resizeEvent(QResizeEvent*)
 {
     if (m_fitPending && width() > 0 && height() > 0) {
         m_fitPending = false;
-        fitPage();
+        multiPageView() ? fitAllPages() : fitPage();
     }
     emit viewChanged();
 }
@@ -323,7 +356,7 @@ void Canvas::paintEvent(QPaintEvent*)
 {
     if (m_fitPending && isVisible()) {
         m_fitPending = false;
-        fitPage();
+        multiPageView() ? fitAllPages() : fitPage();
     }
     QPainter p(this);
     p.fillRect(rect(), kDesktop);
@@ -336,6 +369,11 @@ void Canvas::paintEvent(QPaintEvent*)
     // Kantenglättung nur in Erweitert (und im Pixelmodus über das Zwischenbild)
     const bool draft = mode != ViewMode::Enhanced;
     // Doppelseiten: Partnerseite daneben (nur Anzeige; Klick darauf wechselt die Seite)
+    // Mehrseitenansicht: alle übrigen Seiten an ihrer Lage im Arbeitsbereich
+    const bool multi = multiPageView();
+    const QList<QRectF> layout = multi ? pageLayout() : QList<QRectF>();
+    if (multi)
+        paintOtherPages(p, layout);
     const auto [partner, partnerOffset] = facingPartner();
     if (partner >= 0) {
         const QRectF partnerRect = pageRect.translated(partnerOffset * m_zoom, 0);
@@ -399,10 +437,18 @@ void Canvas::paintEvent(QPaintEvent*)
         p.drawRect(pageRect);
     }
 
+    if (multi)
+        paintPageLabels(p, layout);
     paintSuperClipEdit(p);
     paintGuides(p);
     p.setRenderHint(QPainter::Antialiasing);
     tool()->paintOverlay(p);
+    // Seitengrösse ziehen: neue Seitenfläche gestrichelt
+    if (m_pageDragRect) {
+        p.setPen(QPen(previewColor(), 1, Qt::DashLine));
+        p.setBrush(Qt::NoBrush);
+        p.drawRect(viewTransform().mapRect(*m_pageDragRect));
+    }
     updateClipBar();
 }
 
@@ -538,7 +584,7 @@ void Canvas::paintBackground(QPainter& p, const QRectF& pageRect) const
 std::pair<int, double> Canvas::facingPartner() const
 {
     const Options& opt = Options::instance();
-    if (!opt.flag(QStringLiteral("doc/layout/facing")) || m_rendering)
+    if (!opt.flag(QStringLiteral("doc/layout/facing")) || m_rendering || multiPageView())
         return {-1, 0.0};
     const int n = m_editor.currentPageIndex();
     const int count = m_editor.document().pageCount();
@@ -789,30 +835,62 @@ void Canvas::paintObject(QPainter& p, const DrawObject& o) const
         p.strokePath(screen, QPen(m_wireLens->first, 1.0));
         return;
     }
-    if (o.shadow().active && viewMode() != ViewMode::Draft)
-        paintShadow(p, o, o.shadow());
-    // Extrusion und Kontur: hinten liegende Teile vor dem Objekt zeichnen
-    if (o.extrusion().active) {
-        p.save();
-        p.setRenderHint(QPainter::Antialiasing);
-        for (const auto& [poly, color] : extrusionFaces(o, o.extrusion())) {
-            p.setPen(QPen(color.darker(130), 0));
-            p.setBrush(color);
-            p.drawPolygon(viewTransform().map(poly));
+    paintUnderlay(p, o);
+    // Gedrehte Extrusion: vordere Flächen über dem Objekt, das Objekt selbst projektiv verzerrt
+    struct FrontFaces {
+        const Canvas* canvas;
+        QPainter& p;
+        QList<ExtrusionFace> faces;
+        ~FrontFaces()
+        {
+            if (faces.isEmpty())
+                return;
+            p.save();
+            p.setRenderHint(QPainter::Antialiasing);
+            for (const ExtrusionFace& f : std::as_const(faces)) {
+                if (!f.front)
+                    continue;
+                p.setPen(QPen(f.color.darker(130), 0));
+                p.setBrush(f.color);
+                p.drawPolygon(canvas->viewTransform().map(f.polygon));
+            }
+            p.restore();
         }
-        p.restore();
+    } frontFaces{this, p, {}};
+    struct Warp {
+        const Canvas* canvas;
+        QPainter& p;
+        bool on = false;
+        ~Warp()
+        {
+            if (on) {
+                p.restore();
+                --canvas->m_warp;
+            }
+        }
+    } warp{this, p};
+    if (o.extrusion().active && o.extrusion().isRotated()) {
+        frontFaces.faces = extrusionModel(o, o.extrusion());
+        const QTransform face = o.extrusion().faceTransform(o.boundingRect().center());
+        p.save();
+        p.setTransform(viewTransform().inverted() * face * viewTransform(), true);
+        warp.on = true;
+        ++m_warp;
     }
     QList<ContourStep> contour;
-    if (o.contour().active) {
+    if (o.contour().active)
         contour = contourSteps(o, o.contour());
-        for (const ContourStep& s : std::as_const(contour)) {
-            if (s.front)
-                continue;
-            p.fillPath(viewTransform().map(s.path), s.fill.toQColor());
-            if (s.stroke)
-                p.strokePath(viewTransform().map(s.path), QPen(s.stroke->toQColor(), std::max(1.0, o.style().strokeWidth * m_zoom)));
+    // Innenschatten über allem, was zum Objekt gehört (auch über den inneren Konturstufen)
+    struct Inner {
+        const Canvas* canvas;
+        QPainter& p;
+        const DrawObject& o;
+        ~Inner()
+        {
+            if (o.shadow().active && o.shadow().inner && canvas->m_noInner != &o && canvas->viewMode() != ViewMode::Draft)
+                canvas->paintInnerShadow(p, o, o.shadow());
         }
-    }
+    } inner{this, p, o};
     struct FrontContour {
         const Canvas* canvas;
         QPainter& p;
@@ -844,15 +922,28 @@ void Canvas::paintObject(QPainter& p, const DrawObject& o) const
     const bool draft = !m_rendering && (viewMode() == ViewMode::Draft || viewMode() == ViewMode::Normal);
     const bool blurred = blur.isActive() && !draft;
     const bool transparent = alpha.isActive() && !draft;
-    if (!blurred && !transparent) {
-        paintObjectSharp(p, o);
+    const BlendMode blend = draft ? BlendMode::Normal : o.blendMode();
+    if (!blurred && !transparent && blend == BlendMode::Normal) {
+        paintObjectBody(p, o);
         return;
     }
-    if (!blurred && alpha.type == Ramp::Type::Uniform) {
+    if (blend != BlendMode::Normal && !blurred && (!transparent || alpha.type == Ramp::Type::Uniform)
+        && !node_cast<GroupObject>(&o) && !node_cast<SuperClipObject>(&o) && !node_cast<BlendObject>(&o)) {
+        // SVG: einfache Objekte bleiben Vektoren und bekommen mix-blend-mode
+        const double op = p.opacity() * (transparent ? std::clamp(1.0 - alpha.from / 100.0, 0.0, 1.0) : 1.0);
+        if (const std::optional<double> mark = svgBlendMark(p, op, blend)) {
+            p.save();
+            p.setOpacity(*mark);
+            paintObjectBody(p, o);
+            p.restore();
+            return;
+        }
+    }
+    if (!blurred && blend == BlendMode::Normal && alpha.type == Ramp::Type::Uniform) {
         // Gleichmässige Transparenz: einfach mit geringerer Deckkraft malen
         p.save();
         p.setOpacity(p.opacity() * std::clamp(1.0 - alpha.from / 100.0, 0.0, 1.0));
-        paintObjectSharp(p, o);
+        paintObjectBody(p, o);
         p.restore();
         return;
     }
@@ -861,8 +952,12 @@ void Canvas::paintObject(QPainter& p, const DrawObject& o) const
     const double sigma = blur.maximum() * m_zoom;
     const double reach = 3.0 * sigma;
     const double pad = reach + std::max(1.0, o.style().strokeWidth * m_zoom);
-    QRectF area = viewTransform().mapRect(o.boundingRect()).adjusted(-pad, -pad, pad, pad);
-    area = area.intersected(paintArea().adjusted(-reach, -reach, reach, reach));
+    // Bitmap-Effekte reichen über das Objekt hinaus: ihr Rasterbild bestimmt die Fläche
+    const QRectF objectArea = showsBitmapEffects(o) ? liveEffectRaster(o).rect : o.boundingRect();
+    QRectF area = viewTransform().mapRect(objectArea).adjusted(-pad, -pad, pad, pad);
+    // Verzerrt (gedrehte Extrusion) liegt das Sichtbare anderswo: grosszügig begrenzen
+    const QRectF visible = paintArea().adjusted(-reach, -reach, reach, reach);
+    area = area.intersected(m_warp > 0 ? visible.adjusted(-visible.width(), -visible.height(), visible.width(), visible.height()) : visible);
     if (area.isEmpty())
         return;
     const QRect target = area.toAlignedRect();
@@ -872,7 +967,7 @@ void Canvas::paintObject(QPainter& p, const DrawObject& o) const
     if (!preview && !m_rendering) {
         const auto it = m_effectCache.constFind(o.id());
         if (it != m_effectCache.constEnd() && it->target == target && it->view == viewTransform() && it->dpr == deviceDpr) {
-            p.drawImage(target.topLeft(), it->image);
+            drawBlended(p, it->image, target.topLeft(), blend, o, Backdrop::Underlay);
             return;
         }
     }
@@ -884,7 +979,7 @@ void Canvas::paintObject(QPainter& p, const DrawObject& o) const
         QPainter ip(&image);
         ip.setRenderHints(p.renderHints());
         ip.translate(-target.topLeft());
-        paintObjectSharp(ip, o);
+        paintObjectBody(ip, o);
     }
     // Pixelmitte -> lokale Koordinaten des Objekts, für die Verläufe
     const QTransform toLocal = (o.transform() * viewTransform()).inverted();
@@ -903,13 +998,122 @@ void Canvas::paintObject(QPainter& p, const DrawObject& o) const
     if (preview) {
         p.save();
         p.setRenderHint(QPainter::SmoothPixmapTransform);
-        p.drawImage(QRectF(target), image);
+        drawBlended(p, image, target.topLeft(), blend, o, Backdrop::Underlay);
         p.restore();
         return;
     }
-    p.drawImage(target.topLeft(), image);
+    drawBlended(p, image, target.topLeft(), blend, o, Backdrop::Underlay);
     if (!m_rendering)
         m_effectCache.insert(o.id(), EffectCache{image, target, viewTransform(), deviceDpr});
+}
+
+// --- Bitmap-Effekte (Effektstapel) ----------------------------------------------------------
+
+bool Canvas::showsBitmapEffects(const DrawObject& o) const
+{
+    // Entwurfsansicht rechnet keine Effekte; Drahtmodell kommt gar nicht bis hierher
+    return o.hasBitmapEffects() && (m_rendering || viewMode() != ViewMode::Draft);
+}
+
+QByteArray Canvas::fxKey(const DrawObject& o) const
+{
+    // Nur Objekte im Dokument merken sich ihren Schlüssel (Klon-Ansichten sind Wegwerfobjekte)
+    const bool inDocument = o.id() != InvalidNodeId && m_editor.document().find(o.id()) == &o;
+    if (inDocument)
+        if (const auto it = m_fxKeys.constFind(o.id()); it != m_fxKeys.constEnd())
+            return *it;
+    const QByteArray key = QCryptographicHash::hash(QJsonDocument(serial::toJson(o)).toJson(QJsonDocument::Compact), QCryptographicHash::Md5);
+    if (inDocument)
+        m_fxKeys.insert(o.id(), key);
+    return key;
+}
+
+Canvas::EffectRaster Canvas::rasterizeWithEffects(const DrawObject& o, double pxPerMm, int count, bool silhouette) const
+{
+    const QList<BitmapEffect> stack = count < 0 ? o.bitmapEffects() : o.bitmapEffects().mid(0, count);
+    // Rand für Kontur (Gehrung) und für Effekte, die über das Objekt hinaus wirken
+    const double strokePad = o.style().stroke && !silhouette ? o.style().strokeWidth * 2.0 : 0.0;
+    const double pad = strokePad + fx::margin(stack) / fx::referencePxPerMm();
+    QRectF rect = o.boundingRect().adjusted(-pad, -pad, pad, pad);
+    if (rect.width() <= 0.0 || rect.height() <= 0.0 || pxPerMm <= 0.0)
+        return {};
+    // Höchstens ~24 Megapixel; sehr grosse Objekte werden gröber gerastert
+    constexpr double kMaxPixels = 24e6;
+    double r = pxPerMm;
+    if (rect.width() * rect.height() * r * r > kMaxPixels)
+        r = std::sqrt(kMaxPixels / (rect.width() * rect.height()));
+    const QSize size(std::max(1, int(std::ceil(rect.width() * r))), std::max(1, int(std::ceil(rect.height() * r))));
+    rect.setSize(QSizeF(size) / r);
+    QImage image(size, QImage::Format_ARGB32_Premultiplied);
+    image.fill(Qt::transparent);
+    {
+        // Ansicht vorübergehend auf das Bild umstellen (wie renderPage)
+        auto* self = const_cast<Canvas*>(this);
+        struct Restore {
+            Canvas* c;
+            double zoom;
+            QPointF origin;
+            std::optional<QRectF> area;
+            bool rendering;
+            ~Restore()
+            {
+                c->m_zoom = zoom;
+                c->m_origin = origin;
+                c->m_renderArea = area;
+                c->m_rendering = rendering;
+            }
+        } restore{self, m_zoom, m_origin, m_renderArea, m_rendering};
+        self->m_zoom = r;
+        self->m_origin = -rect.topLeft() * r;
+        m_renderArea = QRectF(QPointF(0, 0), QSizeF(size));
+        m_rendering = true;
+        QPainter ip(&image);
+        ip.setRenderHint(QPainter::Antialiasing);
+        if (silhouette)
+            ip.fillPath(viewTransform().map(o.path()), Qt::black);
+        else
+            paintObjectSharp(ip, o);
+    }
+    return {fx::applyStack(image, stack, r / fx::referencePxPerMm()), rect};
+}
+
+Canvas::EffectRaster Canvas::liveEffectRaster(const DrawObject& o, bool silhouette) const
+{
+    // Ausgabe: in deren Auflösung (höchstens 600 dpi). Bildschirm: Zoomstufe auf die nächste
+    // Zweierpotenz aufgerundet, höchstens doppelte Referenzauflösung, damit nicht jeder
+    // Zoomschritt neu rechnet
+    double r = m_zoom;
+    if (m_output) {
+        r = std::min(m_zoom, 600.0 / 25.4);
+    } else {
+        const double wanted = std::max(1e-3, m_zoom * (m_rendering ? 1.0 : devicePixelRatioF()));
+        r = std::clamp(std::pow(2.0, std::ceil(std::log2(wanted))), 0.25, 2.0 * fx::referencePxPerMm());
+    }
+    if (m_output)
+        return rasterizeWithEffects(o, r, -1, silhouette);
+    const quint64 slot = (quint64(o.id()) << 1) | (silhouette ? 1u : 0u);
+    const QByteArray key = fxKey(o);
+    if (const auto it = m_fxCache.constFind(slot); it != m_fxCache.constEnd() && it->key == key && it->pxPerMm == r)
+        return it->raster;
+    const EffectRaster raster = rasterizeWithEffects(o, r, -1, silhouette);
+    if (o.id() != InvalidNodeId)
+        m_fxCache.insert(slot, FxCache{key, r, raster});
+    return raster;
+}
+
+void Canvas::paintObjectBody(QPainter& p, const DrawObject& o) const
+{
+    if (!showsBitmapEffects(o)) {
+        paintObjectSharp(p, o);
+        return;
+    }
+    const EffectRaster raster = liveEffectRaster(o);
+    if (raster.image.isNull())
+        return;
+    p.save();
+    p.setRenderHint(QPainter::SmoothPixmapTransform);
+    p.drawImage(viewTransform().mapRect(raster.rect), raster.image);
+    p.restore();
 }
 
 namespace {
@@ -1060,6 +1264,9 @@ void Canvas::paintLens(QPainter& p, const DrawObject& o) const
                     line[x] = reinterpret_cast<const QRgb*>(src.constScanLine(sy))[sx];
                 }
             }
+        } else if (lens.type == Lens::Type::BitmapEffect) {
+            // Bitmap-Effekt: Filter auf das, was unter der Linse liegt
+            below = lens.applyBitmapEffect(below, m_zoom * dpr);
         } else if (lens.changesColor()) {
             for (int y = 0; y < below.height(); ++y) {
                 auto* line = reinterpret_cast<QRgb*>(below.scanLine(y));
@@ -1110,7 +1317,9 @@ QList<Canvas::ContourStep> Canvas::contourSteps(const DrawObject& o, const Conto
         QPainterPathStroker st;
         st.setWidth(2.0 * d);
         st.setJoinStyle(Qt::RoundJoin);
-        return base.united(st.createStroke(base)).simplified();
+        // Zackige Umrisse (vektorisierte Bilder) hinterlassen beim Vereinigen feine Schlitze und
+        // Löcher, die ein echter Abstand d nie hat: alles schmaler als d/4 schliessen
+        return pathops::withoutHoles(base.united(st.createStroke(base)).simplified(), d / 4.0);
     };
     auto shrunk = [&base](double d) {
         QPainterPathStroker st;
@@ -1143,9 +1352,60 @@ QList<Canvas::ContourStep> Canvas::contourSteps(const DrawObject& o, const Conto
     return steps;
 }
 
+QPainterPath Canvas::objectArea(const DrawObject& o, bool withOutline)
+{
+    QPainterPath shape;
+    if (const auto* text = node_cast<TextObject>(&o)) {
+        for (const TextObject::Piece& piece : text->shownPieces())
+            shape.addPath(o.transform().map(piece.path));
+    } else {
+        shape = o.path();
+    }
+    shape.setFillRule(Qt::WindingFill);
+    const Style& st = o.style();
+    if (withOutline && st.stroke && st.strokeWidth > 0) {
+        QPainterPathStroker stroker;
+        stroker.setWidth(st.strokeWidth);
+        stroker.setJoinStyle(st.join == Style::Join::Round ? Qt::RoundJoin : st.join == Style::Join::Bevel ? Qt::BevelJoin : Qt::MiterJoin);
+        stroker.setCapStyle(Qt::FlatCap);
+        QPainterPath stroke = stroker.createStroke(shape);
+        stroke.setFillRule(Qt::WindingFill);
+        // Ungefüllte offene Linien: nur die Kontur zählt
+        shape = (st.fill.isNone() ? stroke : shape.united(stroke)).simplified();
+    }
+    return shape;
+}
+
+QPainterPath Canvas::blockShadowShape(const DrawObject& o, const BlockShadow& s)
+{
+    struct Entry {
+        QPainterPath area;
+        BlockShadow settings;
+        QPainterPath result;
+    };
+    // Kleiner Zwischenspeicher je Objekt (Zeiger + Kennung); geprüft wird am Inhalt
+    static QHash<quintptr, Entry> cache;
+    const QPainterPath area = objectArea(o, s.useOutline);
+    const quintptr key = quintptr(&o) ^ (quintptr(o.id()) << 1);
+    auto it = cache.find(key);
+    if (it != cache.end() && it->settings == s && it->area == area)
+        return it->result;
+    if (cache.size() > 256)
+        cache.clear();
+    QPainterPath result = blockShadowPath(area, s);
+    cache.insert(key, Entry{area, s, result});
+    return result;
+}
+
 QList<std::pair<QPolygonF, QColor>> Canvas::extrusionFaces(const DrawObject& o, const Extrusion& e)
 {
     QList<std::pair<QPolygonF, QColor>> faces;
+    if (e.isRotated()) {
+        for (const ExtrusionFace& f : extrusionModel(o, e))
+            if (!f.front)
+                faces << std::pair{f.polygon, f.color};
+        return faces;
+    }
     const QPointF center = o.boundingRect().center();
     const QPointF vp = center + e.vanish;
     const double f = std::clamp(e.depth, 0.0, 99.0) / 100.0;
@@ -1182,8 +1442,86 @@ QList<std::pair<QPolygonF, QColor>> Canvas::extrusionFaces(const DrawObject& o, 
     return faces;
 }
 
+QList<Canvas::ExtrusionFace> Canvas::extrusionModel(const DrawObject& o, const Extrusion& e)
+{
+    QList<ExtrusionFace> out;
+    if (!e.isRotated()) {
+        for (const auto& [poly, color] : extrusionFaces(o, e))
+            out << ExtrusionFace{poly, color, false};
+        return out;
+    }
+    // Gedreht: Flächen im Raum, nach Tiefe sortiert (Maleralgorithmus); was näher liegt als die
+    // Vorderfläche, kommt über das Objekt
+    const QPointF center = o.boundingRect().center();
+    double r[3][3];
+    e.rotation(r);
+    auto rotate = [&r](double x, double y, double z) {
+        return std::array<double, 3>{r[0][0] * x + r[0][1] * y + r[0][2] * z, r[1][0] * x + r[1][1] * y + r[1][2] * z,
+                                     r[2][0] * x + r[2][1] * y + r[2][2] * z};
+    };
+    const QColor base = e.color.toQColor();
+    const std::array<double, 3> depthAxis = rotate(0, 0, 1);
+    const double toLight = 1.0 / std::sqrt(3.0); // Licht von oben links vorn
+    QList<std::pair<double, ExtrusionFace>> faces;
+    double frontDepth = 0.0;
+    int frontCount = 0;
+    for (const QPolygonF& poly : o.path().toSubpathPolygons()) {
+        if (poly.size() < 2)
+            continue;
+        QPolygonF backFace;
+        double backDepth = 0.0;
+        QList<double> zFront, zBack;
+        QPolygonF front;
+        for (const QPointF& p : poly) {
+            double z0 = 0.0, z1 = 0.0;
+            front << e.project(center, p, 0.0, &z0);
+            backFace << e.project(center, p, 1.0, &z1);
+            zFront << z0;
+            zBack << z1;
+            backDepth += z1;
+            frontDepth += z0;
+            ++frontCount;
+        }
+        faces << std::pair{backDepth / poly.size(), ExtrusionFace{backFace, base.darker(150), false}};
+        const QPointF centroid = poly.boundingRect().center();
+        for (int i = 0; i + 1 < poly.size(); ++i) {
+            const QPointF a = poly[i], b = poly[i + 1];
+            if (QLineF(a, b).length() < 1e-9)
+                continue;
+            const QPolygonF quad({front[i], front[i + 1], backFace[i + 1], backFace[i]});
+            QColor c = base;
+            if (e.shade) {
+                // Aussennormale im Raum: Kante x Tiefenachse, von der Mitte weg
+                const std::array<double, 3> edge = rotate(b.x() - a.x(), b.y() - a.y(), 0);
+                std::array<double, 3> n{edge[1] * depthAxis[2] - edge[2] * depthAxis[1], edge[2] * depthAxis[0] - edge[0] * depthAxis[2],
+                                        edge[0] * depthAxis[1] - edge[1] * depthAxis[0]};
+                const QPointF mid = (a + b) / 2.0 - centroid;
+                const std::array<double, 3> m = rotate(mid.x(), mid.y(), 0);
+                if (n[0] * m[0] + n[1] * m[1] + n[2] * m[2] < 0)
+                    n = {-n[0], -n[1], -n[2]};
+                const double len = std::max(1e-12, std::sqrt(n[0] * n[0] + n[1] * n[1] + n[2] * n[2]));
+                const double light = -(n[0] + n[1] + n[2]) * toLight / len;
+                c = light > 0 ? base.lighter(100 + int(light * 40)) : base.darker(100 + int(-light * 50));
+            }
+            const double depth = (zFront[i] + zFront[i + 1] + zBack[i] + zBack[i + 1]) / 4.0;
+            faces << std::pair{depth, ExtrusionFace{quad, c, false}};
+        }
+    }
+    frontDepth /= std::max(1, frontCount);
+    std::stable_sort(faces.begin(), faces.end(), [](const auto& x, const auto& y) { return x.first > y.first; });
+    for (auto& [depth, face] : faces) {
+        face.front = depth < frontDepth;
+        out << face;
+    }
+    return out;
+}
+
 void Canvas::paintShadow(QPainter& p, const DrawObject& o, const DropShadow& s) const
 {
+    if (s.inner) {
+        paintInnerShadow(p, o, s);
+        return;
+    }
     // Silhouette (Fläche samt Kontur) in Seitenkoordinaten
     QPainterPath shape = o.path();
     if (const auto* text = node_cast<TextObject>(&o)) {
@@ -1230,22 +1568,314 @@ void Canvas::paintShadow(QPainter& p, const DrawObject& o, const DropShadow& s) 
         gaussianBlur(mask, sigma);
     p.save();
     p.setOpacity(p.opacity() * std::clamp(s.opacity / 100.0, 0.0, 1.0));
-    p.drawImage(target.topLeft(), mask);
+    drawBlended(p, mask, target.topLeft(), s.blend, o, Backdrop::Below);
     p.restore();
+}
+
+void Canvas::paintInnerShadow(QPainter& p, const DrawObject& o, const DropShadow& s) const
+{
+    // Fläche des Objekts (ohne Kontur) in Seitenkoordinaten
+    QPainterPath shape = o.path();
+    if (const auto* text = node_cast<TextObject>(&o)) {
+        shape = QPainterPath();
+        for (const TextObject::Piece& piece : text->shownPieces())
+            shape.addPath(o.transform().map(piece.path));
+    }
+    shape.setFillRule(Qt::WindingFill);
+    const QPainterPath screen = viewTransform().map(shape);
+    const double sigma = std::max(0.0, s.feather * m_zoom / 2.0);
+    const QPointF shift = s.offset * m_zoom;
+    QRectF area = screen.boundingRect().adjusted(-1, -1, 1, 1);
+    if (m_warp == 0)
+        area = area.intersected(paintArea());
+    if (area.isEmpty())
+        return;
+    // Ringsum so viel Rand, dass der Weichzeichner und der Versatz Farbe von aussen holen
+    const double pad = 3.0 * sigma + std::abs(shift.x()) + std::abs(shift.y()) + 2.0;
+    const QRect target = area.adjusted(-pad, -pad, pad, pad).toAlignedRect();
+    QImage mask(target.size().expandedTo(QSize(1, 1)), QImage::Format_ARGB32_Premultiplied);
+    mask.fill(s.color.toQColor());
+    {
+        // Ausserhalb der versetzten Form liegt Schatten
+        QPainter q(&mask);
+        q.setRenderHint(QPainter::Antialiasing);
+        q.translate(-target.topLeft());
+        q.setCompositionMode(QPainter::CompositionMode_Clear);
+        q.fillPath(screen.translated(shift), Qt::black);
+    }
+    if (sigma > 0.3)
+        gaussianBlur(mask, sigma);
+    {
+        // Auf die Form beschneiden: ausserhalb löschen
+        QPainter q(&mask);
+        q.setRenderHint(QPainter::Antialiasing);
+        q.translate(-target.topLeft());
+        q.setCompositionMode(QPainter::CompositionMode_Clear);
+        QPainterPath outside;
+        outside.addRect(QRectF(target).adjusted(-2, -2, 2, 2));
+        outside.addPath(screen);
+        outside.setFillRule(Qt::OddEvenFill);
+        q.fillPath(outside, Qt::black);
+    }
+    p.save();
+    p.setOpacity(p.opacity() * std::clamp(s.opacity / 100.0, 0.0, 1.0));
+    drawBlended(p, mask, target.topLeft(), s.blend, o, Backdrop::Whole);
+    p.restore();
+}
+
+void Canvas::paintUnderlay(QPainter& p, const DrawObject& o) const
+{
+    if (o.shadow().active && !o.shadow().inner && viewMode() != ViewMode::Draft)
+        paintShadow(p, o, o.shadow());
+    // Blockschatten: eine Vektorfläche hinter dem Objekt (bleibt im PDF/SVG ein Pfad)
+    if (o.blockShadow().active) {
+        const QPainterPath shape = blockShadowShape(o, o.blockShadow());
+        if (!shape.isEmpty()) {
+            p.save();
+            p.setRenderHint(QPainter::Antialiasing);
+            p.setPen(Qt::NoPen);
+            p.setBrush(o.blockShadow().color.toQColor());
+            p.drawPath(viewTransform().map(shape));
+            p.restore();
+        }
+    }
+    // Extrusion und Kontur: hinten liegende Teile vor dem Objekt zeichnen
+    if (o.extrusion().active) {
+        p.save();
+        p.setRenderHint(QPainter::Antialiasing);
+        for (const ExtrusionFace& f : extrusionModel(o, o.extrusion())) {
+            if (f.front)
+                continue;
+            p.setPen(QPen(f.color.darker(130), 0));
+            p.setBrush(f.color);
+            p.drawPolygon(viewTransform().map(f.polygon));
+        }
+        p.restore();
+    }
+    if (o.contour().active) {
+        const QList<ContourStep> contour = contourSteps(o, o.contour());
+        p.save();
+        if (o.extrusion().active && o.extrusion().isRotated())
+            p.setTransform(viewTransform().inverted() * o.extrusion().faceTransform(o.boundingRect().center()) * viewTransform(), true);
+        for (const ContourStep& s : contour) {
+            if (s.front)
+                continue;
+            p.fillPath(viewTransform().map(s.path), s.fill.toQColor());
+            if (s.stroke)
+                p.strokePath(viewTransform().map(s.path), QPen(s.stroke->toQColor(), std::max(1.0, o.style().strokeWidth * m_zoom)));
+        }
+        p.restore();
+    }
+}
+
+void Canvas::drawBlended(QPainter& p, const QImage& layer, const QPointF& topLeft, BlendMode mode, const DrawObject& o,
+                         Backdrop backdrop) const
+{
+    if (mode == BlendMode::Normal || layer.isNull()) {
+        p.drawImage(topLeft, layer);
+        return;
+    }
+    if (const std::optional<double> mark = svgBlendMark(p, p.opacity(), mode)) {
+        p.save();
+        p.setOpacity(*mark);
+        p.drawImage(topLeft, layer);
+        p.restore();
+        return;
+    }
+    QPaintEngine* engine = p.paintEngine();
+    if (engine && engine->type() == QPaintEngine::Raster) {
+        if (const std::optional<QPainter::CompositionMode> qt = blending::painterMode(mode)) {
+            p.save();
+            p.setCompositionMode(*qt);
+            p.drawImage(topLeft, layer);
+            p.restore();
+            return;
+        }
+        // Untergrund aus dem Gerät lesen und in Gerätepixeln mischen
+        QPaintDevice* dev = engine->paintDevice();
+        auto* image = dev && dev->devType() == QInternal::Image ? static_cast<QImage*>(dev) : nullptr;
+        auto* pixmap = dev && dev->devType() == QInternal::Pixmap ? static_cast<QPixmap*>(dev) : nullptr;
+        if (image || pixmap) {
+            const QTransform dt = p.deviceTransform();
+            const QRect bounds(QPoint(0, 0), image ? image->size() : pixmap->size());
+            const QRect r = dt.mapRect(QRectF(topLeft, layer.deviceIndependentSize())).toAlignedRect() & bounds;
+            if (r.isEmpty())
+                return;
+            const QImage back = image ? image->copy(r) : pixmap->copy(r).toImage();
+            QImage src(r.size(), QImage::Format_ARGB32_Premultiplied);
+            src.fill(Qt::transparent);
+            {
+                QPainter q(&src);
+                q.setRenderHint(QPainter::SmoothPixmapTransform);
+                q.setTransform(dt * QTransform::fromTranslate(-r.x(), -r.y()));
+                q.drawImage(topLeft, layer);
+            }
+            const QImage mixed = blending::layer(mode, src, back);
+            p.save();
+            p.resetTransform();
+            p.drawImage(r.topLeft(), mixed);
+            p.restore();
+            return;
+        }
+    }
+    // PDF, SVG, Drucker: Untergrund neu zeichnen, Ergebnis als Bild. Bei verzerrtem Maler
+    // (gedrehte Extrusion) passt der Untergrund nicht: dann ohne Mischmodus.
+    if (m_warp > 0) {
+        p.drawImage(topLeft, layer);
+        return;
+    }
+    // Rechenaufwand begrenzen (PDF mit 1200 dpi): höchstens 4 Mio. Bildpunkte
+    QImage source = layer;
+    const double pixels = double(layer.width()) * layer.height();
+    if (pixels > 4e6) {
+        const double k = std::sqrt(4e6 / pixels);
+        source = layer.scaled(std::max(1, int(layer.width() * k)), std::max(1, int(layer.height() * k)), Qt::IgnoreAspectRatio,
+                              Qt::SmoothTransformation);
+        source.setDevicePixelRatio(layer.devicePixelRatio() * source.width() / std::max(1, layer.width()));
+    }
+    QImage back(source.size(), QImage::Format_ARGB32_Premultiplied);
+    back.setDevicePixelRatio(source.devicePixelRatio());
+    back.fill(Qt::transparent);
+    {
+        QPainter q(&back);
+        q.setRenderHint(QPainter::Antialiasing);
+        q.translate(-topLeft);
+        paintBackdrop(q, o, backdrop);
+    }
+    p.drawImage(topLeft, blending::layer(mode, source, back));
+}
+
+void Canvas::beginSvgBlendModes() const
+{
+    m_svgBlend = QList<SvgBlendMark>();
+}
+
+std::optional<double> Canvas::svgBlendMark(const QPainter& p, double opacity, BlendMode mode) const
+{
+    const QString css = blending::cssName(mode);
+    if (!m_svgBlend || css.isEmpty() || !p.paintEngine() || p.paintEngine()->type() != QPaintEngine::SVG || m_svgBlend->size() >= 900)
+        return std::nullopt;
+    // Sechs gültige Stellen schreibt QSvgGenerator; 0,531001 … kommt als echte Deckkraft nicht vor
+    const double mark = 0.531 + 1e-6 * double(m_svgBlend->size() + 1);
+    m_svgBlend->append(SvgBlendMark{QString::number(mark), opacity, css});
+    return mark;
+}
+
+QByteArray Canvas::svgWithBlendModes(const QByteArray& svg) const
+{
+    QByteArray out = svg;
+    if (m_svgBlend) {
+        for (const SvgBlendMark& m : std::as_const(*m_svgBlend)) {
+            const QString with = (std::abs(m.opacity - 1.0) < 1e-9 ? QString() : QStringLiteral("opacity=\"%1\" ").arg(m.opacity))
+                                 + QStringLiteral("style=\"mix-blend-mode:%1\"").arg(m.css);
+            out.replace(QStringLiteral("opacity=\"%1\"").arg(m.mark).toUtf8(), with.toUtf8());
+        }
+    }
+    m_svgBlend.reset();
+    return out;
+}
+
+void Canvas::paintBackdrop(QPainter& q, const DrawObject& stop, Backdrop backdrop) const
+{
+    const Node* top = &stop;
+    while (top->parent() && !node_cast<Layer>(top->parent()))
+        top = top->parent();
+    const Node* pageNode = top->parent() ? top->parent()->parent() : nullptr;
+    const auto* ownPage = node_cast<Page>(pageNode);
+    const bool onMaster = pageNode == &m_editor.document().masterPage();
+    const QSizeF size = ownPage && !onMaster ? ownPage->size() : m_editor.currentPage().size();
+    paintBackground(q, viewTransform().mapRect(QRectF(QPointF(0, 0), size)));
+    auto paintStop = [&] {
+        if (backdrop == Backdrop::Whole) {
+            const DrawObject* before = m_noInner;
+            m_noInner = &stop;
+            paintObject(q, stop);
+            m_noInner = before;
+        } else if (backdrop == Backdrop::Underlay) {
+            paintUnderlay(q, stop);
+        }
+    };
+    // In d liegt stop: was davor gezeichnet wird
+    std::function<void(const DrawObject&)> into = [&](const DrawObject& d) {
+        if (d.shadow().active && !d.shadow().inner)
+            paintShadow(q, d, d.shadow());
+        auto children = [&](const QList<const DrawObject*>& list) {
+            for (const DrawObject* c : list) {
+                if (c == &stop) {
+                    paintStop();
+                    return;
+                }
+                if (c->isAncestorOf(&stop)) {
+                    into(*c);
+                    return;
+                }
+                paintObject(q, *c);
+            }
+        };
+        if (const auto* clip = node_cast<SuperClipObject>(&d)) {
+            const DrawObject* frame = clip->frame();
+            if (!frame)
+                return;
+            if (frame == &stop || frame->isAncestorOf(&stop)) {
+                children({frame});
+                return;
+            }
+            paintObject(q, *frame);
+            q.save();
+            q.setClipPath(viewTransform().map(frame->path()), Qt::IntersectClip);
+            children(clip->contents());
+            q.restore();
+            return;
+        }
+        if (node_cast<GroupObject>(&d)) {
+            QList<const DrawObject*> list;
+            for (int i = 0; i < d.childCount(); ++i)
+                if (const auto* c = node_cast<DrawObject>(d.child(i)))
+                    list << c;
+            children(list);
+        }
+    };
+    auto paintUntil = [&](const Page& page) {
+        for (int l = 0; l < page.childCount(); ++l) {
+            auto* layer = node_cast<Layer>(page.child(l));
+            if (!layer || !layer->visible() || (m_output && !layer->printable()))
+                continue;
+            for (int i = 0; i < layer->childCount(); ++i) {
+                if (layer->child(i) == top) {
+                    if (top == &stop)
+                        paintStop();
+                    else if (const auto* d = node_cast<DrawObject>(top))
+                        into(*d);
+                    return true;
+                }
+                if (auto* d = node_cast<DrawObject>(layer->child(i)); d && !m_hidden.contains(d->id()))
+                    paintObject(q, *d);
+            }
+        }
+        return false;
+    };
+    if (onMaster) {
+        paintUntil(m_editor.document().masterPage());
+        return;
+    }
+    if (paintUntil(m_editor.document().masterPage()))
+        return;
+    if (ownPage)
+        paintUntil(*ownPage);
 }
 
 void Canvas::paintBevel(QPainter& p, const DrawObject& o) const
 {
     const Bevel& bv = o.bevel();
     const QPainterPath screenPath = viewTransform().map(o.path());
-    const double widthPx = std::max(1.0, bv.width * m_zoom);
-    // Das Höhenfeld braucht die Kanten: sichtbarer Teil plus so viel Rand, wie der Weichzeichner reicht
-    const double reach = 2.0 * widthPx + 2.0;
+    double widthPx = std::max(1.0, bv.width * m_zoom);
+    // Das Höhenfeld braucht die Kanten: sichtbarer Teil plus so viel Rand, wie der Weichzeichner
+    // reicht; bis zur Mitte die ganze Form (begrenzt)
+    const double reach = bv.toCenter ? 3000.0 : 2.0 * widthPx + 2.0;
     QRectF area = screenPath.boundingRect().adjusted(-2, -2, 2, 2).intersected(paintArea().adjusted(-reach, -reach, reach, reach));
     if (area.isEmpty() || !area.intersects(paintArea()))
         return;
     const QRect target = area.toAlignedRect();
-    // Höhenfeld: weichgezeichnete Form, am Rand 0, innen ab der Breite 1
     QImage mask(target.size(), QImage::Format_Grayscale8);
     mask.fill(0);
     {
@@ -1254,8 +1884,56 @@ void Canvas::paintBevel(QPainter& p, const DrawObject& o) const
         q.translate(-target.topLeft());
         q.fillPath(screenPath, Qt::white);
     }
-    QImage height = mask.convertToFormat(QImage::Format_ARGB32_Premultiplied);
-    gaussianBlur(height, widthPx / 2.0);
+    // Höhenfeld 0..1: Abstand: weichgezeichnete Form (am Rand 0, innen ab der Breite 1);
+    // bis zur Mitte: Abstand zum Rand bezogen auf den grössten (Pyramide, First in der Mitte)
+    QList<float> field;
+    if (bv.toCenter) {
+        float maxD = 0.0f;
+        field = distanceToEdge(mask, &maxD);
+        if (maxD > 0.0f) {
+            for (float& d : field)
+                d /= maxD;
+            widthPx = maxD;
+            // Glätten (getrennter Kastenfilter, dreimal ≈ Gauss): sonst zeigen schräge Kanten
+            // Treppenstufen des Pixelrasters als Streifen und die Grate helle Linien
+            const int w = target.width(), h = target.height();
+            const int r = std::clamp(int(maxD / 30.0f), 2, 6);
+            QList<float> tmp(field.size());
+            auto boxPass = [r](const QList<float>& in, QList<float>& out, int len, int count, qsizetype step, qsizetype stride) {
+                for (int line = 0; line < count; ++line) {
+                    const qsizetype base = line * stride;
+                    double sum = 0;
+                    int n = 0;
+                    for (int k = 0; k < std::min(r, len); ++k, ++n)
+                        sum += in[base + k * step];
+                    for (int k = 0; k < len; ++k) {
+                        if (k + r < len) {
+                            sum += in[base + (k + r) * step];
+                            ++n;
+                        }
+                        if (k - r - 1 >= 0) {
+                            sum -= in[base + (k - r - 1) * step];
+                            --n;
+                        }
+                        out[base + k * step] = float(sum / n);
+                    }
+                }
+            };
+            for (int pass = 0; pass < 3; ++pass) {
+                boxPass(field, tmp, w, h, 1, w);
+                boxPass(tmp, field, h, w, w, 1);
+            }
+        }
+    } else {
+        QImage blurred = mask.convertToFormat(QImage::Format_ARGB32_Premultiplied);
+        gaussianBlur(blurred, widthPx / 2.0);
+        field.resize(qsizetype(target.width()) * target.height());
+        for (int y = 0; y < blurred.height(); ++y) {
+            const auto* line = reinterpret_cast<const QRgb*>(blurred.constScanLine(y));
+            for (int x = 0; x < blurred.width(); ++x)
+                field[qsizetype(y) * target.width() + x] = qAlpha(line[x]) / 255.0f;
+        }
+    }
     const double az = qDegreesToRadians(bv.direction), el = qDegreesToRadians(std::clamp(bv.altitude, 1.0, 89.0));
     // Licht in Bildschirmkoordinaten (y nach unten)
     const double lx = std::cos(az) * std::cos(el), ly = -std::sin(az) * std::cos(el), lz = std::sin(el);
@@ -1264,10 +1942,11 @@ void Canvas::paintBevel(QPainter& p, const DrawObject& o) const
     QImage shade(target.size(), QImage::Format_ARGB32_Premultiplied);
     shade.fill(Qt::transparent);
     const QColor light = bv.light.toQColor(), dark = bv.shadow.toQColor();
+    const int fw = target.width(), fh = target.height();
     auto h = [&](int x, int y) {
-        x = std::clamp(x, 0, height.width() - 1);
-        y = std::clamp(y, 0, height.height() - 1);
-        return qAlpha(height.pixel(x, y)) / 255.0;
+        x = std::clamp(x, 0, fw - 1);
+        y = std::clamp(y, 0, fh - 1);
+        return double(field[qsizetype(y) * fw + x]);
     };
     for (int y = 0; y < shade.height(); ++y) {
         const uchar* m = mask.constScanLine(y);
@@ -1294,13 +1973,11 @@ void Canvas::paintBevel(QPainter& p, const DrawObject& o) const
 void Canvas::paintObjectSharp(QPainter& p, const DrawObject& o) const
 {
     if (auto* blend = node_cast<BlendObject>(&o)) {
-        // Überblendung: Start, Zwischenstufen, Ende
-        if (const DrawObject* a = blend->start())
-            paintObject(p, *a);
-        for (const auto& step : blend->intermediates())
-            paintObject(p, *step);
-        if (const DrawObject* b = blend->end())
-            paintObject(p, *b);
+        // Überblendung: Pfad zuunterst, dann Start, Zwischenstufen, Ende (oder umgekehrt)
+        if (const DrawObject* guide = blend->pathObject())
+            paintObject(p, *guide);
+        for (const DrawObject* part : blend->paintOrder())
+            paintObject(p, *part);
         return;
     }
     if (auto* clip = node_cast<SuperClipObject>(&o)) {
@@ -1309,6 +1986,33 @@ void Canvas::paintObjectSharp(QPainter& p, const DrawObject& o) const
         if (!frame)
             return;
         paintObject(p, *frame);
+        if (showsBitmapEffects(*frame)) {
+            // Rahmen mit Bitmap-Effekten (gerissener Rand, Unschärfe …): Inhalte an der gerasterten
+            // Form samt Effekten beschneiden statt am Pfad
+            const EffectRaster mask = liveEffectRaster(*frame, true);
+            QRectF area = viewTransform().mapRect(mask.rect);
+            if (m_warp == 0)
+                area = area.intersected(paintArea());
+            if (area.isEmpty() || mask.image.isNull())
+                return;
+            const QRect target = area.toAlignedRect();
+            const qreal dpr = p.device() ? p.device()->devicePixelRatioF() : 1.0;
+            QImage layer((QSizeF(target.size()) * dpr).toSize().expandedTo(QSize(1, 1)), QImage::Format_ARGB32_Premultiplied);
+            layer.setDevicePixelRatio(dpr);
+            layer.fill(Qt::transparent);
+            {
+                QPainter lp(&layer);
+                lp.setRenderHints(p.renderHints());
+                lp.translate(-target.topLeft());
+                for (const DrawObject* c : clip->contents())
+                    paintObject(lp, *c);
+                lp.setCompositionMode(QPainter::CompositionMode_DestinationIn);
+                lp.setRenderHint(QPainter::SmoothPixmapTransform);
+                lp.drawImage(viewTransform().mapRect(mask.rect), mask.image);
+            }
+            p.drawImage(target.topLeft(), layer);
+            return;
+        }
         p.save();
         p.setClipPath(viewTransform().map(frame->path()), Qt::IntersectClip);
         for (const DrawObject* c : clip->contents())
@@ -1324,16 +2028,17 @@ void Canvas::paintObjectSharp(QPainter& p, const DrawObject& o) const
         }
         return;
     }
-    if (const auto* sprayed = node_cast<CurveObject>(&o); sprayed && sprayed->media().kind == ArtisticMedia::Kind::Sprayer) {
-        // Sprühdose: jedes Objekt in seiner Farbe
+    if (const auto* sprayed = node_cast<CurveObject>(&o); sprayed && sprayed->media().hasPieces()) {
+        // Sprühdose und Pinsel: jedes Teil in seiner Farbe
         const QTransform toScreen = o.transform() * viewTransform();
-        for (const SubPath& sp : sprayed->subPaths())
-            for (const pathops::SprayPiece& piece : pathops::sprayPieces(CurveObject(QList<SubPath>{sp}).spinePath(), sprayed->media()))
-                p.fillPath(toScreen.map(piece.path), piece.color.toQColor());
+        for (const ArtPiece& piece : sprayed->mediaPieces())
+            p.fillPath(toScreen.map(piece.path), piece.color.toQColor());
         return;
     }
     const QPainterPath screenPath = viewTransform().map(o.path());
     const Style& s = o.style();
+    if (const auto* code = node_cast<QrCodeObject>(&o); code && code->background())
+        p.fillPath((o.transform() * viewTransform()).map(code->backgroundPath()), code->background()->toQColor());
     if (s.stroke && s.behindFill && !node_cast<ImageObject>(&o) && !node_cast<TableObject>(&o) && !node_cast<DimensionObject>(&o))
         strokeStyled(p, screenPath, s, m_zoom, isArea(o), o.path(), viewTransform());
     if (auto* image = node_cast<ImageObject>(&o)) {
@@ -1445,7 +2150,8 @@ void Canvas::paintObjectSharp(QPainter& p, const DrawObject& o) const
                 if (sp.closed)
                     closed << sp;
             if (!closed.isEmpty())
-                p.fillPath((o.transform() * viewTransform()).map(CurveObject::toPainterPath(closed)), brush);
+                // Hüllen wirken auch auf die Füllung (vorher nur auf die Kontur: Form schien unverändert)
+                p.fillPath((o.transform() * viewTransform()).map(o.enveloped(CurveObject::toPainterPath(closed))), brush);
         } else if (m_output && m_complexFillsAsBitmaps && brush.style() != Qt::SolidPattern && brush.style() != Qt::NoBrush) {
             // Verläufe, Muster und Maschen als Bild (300 dpi) in der Form – für ältere RIPs
             const QRectF device = p.worldTransform().mapRect(screenPath.boundingRect()).intersected(QRectF(QPointF(-1e5, -1e5), QSizeF(2e5, 2e5)));
@@ -1554,11 +2260,46 @@ void Canvas::mouseDoubleClickEvent(QMouseEvent* e)
 
 void Canvas::mousePressEvent(QMouseEvent* e)
 {
+    // Ein Klick auf die Zeichenfläche holt die Tastatur immer zurück, auch aus einem Feld der
+    // Eigenschaftsleiste (sonst ändert ein späteres Entf dort den Wert statt die Auswahl zu löschen);
+    // ohne Fenstermanager muss das Fenster dazu ausdrücklich aktiv werden
+    if (!hasFocus()) {
+        if (!isActiveWindow())
+            activateWindow();
+        setFocus(Qt::MouseFocusReason);
+    }
     if (e->button() == Qt::MiddleButton) {
         m_panning = true;
         m_panStart = e->position();
         setCursor(Qt::ClosedHandCursor);
         return;
+    }
+    // Mehrseitenansicht: Griffe der markierten Seite, Seitennamen, Klick auf eine andere Seite
+    if (multiPageView() && (e->button() == Qt::LeftButton || e->button() == Qt::RightButton)) {
+        const QPointF pos = e->position();
+        const bool left = e->button() == Qt::LeftButton;
+        if (left && m_pageSelected) {
+            m_pageHandle = pageHandleAt(pos);
+            if (m_pageHandle >= 0) {
+                m_pageDragStart = toDoc(pos);
+                m_pageDragRect = QRectF(QPointF(0, 0), m_editor.currentPage().size());
+                update();
+                return;
+            }
+        }
+        const int label = pageLabelAt(pos);
+        if (label >= 0) {
+            m_editor.clearSelection();
+            m_editor.setCurrentPageIndex(label);
+            setPageSelected(true);
+            if (!left)
+                emit pageContextMenuRequested(label, mapToGlobal(pos.toPoint()));
+            return;
+        }
+        setPageSelected(false);
+        const int target = pageAt(pos);
+        if (target >= 0 && target != m_editor.currentPageIndex() && !keepsCurrentPage(pos))
+            m_editor.setCurrentPageIndex(target);
     }
     // Doppelseiten: Klick auf die Partnerseite macht sie zur aktuellen, ohne dass sich die Ansicht verschiebt
     if (e->button() == Qt::LeftButton) {
@@ -1579,6 +2320,12 @@ void Canvas::mousePressEvent(QMouseEvent* e)
 
 void Canvas::mouseMoveEvent(QMouseEvent* e)
 {
+    if (m_pageDragRect) {
+        m_pageDragRect = draggedPageRect(toDoc(e->position()), e->modifiers());
+        emit cursorMoved(toDoc(e->position()));
+        update();
+        return;
+    }
     if (m_panning) {
         m_origin += e->position() - m_panStart;
         m_panStart = e->position();
@@ -1597,7 +2344,26 @@ void Canvas::mouseReleaseEvent(QMouseEvent* e)
         tool()->activate(); // Werkzeug-Cursor wiederherstellen
         return;
     }
+    if (m_pageDragRect) {
+        if (e->button() == Qt::LeftButton) {
+            const QRectF area = draggedPageRect(toDoc(e->position()), e->modifiers());
+            m_pageDragRect.reset();
+            m_pageHandle = -1;
+            if (area != QRectF(QPointF(0, 0), m_editor.currentPage().size())) {
+                // Die Seite wächst nach links/oben: Ansicht so verschieben, dass alles stehen bleibt
+                m_origin += area.topLeft() * m_zoom;
+                m_editor.resizePage(m_editor.currentPageIndex(), area);
+                emit viewChanged();
+            }
+            update();
+        }
+        return;
+    }
+    const bool relocate = multiPageView() && e->button() == Qt::LeftButton && m_toolId == ToolId::Pick;
+    const std::size_t mark = m_editor.document().undoMark();
     tool()->mouseRelease(e, toDoc(e->position()));
+    if (relocate && m_editor.document().undoMark() != mark)
+        moveSelectionToPageUnderIt(mark);
 }
 
 void Canvas::leaveEvent(QEvent*)
@@ -1649,7 +2415,7 @@ QStringList droppedImageFiles(const QMimeData* data)
 
 void Canvas::dragEnterEvent(QDragEnterEvent* e)
 {
-    if (!droppedImageFiles(e->mimeData()).isEmpty() || e->mimeData()->hasImage())
+    if (!droppedImageFiles(e->mimeData()).isEmpty() || e->mimeData()->hasImage() || e->mimeData()->hasColor())
         e->acceptProposedAction();
 }
 
@@ -1660,6 +2426,20 @@ void Canvas::dragMoveEvent(QDragMoveEvent* e)
 
 void Canvas::dropEvent(QDropEvent* e)
 {
+    if (e->mimeData()->hasColor()) {
+        // Farbe aus der Palette: zuerst das Werkzeug (Verlaufsknoten), sonst das Objekt darunter füllen
+        const Color color = Color::fromQColor(qvariant_cast<QColor>(e->mimeData()->colorData()));
+        bool used = tool()->colorDropped(color, e->position());
+        if (!used) {
+            if (const DrawObject* hit = m_editor.objectAt(toDoc(e->position()), pixelsToDoc(4.0)); hit && !m_editor.isLocked(hit->id())) {
+                m_editor.setObjectFill(hit->id(), Fill::solid(color), tr("Füllung"));
+                used = true;
+            }
+        }
+        if (used)
+            e->acceptProposedAction();
+        return;
+    }
     QPointF at = toDoc(e->position());
     const QPointF step(m_editor.duplicateOffset());
     bool any = false;
@@ -1683,7 +2463,8 @@ void Canvas::dropEvent(QDropEvent* e)
 bool Canvas::event(QEvent* e)
 {
     // Beim Tippen gehören auch Tasten mit Menükürzel (Entf, Strg+A, Strg+C …) dem Werkzeug
-    if (e->type() == QEvent::ShortcutOverride && tool()->capturesKeyboard()) {
+    if (e->type() == QEvent::ShortcutOverride
+        && (tool()->capturesKeyboard() || tool()->claimsKey(static_cast<QKeyEvent*>(e)))) {
         e->accept();
         return true;
     }
@@ -1835,71 +2616,350 @@ int Canvas::textLinkTabAt(const QPointF& screen, const QList<TextFrameGeometry>&
     return -1;
 }
 
+void Canvas::togglePickTool()
+{
+    setTool(m_toolId == ToolId::Pick ? m_lastDrawingTool : ToolId::Pick);
+}
+
+void Canvas::nudge(int dx, int dy, int scale)
+{
+    // Verschiebungsabstand der Seite; Super-Schubsen ein Vielfaches, Mikro-Schubsen ein Bruchteil
+    double step = m_editor.nudge();
+    if (scale > 0)
+        step *= std::max(1, Options::instance().integer(QStringLiteral("doc/rulers/super")));
+    else if (scale < 0)
+        step /= std::max(1, Options::instance().integer(QStringLiteral("doc/rulers/micro")));
+    tool()->nudge(QPointF(dx * step, dy * step));
+}
+
 void Canvas::keyPressEvent(QKeyEvent* e)
 {
     if (tool()->keyPress(e))
         return;
-    switch (e->key()) {
-    case Qt::Key_Space:
-        // Leertaste wechselt zwischen Auswahl- und zuletzt benutztem Zeichenwerkzeug
-        setTool(m_toolId == ToolId::Pick ? m_lastDrawingTool : ToolId::Pick);
-        return;
-    case Qt::Key_F8:
-        setTool(ToolId::Text);
-        return;
-    case Qt::Key_F6:
-        setTool(ToolId::Rectangle);
-        return;
-    case Qt::Key_F7:
-        setTool(ToolId::Ellipse);
-        return;
-    case Qt::Key_Y:
-        if (e->modifiers() == Qt::NoModifier) {
-            setTool(ToolId::Polygon);
-            return;
-        }
-        break;
-    case Qt::Key_F5:
-        setTool(ToolId::Freehand);
-        return;
-    case Qt::Key_F10:
-        setTool(ToolId::Shape);
-        return;
-    case Qt::Key_I:
-        if (e->modifiers() == Qt::NoModifier) {
-            setTool(ToolId::ArtisticMedia);
-            return;
-        }
-        break;
-    case Qt::Key_X:
-        if (e->modifiers() == Qt::NoModifier) {
-            setTool(ToolId::Eraser);
-            return;
-        }
-        break;
-
-    case Qt::Key_G:
-        if (e->modifiers() == Qt::NoModifier) {
-            setTool(ToolId::InteractiveFill);
-            return;
-        }
-        break;
-    case Qt::Key_M:
-        if (e->modifiers() == Qt::NoModifier) {
-            setTool(ToolId::Mesh);
-            return;
-        }
-        break;
-    case Qt::Key_Z:
-        if (e->modifiers() == Qt::NoModifier) {
-            setTool(ToolId::Zoom);
-            return;
-        }
-        break;
-    default:
-        break;
-    }
+    // Werkzeugtasten (F6, F7, Y …), Leertaste und Schubsen sind Tastaturbefehle (Optionen > Befehle)
     QWidget::keyPressEvent(e);
+}
+
+// --- Mehrseitenansicht ---------------------------------------------------------------------------
+
+namespace {
+
+// Dokumentoption aus dem eigenen Dokument (Options hängt evtl. an einem anderen Editor)
+QVariant documentOption(const Editor& editor, const QString& key)
+{
+    const QVariant fallback = Options::instance().defaultValue(key);
+    const QJsonValue v = editor.document().masterPage().options().value(key);
+    if (v.isUndefined())
+        return fallback;
+    QVariant result = v.toVariant();
+    if (fallback.isValid())
+        result.convert(fallback.metaType());
+    return result;
+}
+
+} // namespace
+
+bool Canvas::multiPageView() const
+{
+    return documentOption(m_editor, QStringLiteral("doc/layout/multiPage")).toBool();
+}
+
+void Canvas::setMultiPageView(bool on)
+{
+    if (on != multiPageView()) {
+        // Wird mit dem Dokument gespeichert, ist aber nur eine Ansicht: kein Rückgängig-Schritt, und
+        // das Dokument gilt deswegen nicht als geändert
+        const QString key = QStringLiteral("doc/layout/multiPage");
+        QJsonObject options = m_editor.document().masterPage().options();
+        if (on == Options::instance().defaultValue(key).toBool())
+            options.remove(key);
+        else
+            options.insert(key, on);
+        Transaction tx(m_editor.document(), tr("Mehrseitenansicht"));
+        tx.modify<Page>(m_editor.document().masterPage().id(), [&options](Page& p) { p.setOptions(options); });
+        tx.commitWithoutUndo();
+    }
+    syncLayoutOrigin();
+    setPageSelected(false);
+    if (on)
+        fitAllPages();
+    else
+        fitPage();
+}
+
+QList<QRectF> Canvas::pageLayout() const
+{
+    const Document& doc = m_editor.document();
+    QList<QSizeF> sizes;
+    for (int i = 0; i < doc.pageCount(); ++i)
+        sizes.append(doc.page(i).size());
+    if (!multiPageView()) {
+        QList<QRectF> result;
+        for (const QSizeF& s : sizes)
+            result.append(QRectF(QPointF(0, 0), s));
+        return result;
+    }
+    auto option = [this](const char* key) { return documentOption(m_editor, QLatin1String(key)); };
+    pagelayout::Settings s;
+    s.arrangement = pagelayout::Arrangement(std::clamp(option("doc/layout/multiArrangement").toInt(), 0, 2));
+    s.columns = std::max(1, option("doc/layout/multiColumns").toInt());
+    s.spacing = std::max(0.0, option("doc/layout/multiSpacing").toDouble());
+    s.facing = option("doc/layout/facing").toBool();
+    s.startRight = option("doc/layout/startOn").toInt() == 1;
+    return pagelayout::arrange(sizes, s);
+}
+
+QRectF Canvas::pageRect(int index) const
+{
+    const QList<QRectF> layout = pageLayout();
+    if (index < 0 || index >= layout.size())
+        return {};
+    return layout[index].translated(-layout.value(m_editor.currentPageIndex()).topLeft());
+}
+
+int Canvas::pageAt(const QPointF& screen) const
+{
+    const QPointF doc = toDoc(screen);
+    if (!multiPageView())
+        return QRectF(QPointF(0, 0), m_editor.currentPage().size()).contains(doc) ? m_editor.currentPageIndex() : -1;
+    const QList<QRectF> layout = pageLayout();
+    const QPointF base = layout.value(m_editor.currentPageIndex()).topLeft();
+    for (int i = 0; i < layout.size(); ++i) {
+        if (layout[i].translated(-base).contains(doc))
+            return i;
+    }
+    return -1;
+}
+
+namespace {
+
+
+// Griffpunkte einer Seite im Uhrzeigersinn ab oben links
+std::array<QPointF, 8> handlePoints(const QRectF& r)
+{
+    return {r.topLeft(), QPointF(r.center().x(), r.top()), r.topRight(), QPointF(r.right(), r.center().y()),
+            r.bottomRight(), QPointF(r.center().x(), r.bottom()), r.bottomLeft(), QPointF(r.left(), r.center().y())};
+}
+
+} // namespace
+
+QRectF Canvas::labelRectAbove(const QRectF& page) const
+{
+    // Namensfeld im Abstand über der Seite; ist der Abstand am Bildschirm zu klein, keines
+    const double gap = std::max(0.0, documentOption(m_editor, QStringLiteral("doc/layout/multiSpacing")).toDouble()) * m_zoom;
+    const double height = std::min(16.0, gap - 2.0);
+    if (height < 7.0)
+        return {};
+    return QRectF(page.left(), page.top() - height - 1.0, std::max(page.width(), 60.0), height);
+}
+
+QRectF Canvas::pageLabelRect(int index) const
+{
+    if (!multiPageView() || index < 0 || index >= m_editor.document().pageCount())
+        return {};
+    return labelRectAbove(viewTransform().mapRect(pageRect(index)));
+}
+
+int Canvas::pageLabelAt(const QPointF& screen) const
+{
+    if (!multiPageView())
+        return -1;
+    const QList<QRectF> layout = pageLayout();
+    const QPointF base = layout.value(m_editor.currentPageIndex()).topLeft();
+    for (int i = 0; i < layout.size(); ++i) {
+        const QRectF label = labelRectAbove(viewTransform().mapRect(layout[i].translated(-base)));
+        if (!label.isEmpty() && label.contains(screen))
+            return i;
+    }
+    return -1;
+}
+
+QString Canvas::pageTitle(int index) const
+{
+    const Page& page = m_editor.document().page(index);
+    if (page.name().isEmpty())
+        return tr("Seite %1").arg(index + 1);
+    return tr("%1: %2").arg(index + 1).arg(page.name());
+}
+
+void Canvas::fitAllPages()
+{
+    const QList<QRectF> layout = pageLayout();
+    QRectF all;
+    for (const QRectF& r : layout)
+        all = all.isNull() ? r : all.united(r);
+    all.translate(-layout.value(m_editor.currentPageIndex()).topLeft());
+    const double margin = std::max(all.width(), all.height()) * 0.03;
+    zoomToRect(all.adjusted(-margin, -2 * margin, margin, margin));
+}
+
+void Canvas::setPageSelected(bool on)
+{
+    if (m_pageSelected == on)
+        return;
+    m_pageSelected = on;
+    update();
+}
+
+int Canvas::pageHandleAt(const QPointF& screen) const
+{
+    if (!m_pageSelected || !multiPageView())
+        return -1;
+    const auto points = handlePoints(viewTransform().mapRect(QRectF(QPointF(0, 0), m_editor.currentPage().size())));
+    for (int i = 0; i < 8; ++i) {
+        if (std::abs(points[i].x() - screen.x()) <= 5 && std::abs(points[i].y() - screen.y()) <= 5)
+            return i;
+    }
+    return -1;
+}
+
+QRectF Canvas::draggedPageRect(const QPointF& doc, Qt::KeyboardModifiers mods) const
+{
+    QRectF r(QPointF(0, 0), m_editor.currentPage().size());
+    const QPointF d = doc - m_pageDragStart;
+    const int h = m_pageHandle;
+    // Umschalt: gegenüberliegende Kante spiegelbildlich mit (Seite bleibt mittig)
+    const bool sym = mods & Qt::ShiftModifier;
+    if (h == 0 || h == 6 || h == 7) {
+        r.setLeft(r.left() + d.x());
+        if (sym)
+            r.setRight(r.right() - d.x());
+    }
+    if (h == 2 || h == 3 || h == 4) {
+        r.setRight(r.right() + d.x());
+        if (sym)
+            r.setLeft(r.left() - d.x());
+    }
+    if (h == 0 || h == 1 || h == 2) {
+        r.setTop(r.top() + d.y());
+        if (sym)
+            r.setBottom(r.bottom() - d.y());
+    }
+    if (h == 4 || h == 5 || h == 6) {
+        r.setBottom(r.bottom() + d.y());
+        if (sym)
+            r.setTop(r.top() - d.y());
+    }
+    r = r.normalized();
+    if (r.width() < 1.0)
+        r.setWidth(1.0);
+    if (r.height() < 1.0)
+        r.setHeight(1.0);
+    return r;
+}
+
+void Canvas::syncLayoutOrigin()
+{
+    const bool multi = multiPageView();
+    const QPointF offset = multi ? pageLayout().value(m_editor.currentPageIndex()).topLeft() : QPointF();
+    if (multi && m_layoutMulti && offset != m_layoutOffset) {
+        m_origin += (offset - m_layoutOffset) * m_zoom;
+        emit viewChanged();
+    }
+    m_layoutMulti = multi;
+    m_layoutOffset = offset;
+    if (!multi)
+        m_pageSelected = false;
+}
+
+void Canvas::paintOtherPages(QPainter& p, const QList<QRectF>& layout) const
+{
+    const Document& doc = m_editor.document();
+    const int current = m_editor.currentPageIndex();
+    const QPointF base = layout.value(current).topLeft();
+    const bool border = Options::instance().flag(QStringLiteral("doc/page/showBorder"));
+    const bool draft = viewMode() != ViewMode::Enhanced;
+    for (int i = 0; i < layout.size() && i < doc.pageCount(); ++i) {
+        if (i == current)
+            continue;
+        const Page& page = doc.page(i);
+        const QPointF delta = (layout[i].topLeft() - base) * m_zoom;
+        const QRectF local = viewTransform().mapRect(QRectF(QPointF(0, 0), page.size()));
+        const QRectF screenRect = local.translated(delta);
+        if (!screenRect.adjusted(-8, -24, 8, 8).intersects(QRectF(rect())))
+            continue;
+        if (border)
+            p.fillRect(screenRect.translated(4, 4), kPageShadow);
+        p.save();
+        p.translate(delta);
+        paintBackground(p, local);
+        p.setRenderHint(QPainter::Antialiasing, !draft);
+        paintPage(p, doc.masterPage());
+        paintPage(p, page);
+        p.restore();
+        if (border) {
+            p.setPen(QPen(kPageBorder, 1));
+            p.setBrush(Qt::NoBrush);
+            p.drawRect(screenRect);
+        }
+    }
+}
+
+void Canvas::paintPageLabels(QPainter& p, const QList<QRectF>& layout) const
+{
+    const int current = m_editor.currentPageIndex();
+    const QPointF base = layout.value(current).topLeft();
+    p.save();
+    QFont f = font();
+    f.setPointSizeF(std::max(6.0, f.pointSizeF() * 0.9));
+    p.setFont(f);
+    for (int i = 0; i < layout.size(); ++i) {
+        const QRectF page = viewTransform().mapRect(layout[i].translated(-base));
+        const QRectF label = labelRectAbove(page);
+        if (label.isEmpty() || !label.intersects(QRectF(rect())))
+            continue;
+        const bool isCurrent = i == current;
+        if (isCurrent && m_pageSelected) {
+            p.fillRect(label, QColor(0xd6, 0xe6, 0xfa));
+            p.setPen(QPen(previewColor(), 1));
+            p.setBrush(Qt::NoBrush);
+            p.drawRect(page);
+        }
+        p.setPen(isCurrent ? previewColor() : QColor(0x70, 0x70, 0x70));
+        const QString text = p.fontMetrics().elidedText(pageTitle(i), Qt::ElideRight, int(label.width()) - 4);
+        p.drawText(label.adjusted(2, 0, -2, 0), Qt::AlignLeft | Qt::AlignVCenter, text);
+    }
+    // Griffe der markierten Seite
+    if (m_pageSelected) {
+        const auto points = handlePoints(viewTransform().mapRect(QRectF(QPointF(0, 0), m_editor.currentPage().size())));
+        p.setPen(QPen(previewColor(), 1));
+        p.setBrush(Qt::white);
+        for (const QPointF& pt : points)
+            p.drawRect(QRectF(pt - QPointF(3.5, 3.5), QSizeF(7, 7)));
+    }
+    p.restore();
+}
+
+bool Canvas::keepsCurrentPage(const QPointF& screen) const
+{
+    if (!m_editor.selection().isEmpty()) {
+        const QRectF b = viewTransform().mapRect(m_editor.selectionBounds()).adjusted(-12, -12, 12, 12);
+        if (b.contains(screen))
+            return true;
+    }
+    const DrawObject* o = m_editor.objectAt(toDoc(screen), pixelsToDoc(3));
+    return o && m_editor.document().pageOf(o->id()) == &m_editor.currentPage();
+}
+
+void Canvas::moveSelectionToPageUnderIt(std::size_t undoMark)
+{
+    if (m_editor.selection().isEmpty())
+        return;
+    const QList<QRectF> layout = pageLayout();
+    const int current = m_editor.currentPageIndex();
+    const QPointF base = layout.value(current).topLeft();
+    const QPointF center = m_editor.selectionBounds().center() + base;
+    int target = -1;
+    for (int i = 0; i < layout.size(); ++i) {
+        if (layout[i].contains(center))
+            target = i;
+    }
+    if (target < 0 || target == current)
+        return;
+    Document& doc = m_editor.document();
+    const QString label = doc.undoText();
+    if (m_editor.moveObjectsToPage(m_editor.selection(), target, base - layout[target].topLeft(), label))
+        doc.mergeUndo(undoMark, label);
 }
 
 } // namespace vek

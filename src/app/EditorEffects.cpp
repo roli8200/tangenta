@@ -5,6 +5,7 @@
 #include "CloneObject.h"
 #include "GroupObject.h"
 #include "ImageObject.h"
+#include "ImagePool.h"
 #include "PathOps.h"
 #include "PerfectShape.h"
 #include "SuperClipObject.h"
@@ -33,7 +34,8 @@ void Editor::setObjectEnvelopes(NodeId id, const QList<Envelope>& envelopes, con
     tx.commit();
 }
 
-bool Editor::applyEnvelopeShape(const QPainterPath& shape, bool pageCoordinates, Envelope::Mode mode, bool addNew)
+bool Editor::applyEnvelopeShape(const QPainterPath& shape, bool pageCoordinates, Envelope::Mode mode, bool addNew,
+                                Envelope::Mapping mapping)
 {
     Transaction tx(*m_doc, tr("Hülle"));
     for (NodeId id : topLevelSelection()) {
@@ -56,12 +58,30 @@ bool Editor::applyEnvelopeShape(const QPainterPath& shape, bool pageCoordinates,
             continue;
         const QPainterPath local = pageCoordinates ? o->transform().inverted().map(shape) : shape;
         list << (local.isEmpty() ? Envelope::rectangle(box, mode) : Envelope::fromOutline(box, local, mode));
+        list.last().mapping = mapping;
         tx.modify<DrawObject>(id, [&list](DrawObject& d) { d.setEnvelopes(list); });
     }
     if (tx.isEmpty())
         return false;
     tx.commit();
     return true;
+}
+
+void Editor::setSelectionEnvelopeMapping(Envelope::Mapping mapping)
+{
+    Transaction tx(*m_doc, tr("Hüllenzuordnung"));
+    for (NodeId id : topLevelSelection()) {
+        const DrawObject* o = m_doc->findAs<DrawObject>(id);
+        if (!o || isLocked(id) || o->envelopes().isEmpty() || o->envelopes().last().mapping == mapping)
+            continue;
+        tx.modify<DrawObject>(id, [mapping](DrawObject& d) {
+            QList<Envelope> list = d.envelopes();
+            list.last().mapping = mapping;
+            d.setEnvelopes(list);
+        });
+    }
+    if (!tx.isEmpty())
+        tx.commit();
 }
 
 void Editor::setSelectionEnvelopeMode(Envelope::Mode mode)
@@ -199,12 +219,10 @@ std::unique_ptr<DrawObject> frozenCopy(const DrawObject& o, const Freeze& fz)
         group->setEffect(Effect::Transparency, o.transparency());
         group->setEffect(Effect::Blur, o.blurRamp());
         if (const auto* blend = node_cast<BlendObject>(&o)) {
-            if (blend->start())
-                attach(*group, frozenCopy(*blend->start(), fz));
-            for (const auto& step : blend->intermediates())
-                attach(*group, frozenCopy(*step, fz));
-            if (blend->end())
-                attach(*group, frozenCopy(*blend->end(), fz));
+            if (blend->pathObject())
+                attach(*group, frozenCopy(*blend->pathObject(), fz));
+            for (const DrawObject* part : blend->paintOrder())
+                attach(*group, frozenCopy(*part, fz));
         } else {
             for (int i = 0; i < o.childCount(); ++i)
                 if (const auto* c = node_cast<DrawObject>(o.child(i)))
@@ -271,7 +289,8 @@ std::unique_ptr<DrawObject> frozenCopy(const DrawObject& o, const Freeze& fz)
 NodeId Editor::freezeLens(NodeId lensId)
 {
     const DrawObject* lensObj = m_doc->findAs<DrawObject>(lensId);
-    if (!lensObj || !lensObj->lens().isActive() || isLocked(lensId))
+    // Bitmap-Effekt lässt sich nicht als Vektoren fixieren
+    if (!lensObj || !lensObj->lens().isActive() || lensObj->lens().type == Lens::Type::BitmapEffect || isLocked(lensId))
         return InvalidNodeId;
     Freeze fz;
     fz.lens = lensObj->lens();
@@ -463,6 +482,56 @@ bool Editor::selectSuperClipContents()
 {
     const QList<NodeId> ids = topLevelSelection();
     return ids.size() == 1 && beginSuperClipEdit(ids.first());
+}
+
+bool Editor::addBitmapEffect(const BitmapEffect& effect, const QString& label)
+{
+    Transaction tx(*m_doc, label);
+    for (NodeId id : topLevelSelection())
+        tx.modify<DrawObject>(id, [&effect](DrawObject& o) {
+            QList<BitmapEffect> list = o.bitmapEffects();
+            list << effect;
+            o.setBitmapEffects(list);
+        });
+    if (tx.isEmpty())
+        return false;
+    tx.commit();
+    return true;
+}
+
+void Editor::setBitmapEffects(NodeId id, const QList<BitmapEffect>& effects, const QString& label)
+{
+    const DrawObject* o = m_doc->findAs<DrawObject>(id);
+    if (!o || isLocked(id) || o->bitmapEffects() == effects)
+        return;
+    Transaction tx(*m_doc, label);
+    tx.modify<DrawObject>(id, [&effects](DrawObject& d) { d.setBitmapEffects(effects); });
+    tx.commit();
+}
+
+NodeId Editor::bakeBitmapEffects(NodeId id, const QImage& pixels, const QRectF& bounds, const QString& label)
+{
+    const DrawObject* o = m_doc->findAs<DrawObject>(id);
+    if (!o || isLocked(id) || pixels.isNull() || bounds.isEmpty())
+        return InvalidNodeId;
+    const QString key = imagepool::addImage(pixels);
+    if (key.isEmpty())
+        return InvalidNodeId;
+    auto image = std::make_unique<ImageObject>(key, bounds.size());
+    image->setTransform(QTransform::fromTranslate(bounds.left(), bounds.top()));
+    image->setName(o->name());
+    image->setEffect(Effect::Blur, o->blurRamp());
+    image->setEffect(Effect::Transparency, o->transparency());
+    image->setBlendMode(o->blendMode());
+    image->setShadow(o->shadow());
+    const NodeId parent = o->parent()->id();
+    const int index = o->indexInParent();
+    Transaction tx(*m_doc, label);
+    tx.remove(id);
+    const NodeId created = tx.insert(parent, index, std::move(image));
+    tx.commit();
+    setSelection({created});
+    return created;
 }
 
 } // namespace vek

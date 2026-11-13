@@ -121,6 +121,16 @@ void Transaction::commit()
         m_doc.commitChanges(std::move(m_set));
 }
 
+void Transaction::commitWithoutUndo()
+{
+    Q_ASSERT(m_open);
+    m_open = false;
+    m_doc.m_inTransaction = false;
+    if (!m_set.changes.empty())
+        m_doc.commitWithoutUndo();
+    m_set.changes.clear();
+}
+
 void Transaction::rollback()
 {
     Q_ASSERT(m_open);

@@ -1,13 +1,18 @@
 #include "Effects.h"
 
+#include "BitmapFilters.h"
+
 #include <QJsonArray>
+#include <QPainterPathStroker>
 #include <QLineF>
 #include <QPolygonF>
 #include <QTransform>
+#include <QtMath>
 
 #include <algorithm>
 #include <cmath>
 #include <iterator>
+#include <vector>
 
 namespace vek {
 
@@ -16,6 +21,8 @@ QJsonObject Lens::toJson() const
     QJsonObject o{{QStringLiteral("type"), int(type)}, {QStringLiteral("amount"), amount}, {QStringLiteral("color"), color.toHex()}};
     if (type == Type::CustomColorMap || type == Type::Wireframe)
         o[QStringLiteral("color2")] = color2.toHex();
+    if (type == Type::BitmapEffect)
+        o[QStringLiteral("effect")] = bitmapEffect;
     if (viewpoint) {
         o[QStringLiteral("vx")] = viewOffset.x();
         o[QStringLiteral("vy")] = viewOffset.y();
@@ -26,7 +33,8 @@ QJsonObject Lens::toJson() const
 Lens Lens::fromJson(const QJsonObject& json)
 {
     Lens l;
-    l.type = Type(std::clamp(json.value(QStringLiteral("type")).toInt(), 0, int(Type::Wireframe)));
+    l.type = Type(std::clamp(json.value(QStringLiteral("type")).toInt(), 0, int(Type::BitmapEffect)));
+    l.bitmapEffect = json.value(QStringLiteral("effect")).toString(QStringLiteral("blur"));
     l.amount = json.value(QStringLiteral("amount")).toDouble(50.0);
     l.color = Color::fromHex(json.value(QStringLiteral("color")).toString()).value_or(Color(255, 0, 0));
     l.color2 = Color::fromHex(json.value(QStringLiteral("color2")).toString()).value_or(Color(255, 255, 0));
@@ -37,7 +45,66 @@ Lens Lens::fromJson(const QJsonObject& json)
 
 bool Lens::changesColor() const
 {
-    return type != Type::None && type != Type::Magnify && type != Type::FishEye && type != Type::Wireframe;
+    return type != Type::None && type != Type::Magnify && type != Type::FishEye && type != Type::Wireframe
+           && type != Type::BitmapEffect;
+}
+
+QList<std::pair<QString, const char*>> Lens::bitmapEffects()
+{
+    return {{QStringLiteral("blur"), QT_TRANSLATE_NOOP("vek::Lens", "Gaussscher Weichzeichner")},
+            {QStringLiteral("pixelate"), QT_TRANSLATE_NOOP("vek::Lens", "Verpixeln")},
+            {QStringLiteral("mosaic"), QT_TRANSLATE_NOOP("vek::Lens", "Mosaik")},
+            {QStringLiteral("crystallize"), QT_TRANSLATE_NOOP("vek::Lens", "Kristallisieren")},
+            {QStringLiteral("emboss"), QT_TRANSLATE_NOOP("vek::Lens", "Relief")},
+            {QStringLiteral("edges"), QT_TRANSLATE_NOOP("vek::Lens", "Kanten finden")},
+            {QStringLiteral("charcoal"), QT_TRANSLATE_NOOP("vek::Lens", "Kohle")},
+            {QStringLiteral("oil"), QT_TRANSLATE_NOOP("vek::Lens", "Ölfarbe")},
+            {QStringLiteral("solarize"), QT_TRANSLATE_NOOP("vek::Lens", "Solarisieren")},
+            {QStringLiteral("halftone"), QT_TRANSLATE_NOOP("vek::Lens", "Rasterpunkte")},
+            {QStringLiteral("swirl"), QT_TRANSLATE_NOOP("vek::Lens", "Wirbel")},
+            {QStringLiteral("ripple"), QT_TRANSLATE_NOOP("vek::Lens", "Wellen")},
+            {QStringLiteral("noise"), QT_TRANSLATE_NOOP("vek::Lens", "Rauschen")}};
+}
+
+QImage Lens::applyBitmapEffect(const QImage& below, double pxPerMm) const
+{
+    if (below.isNull())
+        return below;
+    const double k = std::clamp(amount, 0.0, 100.0) / 100.0;
+    // Räumliche Grössen in mm, damit die Linse beim Zoomen gleich aussieht
+    const double mm = std::max(0.05, pxPerMm);
+    auto px = [mm](double v) { return std::max(1, int(std::lround(v * mm))); };
+    const QString& f = bitmapEffect;
+    QImage out;
+    if (f == QLatin1String("pixelate"))
+        out = filters::pixelate(below, px(0.5 + 9.5 * k));
+    else if (f == QLatin1String("mosaic"))
+        out = filters::mosaic(below, px(0.5 + 9.5 * k));
+    else if (f == QLatin1String("crystallize"))
+        out = filters::crystallize(below, px(0.5 + 9.5 * k));
+    else if (f == QLatin1String("emboss"))
+        out = filters::emboss(below, 1.0 + 9.0 * k, 135.0);
+    else if (f == QLatin1String("edges"))
+        out = filters::findEdges(below, 0.2 + 1.8 * k);
+    else if (f == QLatin1String("charcoal"))
+        out = filters::charcoal(below, std::max(1.0, 0.1 * mm + 4.0 * k), 2.0 + 8.0 * k);
+    else if (f == QLatin1String("oil"))
+        out = filters::oilPaint(below, std::clamp(px(0.1 + 1.0 * k), 1, 12), 20);
+    else if (f == QLatin1String("solarize"))
+        out = filters::solarize(below, int(255 * (1.0 - k)));
+    else if (f == QLatin1String("halftone"))
+        out = filters::halftone(below, std::max(2.0, (0.5 + 3.5 * k) * mm));
+    else if (f == QLatin1String("swirl"))
+        out = filters::swirl(below, 360.0 * k);
+    else if (f == QLatin1String("ripple"))
+        out = filters::ripple(below, std::max(1.0, 2.0 * k * mm), std::max(4.0, 10.0 * mm));
+    else if (f == QLatin1String("noise"))
+        out = filters::addNoise(below, 100.0 * k, false);
+    else
+        out = filters::gaussian(below, std::max(0.5, 5.0 * k * mm));
+    out = out.convertToFormat(below.format());
+    out.setDevicePixelRatio(below.devicePixelRatio());
+    return out;
 }
 
 void Lens::filter(int& r, int& g, int& b, int a) const
@@ -330,8 +397,35 @@ QPointF Envelope::map(const QPointF& p) const
     const double u = (p.x() - box.left()) / box.width(), v = (p.y() - box.top()) / box.height();
     const QPointF t = edgeAt(top, u), b = edgeAt(bottom, u), l = edgeAt(left, v), r = edgeAt(right, v);
     const QPointF c00 = top.first(), c10 = top.last(), c01 = bottom.first(), c11 = bottom.last();
-    return (1 - v) * t + v * b + (1 - u) * l + u * r
-           - ((1 - u) * (1 - v) * c00 + u * (1 - v) * c10 + (1 - u) * v * c01 + u * v * c11);
+    // Ecken bilinear (gerade Zeilen und Spalten)
+    const QPointF corners = (1 - u) * (1 - v) * c00 + u * (1 - v) * c10 + (1 - u) * v * c01 + u * v * c11;
+    switch (mapping) {
+    case Mapping::Original:
+        // Nur obere und untere Kante: senkrecht dazwischen gerade
+        return (1 - v) * t + v * b;
+    case Mapping::Putty: {
+        // Wie Standard, die Ränder wirken aber mit geglätteter Gewichtung (weicher nach innen)
+        auto smooth = [](double x) {
+            x = std::clamp(x, 0.0, 1.0);
+            return x * x * (3.0 - 2.0 * x);
+        };
+        const double su = smooth(u), sv = smooth(v);
+        return (1 - sv) * t + sv * b + (1 - su) * l + su * r
+               - ((1 - su) * (1 - sv) * c00 + su * (1 - sv) * c10 + (1 - su) * sv * c01 + su * sv * c11);
+    }
+    case Mapping::Horizontal: {
+        // Waagrecht: x zwischen linker und rechter Kante, Zeilen gerade
+        const QPointF row = (1 - u) * l + u * r;
+        return QPointF(row.x(), corners.y());
+    }
+    case Mapping::Vertical: {
+        // Senkrecht: y zwischen oberer und unterer Kante, Spalten gerade
+        const QPointF column = (1 - v) * t + v * b;
+        return QPointF(corners.x(), column.y());
+    }
+    case Mapping::Standard: break;
+    }
+    return (1 - v) * t + v * b + (1 - u) * l + u * r - corners;
 }
 
 QPainterPath Envelope::map(const QPainterPath& path) const
@@ -443,12 +537,15 @@ QJsonObject Envelope::toJson() const
         }
         return a;
     };
-    return {{QStringLiteral("mode"), int(mode)},
-            {QStringLiteral("box"), QJsonArray{box.x(), box.y(), box.width(), box.height()}},
-            {QStringLiteral("top"), pts(top)},
-            {QStringLiteral("right"), pts(right)},
-            {QStringLiteral("bottom"), pts(bottom)},
-            {QStringLiteral("left"), pts(left)}};
+    QJsonObject o{{QStringLiteral("mode"), int(mode)},
+                  {QStringLiteral("box"), QJsonArray{box.x(), box.y(), box.width(), box.height()}},
+                  {QStringLiteral("top"), pts(top)},
+                  {QStringLiteral("right"), pts(right)},
+                  {QStringLiteral("bottom"), pts(bottom)},
+                  {QStringLiteral("left"), pts(left)}};
+    if (mapping != Mapping::Standard)
+        o[QStringLiteral("mapping")] = int(mapping);
+    return o;
 }
 
 Envelope Envelope::fromJson(const QJsonObject& json)
@@ -462,6 +559,7 @@ Envelope Envelope::fromJson(const QJsonObject& json)
     };
     Envelope e;
     e.mode = Mode(std::clamp(json.value(QStringLiteral("mode")).toInt(3), 0, 3));
+    e.mapping = Mapping(std::clamp(json.value(QStringLiteral("mapping")).toInt(0), 0, int(Mapping::Vertical)));
     const QJsonArray b = json.value(QStringLiteral("box")).toArray();
     if (b.size() == 4)
         e.box = QRectF(b[0].toDouble(), b[1].toDouble(), b[2].toDouble(), b[3].toDouble());
@@ -477,7 +575,7 @@ QJsonObject Bevel::toJson() const
     return {{QStringLiteral("style"), int(style)},       {QStringLiteral("width"), width},
             {QStringLiteral("intensity"), intensity},     {QStringLiteral("direction"), direction},
             {QStringLiteral("altitude"), altitude},       {QStringLiteral("light"), light.toHex()},
-            {QStringLiteral("shadow"), shadow.toHex()}};
+            {QStringLiteral("shadow"), shadow.toHex()}, {QStringLiteral("toCenter"), toCenter}};
 }
 
 Bevel Bevel::fromJson(const QJsonObject& json)
@@ -490,7 +588,218 @@ Bevel Bevel::fromJson(const QJsonObject& json)
     b.altitude = json.value(QStringLiteral("altitude")).toDouble(45.0);
     b.light = Color::fromHex(json.value(QStringLiteral("light")).toString()).value_or(Color(255, 255, 255));
     b.shadow = Color::fromHex(json.value(QStringLiteral("shadow")).toString()).value_or(Color(0, 0, 0));
+    b.toCenter = json.value(QStringLiteral("toCenter")).toBool(false);
     return b;
+}
+
+namespace {
+
+// Eindimensionale Abstandstransformation (Felzenszwalb/Huttenlocher): f = quadrierte Abstände
+void distance1d(const std::vector<float>& f, std::vector<float>& d, std::vector<int>& v, std::vector<float>& z)
+{
+    const int n = int(f.size());
+    constexpr float inf = 1e20f;
+    int k = 0;
+    v[0] = 0;
+    z[0] = -inf;
+    z[1] = inf;
+    for (int q = 1; q < n; ++q) {
+        float s = ((f[q] + float(q) * q) - (f[v[k]] + float(v[k]) * v[k])) / (2.0f * q - 2.0f * v[k]);
+        while (s <= z[k]) {
+            --k;
+            s = ((f[q] + float(q) * q) - (f[v[k]] + float(v[k]) * v[k])) / (2.0f * q - 2.0f * v[k]);
+        }
+        ++k;
+        v[k] = q;
+        z[k] = s;
+        z[k + 1] = inf;
+    }
+    k = 0;
+    for (int q = 0; q < n; ++q) {
+        while (z[k + 1] < q)
+            ++k;
+        d[q] = float(q - v[k]) * float(q - v[k]) + f[v[k]];
+    }
+}
+
+} // namespace
+
+QList<float> distanceToEdge(const QImage& mask, float* maxDistance)
+{
+    const QImage m = mask.convertToFormat(QImage::Format_Grayscale8);
+    const int w = m.width(), h = m.height();
+    QList<float> out(qsizetype(w) * h, 0.0f);
+    if (maxDistance)
+        *maxDistance = 0.0f;
+    if (w == 0 || h == 0)
+        return out;
+    constexpr float inf = 1e20f;
+    // Abstand zum nächsten Aussenpunkt; ein Rand von einem Pixel ringsum liegt aussen
+    const int W = w + 2, H = h + 2;
+    std::vector<float> grid(std::size_t(W) * H, 0.0f);
+    for (int y = 0; y < h; ++y) {
+        const uchar* line = m.constScanLine(y);
+        for (int x = 0; x < w; ++x)
+            grid[std::size_t(y + 1) * W + x + 1] = line[x] >= 128 ? inf : 0.0f;
+    }
+    const int n = std::max(W, H);
+    std::vector<float> f, d, z(n + 1);
+    std::vector<int> v(n);
+    f.resize(H);
+    d.resize(H);
+    for (int x = 0; x < W; ++x) {
+        for (int y = 0; y < H; ++y)
+            f[y] = grid[std::size_t(y) * W + x];
+        distance1d(f, d, v, z);
+        for (int y = 0; y < H; ++y)
+            grid[std::size_t(y) * W + x] = d[y];
+    }
+    f.resize(W);
+    d.resize(W);
+    for (int y = 0; y < H; ++y) {
+        for (int x = 0; x < W; ++x)
+            f[x] = grid[std::size_t(y) * W + x];
+        distance1d(f, d, v, z);
+        for (int x = 0; x < W; ++x)
+            grid[std::size_t(y) * W + x] = d[x];
+    }
+    float best = 0.0f;
+    for (int y = 0; y < h; ++y)
+        for (int x = 0; x < w; ++x) {
+            const float dist = std::sqrt(grid[std::size_t(y + 1) * W + x + 1]);
+            out[qsizetype(y) * w + x] = dist;
+            best = std::max(best, dist);
+        }
+    if (maxDistance)
+        *maxDistance = best;
+    return out;
+}
+
+double BlockShadow::depth() const
+{
+    return std::hypot(offset.x(), offset.y());
+}
+
+double BlockShadow::angle() const
+{
+    return depth() < 1e-12 ? 0.0 : qRadiansToDegrees(std::atan2(-offset.y(), offset.x()));
+}
+
+void BlockShadow::setPolar(double depthMm, double angleDeg)
+{
+    const double a = qDegreesToRadians(angleDeg);
+    offset = QPointF(std::cos(a), -std::sin(a)) * std::max(0.0, depthMm);
+}
+
+QJsonObject BlockShadow::toJson() const
+{
+    QJsonObject o{{QStringLiteral("dx"), offset.x()}, {QStringLiteral("dy"), offset.y()}, {QStringLiteral("color"), color.toHex()}};
+    if (expand != 0.0)
+        o[QStringLiteral("expand")] = expand;
+    if (simplify)
+        o[QStringLiteral("simplify")] = true;
+    if (removeHoles)
+        o[QStringLiteral("removeHoles")] = true;
+    if (!useOutline)
+        o[QStringLiteral("useOutline")] = false;
+    return o;
+}
+
+BlockShadow BlockShadow::fromJson(const QJsonObject& json)
+{
+    BlockShadow s;
+    s.active = true;
+    s.offset = QPointF(json.value(QStringLiteral("dx")).toDouble(5.0), json.value(QStringLiteral("dy")).toDouble(5.0));
+    s.color = Color::fromHex(json.value(QStringLiteral("color")).toString()).value_or(Color(0, 0, 0));
+    s.expand = json.value(QStringLiteral("expand")).toDouble(0.0);
+    s.simplify = json.value(QStringLiteral("simplify")).toBool(false);
+    s.removeHoles = json.value(QStringLiteral("removeHoles")).toBool(false);
+    s.useOutline = json.value(QStringLiteral("useOutline")).toBool(true);
+    return s;
+}
+
+namespace {
+
+double signedArea(const QPolygonF& poly)
+{
+    double a = 0;
+    for (int i = 0; i < poly.size(); ++i) {
+        const QPointF p = poly[i], q = poly[(i + 1) % poly.size()];
+        a += p.x() * q.y() - q.x() * p.y();
+    }
+    return a / 2.0;
+}
+
+} // namespace
+
+QPainterPath sweepArea(const QPainterPath& area, const QPointF& offset, double flatness)
+{
+    if (area.isEmpty())
+        return area;
+    const QPainterPath both = area.united(area.translated(offset));
+    if (std::hypot(offset.x(), offset.y()) < 1e-9)
+        return both.simplified();
+    // Kurven fein in Strecken zerlegen: Qt zerlegt in Einheiten von etwa einem halben Punkt,
+    // darum vergrössert zerlegen und zurückrechnen
+    const double k = 1.0 / std::max(1e-4, flatness);
+    const QTransform up = QTransform::fromScale(k, k), down = QTransform::fromScale(1.0 / k, 1.0 / k);
+    QList<QPolygonF> polys = up.map(area).toSubpathPolygons();
+    for (QPolygonF& poly : polys)
+        poly = down.map(poly);
+    // Jede Kante überstreicht ein Parallelogramm; vereinigt paarweise (wie ein Turnier), damit
+    // die Pfade der Mengenoperationen klein bleiben
+    QList<QPainterPath> parts;
+    for (const QPolygonF& poly : std::as_const(polys)) {
+        for (int i = 0; i < poly.size(); ++i) {
+            const QPointF a = poly[i], b = poly[(i + 1) % poly.size()];
+            const QPointF e = b - a;
+            if (std::abs(e.x() * offset.y() - e.y() * offset.x()) < 1e-12)
+                continue;
+            QPainterPath q;
+            q.addPolygon(QPolygonF{a, b, b + offset, a + offset});
+            q.closeSubpath();
+            parts << q;
+        }
+    }
+    parts << both;
+    while (parts.size() > 1) {
+        QList<QPainterPath> next;
+        for (int i = 0; i + 1 < parts.size(); i += 2)
+            next << parts[i].united(parts[i + 1]);
+        if (parts.size() % 2)
+            next << parts.last();
+        parts = next;
+    }
+    return parts.first().simplified();
+}
+
+QPainterPath blockShadowPath(const QPainterPath& area, const BlockShadow& s)
+{
+    QPainterPath base = area;
+    if (base.isEmpty())
+        return {};
+    if (s.expand > 0) {
+        QPainterPathStroker st;
+        st.setWidth(2.0 * s.expand);
+        st.setJoinStyle(Qt::RoundJoin);
+        base = base.united(st.createStroke(base)).simplified();
+    }
+    QPainterPath shadow = sweepArea(base, s.offset);
+    if (s.removeHoles) {
+        // Alle Teilpfade gleich orientiert: Löcher werden mitgefüllt
+        QPainterPath filled;
+        filled.setFillRule(Qt::WindingFill);
+        for (QPolygonF poly : shadow.toSubpathPolygons()) {
+            if (signedArea(poly) < 0)
+                std::reverse(poly.begin(), poly.end());
+            filled.addPolygon(poly);
+            filled.closeSubpath();
+        }
+        shadow = filled.simplified();
+    }
+    if (s.simplify)
+        shadow = shadow.subtracted(area).simplified();
+    return shadow;
 }
 
 QJsonObject ContourEffect::toJson() const
@@ -514,8 +823,14 @@ ContourEffect ContourEffect::fromJson(const QJsonObject& json)
 
 QJsonObject Extrusion::toJson() const
 {
-    return {{QStringLiteral("vx"), vanish.x()}, {QStringLiteral("vy"), vanish.y()}, {QStringLiteral("depth"), depth},
-            {QStringLiteral("parallel"), parallel}, {QStringLiteral("color"), color.toHex()}, {QStringLiteral("shade"), shade}};
+    QJsonObject o{{QStringLiteral("vx"), vanish.x()}, {QStringLiteral("vy"), vanish.y()}, {QStringLiteral("depth"), depth},
+                  {QStringLiteral("parallel"), parallel}, {QStringLiteral("color"), color.toHex()}, {QStringLiteral("shade"), shade}};
+    if (isRotated()) {
+        o[QStringLiteral("rx")] = rotX;
+        o[QStringLiteral("ry")] = rotY;
+        o[QStringLiteral("rz")] = rotZ;
+    }
+    return o;
 }
 
 Extrusion Extrusion::fromJson(const QJsonObject& json)
@@ -527,16 +842,96 @@ Extrusion Extrusion::fromJson(const QJsonObject& json)
     e.parallel = json.value(QStringLiteral("parallel")).toBool();
     e.color = Color::fromHex(json.value(QStringLiteral("color")).toString()).value_or(Color(128, 128, 128));
     e.shade = json.value(QStringLiteral("shade")).toBool(true);
+    e.rotX = json.value(QStringLiteral("rx")).toDouble(0.0);
+    e.rotY = json.value(QStringLiteral("ry")).toDouble(0.0);
+    e.rotZ = json.value(QStringLiteral("rz")).toDouble(0.0);
     return e;
+}
+
+double Extrusion::bodyDepth() const
+{
+    const double f = std::clamp(depth, 0.0, 99.0) / 100.0;
+    const double len = std::hypot(vanish.x(), vanish.y());
+    if (parallel)
+        return std::max(1e-6, len * f);
+    const double k = std::max(1e-3, len);
+    return f * k / (1.0 - f);
+}
+
+void Extrusion::rotation(double r[3][3]) const
+{
+    // x: Oberkante nach hinten, y: rechte Seite nach hinten, z: im Uhrzeigersinn (y nach unten)
+    const double ax = qDegreesToRadians(rotX), ay = qDegreesToRadians(rotY), az = qDegreesToRadians(rotZ);
+    const double rx[3][3] = {{1, 0, 0}, {0, std::cos(ax), std::sin(ax)}, {0, -std::sin(ax), std::cos(ax)}};
+    const double ry[3][3] = {{std::cos(ay), 0, -std::sin(ay)}, {0, 1, 0}, {std::sin(ay), 0, std::cos(ay)}};
+    const double rz[3][3] = {{std::cos(az), -std::sin(az), 0}, {std::sin(az), std::cos(az), 0}, {0, 0, 1}};
+    double ryx[3][3];
+    for (int i = 0; i < 3; ++i)
+        for (int j = 0; j < 3; ++j)
+            ryx[i][j] = ry[i][0] * rx[0][j] + ry[i][1] * rx[1][j] + ry[i][2] * rx[2][j];
+    for (int i = 0; i < 3; ++i)
+        for (int j = 0; j < 3; ++j)
+            r[i][j] = rz[i][0] * ryx[0][j] + rz[i][1] * ryx[1][j] + rz[i][2] * ryx[2][j];
+}
+
+QPointF Extrusion::project(const QPointF& center, const QPointF& p, double t, double* depthOut) const
+{
+    double r[3][3];
+    rotation(r);
+    const double d = bodyDepth();
+    const double v[3] = {p.x() - center.x(), p.y() - center.y(), t * d};
+    double q[3];
+    for (int i = 0; i < 3; ++i)
+        q[i] = r[i][0] * v[0] + r[i][1] * v[1] + r[i][2] * v[2];
+    if (depthOut)
+        *depthOut = q[2];
+    if (parallel) {
+        // Schräg: die Tiefe verläuft in Richtung des Fluchtpunkts
+        const double f = std::clamp(depth, 0.0, 99.0) / 100.0;
+        const QPointF dir = vanish * f / d;
+        return center + QPointF(q[0], q[1]) + dir * q[2];
+    }
+    const double k = std::max(1e-3, std::hypot(vanish.x(), vanish.y()));
+    const double z = std::max(q[2], -0.9 * k); // nicht hinter das Auge
+    return center + vanish + (QPointF(q[0], q[1]) - vanish) * (k / (k + z));
+}
+
+QTransform Extrusion::faceTransform(const QPointF& center) const
+{
+    if (!isRotated())
+        return QTransform();
+    double r[3][3];
+    rotation(r);
+    const double cx = center.x(), cy = center.y();
+    QTransform m;
+    if (parallel) {
+        const double f = std::clamp(depth, 0.0, 99.0) / 100.0;
+        const QPointF dir = vanish * f / bodyDepth();
+        m = QTransform(r[0][0] + dir.x() * r[2][0], r[1][0] + dir.y() * r[2][0], r[0][1] + dir.x() * r[2][1],
+                       r[1][1] + dir.y() * r[2][1], cx, cy);
+    } else {
+        // w = 1 + z/k mit z = r20 x + r21 y; Bild = (c + V) w - V + (r00 x + r01 y, ...)
+        const double k = std::max(1e-3, std::hypot(vanish.x(), vanish.y()));
+        const double ex = cx + vanish.x(), ey = cy + vanish.y();
+        m = QTransform(r[0][0] + ex * r[2][0] / k, r[1][0] + ey * r[2][0] / k, r[2][0] / k,
+                       r[0][1] + ex * r[2][1] / k, r[1][1] + ey * r[2][1] / k, r[2][1] / k,
+                       cx, cy, 1.0);
+    }
+    return QTransform::fromTranslate(-cx, -cy) * m;
 }
 
 QJsonObject DropShadow::toJson() const
 {
-    return {{QStringLiteral("perspective"), perspective}, {QStringLiteral("fromTop"), fromTop},
-            {QStringLiteral("dx"), offset.x()},           {QStringLiteral("dy"), offset.y()},
-            {QStringLiteral("angle"), angle},             {QStringLiteral("stretch"), stretch},
-            {QStringLiteral("fade"), fade},               {QStringLiteral("opacity"), opacity},
-            {QStringLiteral("feather"), feather},         {QStringLiteral("color"), color.toHex()}};
+    QJsonObject o{{QStringLiteral("perspective"), perspective}, {QStringLiteral("fromTop"), fromTop},
+                  {QStringLiteral("dx"), offset.x()},           {QStringLiteral("dy"), offset.y()},
+                  {QStringLiteral("angle"), angle},             {QStringLiteral("stretch"), stretch},
+                  {QStringLiteral("fade"), fade},               {QStringLiteral("opacity"), opacity},
+                  {QStringLiteral("feather"), feather},         {QStringLiteral("color"), color.toHex()}};
+    if (inner)
+        o[QStringLiteral("inner")] = true;
+    if (blend != BlendMode::Normal)
+        o[QStringLiteral("blend")] = blending::id(blend);
+    return o;
 }
 
 DropShadow DropShadow::fromJson(const QJsonObject& json)
@@ -552,6 +947,8 @@ DropShadow DropShadow::fromJson(const QJsonObject& json)
     s.opacity = json.value(QStringLiteral("opacity")).toDouble(50.0);
     s.feather = json.value(QStringLiteral("feather")).toDouble(1.5);
     s.color = Color::fromHex(json.value(QStringLiteral("color")).toString()).value_or(Color(0, 0, 0));
+    s.inner = json.value(QStringLiteral("inner")).toBool();
+    s.blend = blending::fromId(json.value(QStringLiteral("blend")).toString()).value_or(BlendMode::Normal);
     return s;
 }
 

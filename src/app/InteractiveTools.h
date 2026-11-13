@@ -6,6 +6,7 @@
 
 #include <QIcon>
 #include <QPolygonF>
+#include <QWidget>
 
 #include <optional>
 
@@ -64,6 +65,46 @@ private:
     std::optional<Extrusion> m_preview;
 };
 
+// Zickzack-Optionen: glatt (Wellen statt Zacken), zufällige Amplitude (fester Startwert),
+// lokal (Amplitude nimmt vom Mittelpunkt nach aussen ab)
+struct ZipperDistortOptions {
+    bool smooth = false;
+    bool random = false;
+    bool local = false;
+    quint32 seed = 1;
+};
+
+// Kugel in der Leiste der Extrusion: Ziehen dreht den Körper im Raum (waagrecht um die
+// senkrechte Achse, senkrecht um die waagrechte, mit Umschalt um die Blickachse). Beim Ziehen nur
+// Vorschau in der Kugel, beim Loslassen rotationChanged (ein Undo-Schritt).
+class ExtrusionTrackball final : public QWidget {
+    Q_OBJECT
+
+public:
+    explicit ExtrusionTrackball(QWidget* parent = nullptr);
+    void setRotation(double x, double y, double z);
+    double rotX() const { return m_x; }
+    double rotY() const { return m_y; }
+    double rotZ() const { return m_z; }
+    QSize sizeHint() const override { return {30, 30}; }
+    static constexpr double kDegreesPerPixel = 2.0;
+
+signals:
+    void rotationChanged(double x, double y, double z);
+
+protected:
+    void paintEvent(QPaintEvent* e) override;
+    void mousePressEvent(QMouseEvent* e) override;
+    void mouseMoveEvent(QMouseEvent* e) override;
+    void mouseReleaseEvent(QMouseEvent* e) override;
+
+private:
+    double m_x = 0.0, m_y = 0.0, m_z = 0.0;
+    double m_startX = 0.0, m_startY = 0.0, m_startZ = 0.0;
+    QPoint m_press;
+    bool m_dragging = false;
+};
+
 // Verzerren: Stossen/Ziehen, Zickzack, Wirbel; Ziehen vom Objekt bestimmt die Stärke
 class DistortTool final : public Tool {
 public:
@@ -74,10 +115,14 @@ public:
     void mouseMove(QMouseEvent* event, const QPointF& doc) override;
     void mouseRelease(QMouseEvent* event, const QPointF& doc) override;
     void paintOverlay(QPainter& p) override;
+    using ZipperOptions = ZipperDistortOptions;
     // Linienzüge (Seitenkoordinaten) um center verzerren; amount: Stossen/Ziehen in % (−/+),
     // Zickzack Amplitude in mm, Wirbel Grad
-    static QList<SubPath> distort(const QList<SubPath>& paths, Mode mode, double amount, int frequency, const QPointF& center);
+    static QList<SubPath> distort(const QList<SubPath>& paths, Mode mode, double amount, int frequency, const QPointF& center,
+                                  const ZipperOptions& zipper = {});
     static Mode mode();
+    // Zickzack-Optionen aus der Eigenschaftsleiste
+    static ZipperOptions zipperOptions();
 
 private:
     double amountFor(const QPointF& to) const;

@@ -1638,7 +1638,7 @@ std::vector<svg::Import> read(const QByteArray& data, QString* error)
 namespace {
 
 // Ghostscript-Bibliothek (gsapi) im eigenen Prozess: gsdll64.dll liegt neben tangenta.exe, unter
-// Linux libgs.so. Ghostscript steht unter AGPLv3; mit TANGENTA (GPLv3) kombinierbar (GPLv3 § 13).
+// Linux libgs.so, unter macOS libgs.dylib (Homebrew). Ghostscript steht unter AGPLv3; mit TANGENTA (GPLv3) kombinierbar (GPLv3 § 13).
 struct GsApi {
     using NewInstance = int (*)(void**, void*);
     using DeleteInstance = void (*)(void*);
@@ -1667,6 +1667,9 @@ struct GsApi {
         QDir gsRoot(QStringLiteral("C:/Program Files/gs"));
         for (const QString& v : gsRoot.entryList(QDir::Dirs | QDir::NoDotAndDotDot, QDir::Name | QDir::Reversed))
             candidates << gsRoot.filePath(v + QStringLiteral("/bin/gsdll64.dll"));
+#elif defined(Q_OS_MACOS)
+        candidates << appDir + QStringLiteral("/../Frameworks/libgs.dylib") << QStringLiteral("/opt/homebrew/lib/libgs.dylib")
+                   << QStringLiteral("/usr/local/lib/libgs.dylib") << QStringLiteral("/opt/local/lib/libgs.dylib");
 #else
         candidates << appDir + QStringLiteral("/libgs.so") << QStringLiteral("libgs.so.10") << QStringLiteral("libgs.so.9") << QStringLiteral("libgs");
 #endif
@@ -1718,6 +1721,12 @@ QString executable()
     for (const char* name : {"gswin64c", "gswin32c", "gs"})
         if (const QString p = QStandardPaths::findExecutable(QLatin1String(name)); !p.isEmpty())
             return p;
+#ifdef Q_OS_MACOS
+    // Aus dem Finder gestartete Programme sehen den PATH von Homebrew und MacPorts nicht
+    if (const QString p = QStandardPaths::findExecutable(QStringLiteral("gs"), {QStringLiteral("/opt/homebrew/bin"), QStringLiteral("/usr/local/bin"), QStringLiteral("/opt/local/bin")});
+        !p.isEmpty())
+        return p;
+#endif
     return {};
 }
 

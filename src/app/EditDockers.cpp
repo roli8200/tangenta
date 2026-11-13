@@ -1,7 +1,9 @@
 #include "EditDockers.h"
 
 #include "ColorDialog.h"
+#include "EffectTool.h"
 #include "Editor.h"
+#include "ExpressionSpinBox.h"
 #include "Icons.h"
 #include "Outline.h"
 
@@ -56,7 +58,7 @@ ObjectPropertiesDocker::ObjectPropertiesDocker(Editor& editor, QWidget* parent) 
     m_stroke = new QToolButton(this);
     m_stroke->setToolButtonStyle(Qt::ToolButtonTextBesideIcon);
     form->addRow(tr("Kontur:"), m_stroke);
-    m_width = new QDoubleSpinBox(this);
+    m_width = new ExpressionSpinBox(this);
     m_width->setRange(0, 1000);
     m_width->setDecimals(3);
     m_width->setSuffix(QStringLiteral(" mm"));
@@ -67,12 +69,14 @@ ObjectPropertiesDocker::ObjectPropertiesDocker(Editor& editor, QWidget* parent) 
     for (int i = 1; i < outline::dashCount(); ++i)
         m_dash->addItem(tr("Linienstil %1").arg(i));
     form->addRow(tr("Linienstil:"), m_dash);
-    m_transparency = new QDoubleSpinBox(this);
+    m_transparency = new ExpressionSpinBox(this);
     m_transparency->setRange(0, 100);
     m_transparency->setSuffix(QStringLiteral(" %"));
     m_transparency->setKeyboardTracking(false);
     form->addRow(tr("Transparenz:"), m_transparency);
-    m_blur = new QDoubleSpinBox(this);
+    m_blendMode = createBlendModeCombo(this, tr("Mischmodus"));
+    form->addRow(tr("Mischmodus:"), m_blendMode);
+    m_blur = new ExpressionSpinBox(this);
     m_blur->setRange(0, 500);
     m_blur->setDecimals(2);
     m_blur->setSuffix(QStringLiteral(" mm"));
@@ -110,6 +114,10 @@ ObjectPropertiesDocker::ObjectPropertiesDocker(Editor& editor, QWidget* parent) 
         if (!m_updating)
             m_editor.setSelectionEffect(Effect::Transparency, [v](Ramp& r) { r = Ramp::uniform(v); }, tr("Transparenz"));
     });
+    connect(m_blendMode, &QComboBox::activated, this, [this](int i) {
+        if (!m_updating)
+            m_editor.setSelectionBlendMode(BlendMode(m_blendMode->itemData(i).toInt()));
+    });
     connect(m_blur, &QDoubleSpinBox::valueChanged, this, [this](double v) {
         if (!m_updating)
             m_editor.setSelectionBlur(v);
@@ -128,7 +136,7 @@ void ObjectPropertiesDocker::refresh()
     m_updating = true;
     const QList<const DrawObject*> objects = m_editor.selectedObjects();
     const bool any = !objects.isEmpty();
-    for (QWidget* w : std::initializer_list<QWidget*>{m_name, m_fill, m_stroke, m_width, m_dash, m_transparency, m_blur, m_locked})
+    for (QWidget* w : std::initializer_list<QWidget*>{m_name, m_fill, m_stroke, m_width, m_dash, m_transparency, m_blendMode, m_blur, m_locked})
         w->setEnabled(any);
     if (!any) {
         m_kind->setText(tr("Keine Auswahl"));
@@ -150,6 +158,7 @@ void ObjectPropertiesDocker::refresh()
     m_width->setValue(o->style().strokeWidth);
     m_dash->setCurrentIndex(std::clamp(o->style().dash, 0, m_dash->count() - 1));
     m_transparency->setValue(o->transparency().maximum());
+    setBlendModeComboValue(m_blendMode, o->blendMode());
     m_blur->setValue(o->blur());
     m_locked->setChecked(o->locked());
     m_updating = false;

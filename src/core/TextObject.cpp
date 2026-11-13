@@ -12,6 +12,7 @@
 #include <QTextBlock>
 #include <QTextCursor>
 #include <QTextDocument>
+#include <QTextBoundaryFinder>
 #include <QTextDocumentFragment>
 
 #include <algorithm>
@@ -670,6 +671,112 @@ void TextObject::readProperties(const QJsonObject& in)
         list << p;
     }
     setParagraphs(list);
+}
+
+namespace {
+
+QString paragraphText(const TextParagraph& p)
+{
+    QString text;
+    for (const TextRun& r : p.runs)
+        text += r.text;
+    return text;
+}
+
+// Ausschnitt [from, to) eines Absatzes mit den Formaten der Läufe
+TextParagraph sliceParagraph(const TextParagraph& p, int from, int to)
+{
+    TextParagraph out = p;
+    out.runs.clear();
+    out.dropCap = 0;
+    int pos = 0;
+    for (const TextRun& r : p.runs) {
+        const int a = std::max(from, pos);
+        const int b = std::min(to, pos + int(r.text.size()));
+        if (a < b)
+            out.runs << TextRun{r.text.mid(a - pos, b - a), r.format};
+        pos += int(r.text.size());
+    }
+    if (out.runs.isEmpty())
+        out.runs << TextRun{QString(), p.runs.isEmpty() ? CharFormat() : p.runs.first().format};
+    return out;
+}
+
+} // namespace
+
+std::vector<std::unique_ptr<TextObject>> TextObject::breakApart() const
+{
+    std::vector<std::unique_ptr<TextObject>> out;
+    if (m_kind != Kind::Artistic || onPath())
+        return out;
+    // Teile als (Absatz, von, bis); Zeilen zuerst, dann Wörter, dann Zeichen
+    struct Part {
+        int paragraph;
+        int from;
+        int to;
+    };
+    QList<Part> parts;
+    for (int i = 0; i < m_paragraphs.size(); ++i) {
+        const QString text = paragraphText(m_paragraphs[i]);
+        if (!text.trimmed().isEmpty())
+            parts << Part{i, 0, int(text.size())};
+    }
+    if (parts.size() == 1) {
+        const Part line = parts.takeFirst();
+        const QString text = paragraphText(m_paragraphs[line.paragraph]);
+        // Wörter: zusammenhängende Folgen ohne Leerraum
+        for (int i = 0; i < text.size();) {
+            if (text[i].isSpace()) {
+                ++i;
+                continue;
+            }
+            int j = i;
+            while (j < text.size() && !text[j].isSpace())
+                ++j;
+            parts << Part{line.paragraph, i, j};
+            i = j;
+        }
+        if (parts.size() == 1) {
+            // Ein Wort: einzelne Zeichen (Graphem-Grenzen, damit Akzente beim Buchstaben bleiben)
+            const Part word = parts.takeFirst();
+            QTextBoundaryFinder finder(QTextBoundaryFinder::Grapheme, text);
+            finder.setPosition(word.from);
+            int a = word.from;
+            while (a < word.to) {
+                int b = finder.toNextBoundary();
+                if (b < 0 || b > word.to)
+                    b = word.to;
+                parts << Part{line.paragraph, a, b};
+                a = b;
+            }
+        }
+    }
+    if (parts.size() < 2)
+        return {};
+
+    // Lage: Anfang des Teils im Original (x am Zeichen, y auf der Grundlinie)
+    const std::unique_ptr<QTextDocument> doc = toDocument();
+    const TextFlow flow(*doc, {}, false);
+    std::vector<int> blockStart;
+    int start = 0;
+    for (const TextParagraph& p : m_paragraphs) {
+        blockStart.push_back(start);
+        start += int(paragraphText(p).size()) + 1;
+    }
+    for (const Part& part : parts) {
+        auto piece = std::make_unique<TextObject>(Kind::Artistic);
+        piece->setParagraphs({sliceParagraph(m_paragraphs[part.paragraph], part.from, part.to)});
+        piece->setStyle(style());
+        piece->copyEffects(*this);
+        const TextFlow::Caret original = flow.caret(blockStart[std::size_t(part.paragraph)] + part.from);
+        const std::unique_ptr<QTextDocument> pieceDoc = piece->toDocument();
+        const TextFlow pieceFlow(*pieceDoc, {}, false);
+        const TextFlow::Caret own = pieceFlow.caret(0);
+        const QPointF offset(original.top.x() - own.top.x(), original.baseline - own.baseline);
+        piece->setTransform(QTransform::fromTranslate(offset.x(), offset.y()) * transform());
+        out.push_back(std::move(piece));
+    }
+    return out;
 }
 
 } // namespace vek

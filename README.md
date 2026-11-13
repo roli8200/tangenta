@@ -5,11 +5,11 @@
 <h1 align="center">TANGENTA</h1>
 
 <p align="center">
-  <b>Vector graphics the way you know it – free, for Windows and Linux, with a built-in AI assistant.</b>
+  <b>Vector graphics the way you know it – free, for Windows, macOS and Linux, with a built-in AI assistant.</b>
 </p>
 
 <p align="center">
-  <a href="https://github.com/roli8200/tangenta/releases/latest"><img alt="Download" src="https://img.shields.io/badge/Download-Windows%20%7C%20Linux-2f6fdf?style=for-the-badge"></a>
+  <a href="https://github.com/roli8200/tangenta/releases/latest"><img alt="Download" src="https://img.shields.io/badge/Download-Windows%20%7C%20macOS%20%7C%20Linux-2f6fdf?style=for-the-badge"></a>
   <a href="LICENSE"><img alt="GPL-3.0" src="https://img.shields.io/badge/License-GPL--3.0-6c3fb5?style=for-the-badge"></a>
   <img alt="Qt 6" src="https://img.shields.io/badge/Qt-6.10-41cd52?style=for-the-badge">
   <img alt="C++20" src="https://img.shields.io/badge/C%2B%2B-20-00599c?style=for-the-badge">
@@ -112,19 +112,31 @@ packages:
 Silent installation, e.g. via GPO, Intune or a script:
 
 ```bat
-TANGENTA-0.86-x64-setup.exe /quiet
-msiexec /i TANGENTA-0.86-x64.msi /qn INSTALLFOLDER="D:\Programs\TANGENTA" DESKTOPSHORTCUT=1
+TANGENTA-0.91-x64-setup.exe /quiet
+msiexec /i TANGENTA-0.91-x64.msi /qn INSTALLFOLDER="D:\Programs\TANGENTA" DESKTOPSHORTCUT=1
 ```
 
 The packages are not signed yet. If Windows shows "Windows protected your PC", click *More info* →
 *Run anyway*.
+
+### macOS 13 or newer
+
+`TANGENTA-0.91-macos.dmg` runs on Macs with Apple silicon and with Intel processors. Open the disk image
+and drag TANGENTA into *Applications*.
+
+The Mac version is not signed by Apple yet. On first start macOS refuses to open it: open
+*System Settings* → *Privacy & Security*, scroll down and click *Open Anyway* next to TANGENTA. Or in the
+terminal: `xattr -dr com.apple.quarantine /Applications/TANGENTA.app`
+
+The Mac version is built automatically on GitHub Actions and has had less hands-on testing than the
+Windows and Linux versions. Feedback is welcome.
 
 ### Debian and Ubuntu
 
 One package each for Debian 12, Debian 13, Ubuntu 24.04 and Ubuntu 26.04. Qt 6.10 is included.
 
 ```sh
-sudo apt install ./tangenta_0.86-1.debian12_amd64.deb
+sudo apt install ./tangenta_0.91-1.debian12_amd64.deb
 ```
 
 ### Other Linux systems (Flatpak)
@@ -133,7 +145,7 @@ For Fedora, openSUSE, Arch, Mint and every other system with Flatpak. Flatpak fe
 (Qt 6.10) from Flathub during installation.
 
 ```sh
-flatpak install --user TANGENTA-0.86-x86_64.flatpak
+flatpak install --user TANGENTA-0.91-x86_64.flatpak
 flatpak run ch.tangenta.Tangenta
 ```
 

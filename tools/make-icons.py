@@ -229,6 +229,14 @@ ICONS = {
     'unlock-all': '<rect x="4" y="11" width="10" height="8" rx="1" fill="#e2c35b" stroke="#8a6d1a"/><path d="M6 11V8a3 3 0 0 1 6 0" fill="none" stroke="#8a6d1a" stroke-width="1.4"/><rect x="12" y="6" width="8" height="6" rx="1" fill="#e2c35b" stroke="#8a6d1a"/>',
     'edit-repeat': '<path d="M5 12a7 7 0 1 0 2-5" fill="none" stroke="#1f5fae" stroke-width="1.8"/><path d="M4 3v5h5" fill="none" stroke="#1f5fae" stroke-width="1.8"/>',
     'edit-clone': '<rect x="3" y="3" width="11" height="11" fill="#9cc3ef" stroke="#1f5fae" stroke-width="1"/><rect x="10" y="10" width="11" height="11" fill="#fff" stroke="#1f5fae" stroke-dasharray="2 1.2"/><path d="M8 8l7 7" stroke="#d22" stroke-width="1.2"/>',
+    'image-search': f'<rect x="2.5" y="3.5" width="15" height="12" rx="1" fill="url(#paper)" {S} stroke-width="1.1"/>'
+                    f'<path d="M3.5 14.5l4.2-5 3 3.4 2-2.2 3.8 3.8z" fill="#2f7d32"/>'
+                    f'<circle cx="13.6" cy="7.2" r="1.6" fill="#f2b705"/>'
+                    f'<circle cx="15" cy="15" r="4.3" fill="url(#glass)" stroke="{INK}" stroke-width="1.5"/>'
+                    f'<path d="M18.2 18.2l3.6 3.6" stroke="#5b4636" stroke-width="2.6" stroke-linecap="round"/>'
+                    f'<path d="M12.8 13.7a2.4 2.4 0 0 1 2-1.7" fill="none" stroke="#ffffff" stroke-width="1" stroke-linecap="round"/>',
+    'qr-code': '<rect x="3" y="3" width="18" height="18" fill="#fff" stroke="#555" stroke-width="0.8"/><path d="M5 5h5v5H5zM14 5h5v5h-5zM5 14h5v5H5z" fill="none" stroke="#1f2a44" stroke-width="1.4"/><path d="M7 7h1v1H7zM16 7h1v1h-1zM7 16h1v1H7zM13 13h2v2h-2zM16 14h3v2h-3zM14 17h2v2h-2zM17 17h2v2h-2z" fill="#1f2a44"/>',
+    'qr-background': '<rect x="3" y="3" width="18" height="18" fill="#fff" stroke="#1f5fae" stroke-width="1.6"/><path d="M7 7h4v4H7zM13 13h4v4h-4zM13 7h2v2h-2zM7 13h2v2H7z" fill="#1f2a44"/>',
     'symbol': '<circle cx="12" cy="12" r="8" fill="#9cc3ef" stroke="#1f5fae" stroke-width="1"/><path d="M8 12l3 3 5-6" fill="none" stroke="#fff" stroke-width="2"/>',
     'object-properties': '<rect x="4" y="3" width="16" height="18" rx="1" fill="#fff" stroke="#555"/><path d="M7 8h10M7 12h10M7 16h6" stroke="#1f5fae" stroke-width="1.4"/>',
     'tool-pipette': '<path d="M15 4l5 5-2 2-1-1-8 8H6v-3l8-8-1-1z" fill="#cfe0f5" stroke="#1f5fae" stroke-width="1.1"/><path d="M4 20l2-2" stroke="#1f5fae" stroke-width="1.6"/><circle cx="4" cy="20" r="1.2" fill="#d22"/>',
@@ -256,13 +264,25 @@ ICONS = {
     'tool-contour': '<rect x="3" y="3" width="18" height="18" rx="3" fill="#dfeaf7" stroke="#1f5fae"/><rect x="6" y="6" width="12" height="12" rx="2" fill="#9cc3ef" stroke="#1f5fae"/><rect x="9" y="9" width="6" height="6" fill="#1f5fae"/>',
     'tool-distort': '<path d="M4 12c2-6 4 6 6 0s4 6 6 0 4 6 4 0" fill="none" stroke="#1f5fae" stroke-width="1.6"/>',
     'tool-envelope': '<path d="M4 6c5 3 11 3 16 0v12c-5-3-11-3-16 0z" fill="#9cc3ef" stroke="#1f5fae"/><rect x="2.5" y="4.5" width="3" height="3" fill="#fff" stroke="#000" stroke-width="0.8"/><rect x="18.5" y="16.5" width="3" height="3" fill="#fff" stroke="#000" stroke-width="0.8"/>',
+    'tool-block-shadow': '<path d="M4 4h11v11H4z" fill="#555"/><path d="M4 15l5 5h11V9l-5-5v11z" fill="#555" opacity="0.6"/><rect x="4" y="4" width="11" height="11" fill="#9cc3ef" stroke="#1f5fae"/>',
+    'fx-photomosaic': f'<rect x="3.5" y="3.5" width="5" height="5" fill="#e53935" {S}/><rect x="9.5" y="3.5" width="5" height="5" fill="#fdd835" {S}/><rect x="15.5" y="3.5" width="5" height="5" fill="#43a047" {S}/>'
+                      f'<rect x="3.5" y="9.5" width="5" height="5" fill="#1e88e5" {S}/><rect x="9.5" y="9.5" width="5" height="5" fill="url(#glass)" {S}/><rect x="15.5" y="9.5" width="5" height="5" fill="#e2740c" {S}/>'
+                      f'<rect x="3.5" y="15.5" width="5" height="5" fill="#8e24aa" {S}/><rect x="9.5" y="15.5" width="5" height="5" fill="#43a047" {S}/><rect x="15.5" y="15.5" width="5" height="5" fill="#fdd835" {S}/>',
+    'fx-pointillize': f'<circle cx="6" cy="6" r="2.5" fill="{INK}"/><circle cx="12" cy="6" r="2" fill="{INK}"/><circle cx="18" cy="6" r="1.2" fill="{INK}"/>'
+                      f'<circle cx="6" cy="12" r="2" fill="{INK}"/><circle cx="12" cy="12" r="1.5" fill="{INK}"/><circle cx="18" cy="12" r="0.9" fill="{INK}"/>'
+                      f'<circle cx="6" cy="18" r="1.3" fill="{INK}"/><circle cx="12" cy="18" r="0.9" fill="{INK}"/><circle cx="18" cy="18" r="0.5" fill="{INK}"/>',
     'tool-extrude': '<path d="M4 9h11v11H4z" fill="#9cc3ef" stroke="#1f5fae"/><path d="M4 9l5-5h11l-5 5zM15 9l5-5v11l-5 5z" fill="#5f8fca" stroke="#1f5fae"/>',
     'contour-center': '<rect x="3" y="3" width="18" height="18" fill="none" stroke="#1f5fae"/><rect x="7" y="7" width="10" height="10" fill="none" stroke="#1f5fae"/><circle cx="12" cy="12" r="1.5" fill="#d22"/>',
     'contour-inside': '<rect x="3" y="3" width="18" height="18" fill="#9cc3ef" stroke="#1f5fae"/><rect x="7" y="7" width="10" height="10" fill="none" stroke="#1f5fae"/>',
     'contour-outside': '<rect x="3" y="3" width="18" height="18" fill="none" stroke="#1f5fae" stroke-dasharray="2 1"/><rect x="7" y="7" width="10" height="10" fill="#9cc3ef" stroke="#1f5fae"/>',
     'contour-offset': '<path d="M4 4v16M12 4v16M8 12H20M17 9l3 3-3 3" fill="none" stroke="#1f5fae" stroke-width="1.3"/>',
     'blend-steps': '<rect x="3" y="14" width="4" height="6" fill="#1f5fae"/><rect x="10" y="10" width="4" height="10" fill="#4a7fc0"/><rect x="17" y="6" width="4" height="14" fill="#7aa5d8"/>',
-    'extrude-depth': '<path d="M5 15h9v5H5z" fill="#9cc3ef" stroke="#1f5fae"/><path d="M5 15l5-5h9l-5 5zM14 15l5-5v5l-5 5z" fill="#5f8fca"/>',
+    'blend-path': '<path d="M3 19C6 8 14 20 21 6" fill="none" stroke="#3a3a3a" stroke-width="1.2"/><circle cx="5" cy="15" r="2.5" fill="#1f5fae"/><circle cx="12" cy="14" r="2.5" fill="#4a7fc0"/><circle cx="19" cy="9" r="2.5" fill="#7aa5d8"/>',
+    'blend-detach': '<path d="M3 21C6 12 12 22 18 12" fill="none" stroke="#3a3a3a" stroke-width="1.2" stroke-dasharray="2 1.5"/><circle cx="7" cy="7" r="2.5" fill="#1f5fae"/><circle cx="14" cy="5" r="2.5" fill="#7aa5d8"/><path d="M17 15l4 4M21 15l-4 4" stroke="#d22" stroke-width="1.5"/>',
+    'blend-fullpath': '<path d="M3 18C7 6 15 22 21 6" fill="none" stroke="#3a3a3a" stroke-width="1.2"/><circle cx="3.5" cy="17" r="2.5" fill="#1f5fae"/><circle cx="20.5" cy="7" r="2.5" fill="#7aa5d8"/><circle cx="12" cy="14" r="2" fill="#4a7fc0"/>',
+    'blend-rotate': '<path d="M3 19C6 8 14 20 21 6" fill="none" stroke="#3a3a3a" stroke-width="1.2"/><rect x="2.5" y="13" width="5" height="3" fill="#1f5fae" transform="rotate(-60 5 14.5)"/><rect x="9.5" y="12.5" width="5" height="3" fill="#4a7fc0"/><rect x="16.5" y="8.5" width="5" height="3" fill="#7aa5d8" transform="rotate(-50 19 10)"/>',
+    'blend-reverse': '<circle cx="9" cy="12" r="5" fill="#7aa5d8" stroke="#1f5fae"/><circle cx="15" cy="12" r="5" fill="#1f5fae" stroke="#1f5fae"/><path d="M4 4h12M13 2l3 2-3 2M20 20H8M11 18l-3 2 3 2" fill="none" stroke="#3a3a3a" stroke-width="1.2"/>',
+    'extrude-depth':'<path d="M5 15h9v5H5z" fill="#9cc3ef" stroke="#1f5fae"/><path d="M5 15l5-5h9l-5 5zM14 15l5-5v5l-5 5z" fill="#5f8fca"/>',
     'distort-pushpull': '<path d="M12 3l3 6 6 3-6 3-3 6-3-6-6-3 6-3z" fill="#9cc3ef" stroke="#1f5fae"/>',
     'distort-zipper': '<path d="M3 12l2-4 2 8 2-8 2 8 2-8 2 8 2-8 2 8 2-4" fill="none" stroke="#1f5fae" stroke-width="1.3"/>',
     'distort-twister': '<path d="M12 12m-1 0a1 1 0 1 1 2 0a3 3 0 1 1-6 0a5 5 0 1 1 10 0a7 7 0 1 1-14 0" fill="none" stroke="#1f5fae" stroke-width="1.3"/>',
@@ -321,6 +341,26 @@ ICONS = {
     'page-insert': f'<path d="M4.5 2.5h8l3 3v15h-11z" fill="url(#paper)" {S}/>'
                    f'<circle cx="17" cy="17" r="4.8" fill="#3fae49" stroke="#1e6e26" stroke-width="0.8"/>'
                    f'<path d="M17 14.3v5.4M14.3 17h5.4" stroke="#ffffff" stroke-width="1.6"/>',
+    # --- Andockfenster Seiten, Mehrseitenansicht ------------------------------------------------
+    'pages-multi': f'<rect x="3.5" y="3.5" width="7" height="8" fill="url(#paper)" {S}/>'
+                   f'<rect x="13.5" y="3.5" width="7" height="8" fill="url(#paper)" {S}/>'
+                   f'<rect x="3.5" y="13.5" width="7" height="8" fill="url(#paper)" {S}/>'
+                   f'<rect x="13.5" y="13.5" width="7" height="8" fill="#ffffff" {S}/>',
+    'pages-list': f'<rect x="3.5" y="3.5" width="6" height="7" fill="url(#paper)" {S}/>'
+                  f'<rect x="3.5" y="13.5" width="6" height="7" fill="url(#paper)" {S}/>'
+                  f'<path d="M12 6h8.5M12 8h6M12 16h8.5M12 18h6" stroke="{INK}" stroke-width="1"/>',
+    'pages-grid': f'<rect x="3.5" y="3.5" width="7" height="7" fill="url(#paper)" {S}/>'
+                  f'<rect x="13.5" y="3.5" width="7" height="7" fill="url(#paper)" {S}/>'
+                  f'<rect x="3.5" y="13.5" width="7" height="7" fill="url(#paper)" {S}/>'
+                  f'<rect x="13.5" y="13.5" width="7" height="7" fill="url(#paper)" {S}/>',
+    'page-delete': f'<path d="M4.5 2.5h8l3 3v15h-11z" fill="url(#paper)" {S}/>'
+                   f'<circle cx="17" cy="17" r="4.8" fill="#d23c3c" stroke="#8e1f1f" stroke-width="0.8"/>'
+                   f'<path d="M14.3 17h5.4" stroke="#ffffff" stroke-width="1.6"/>',
+    'page-duplicate': f'<path d="M7.5 2.5h8l3 3v12h-11z" fill="#ffffff" {S}/>'
+                      f'<path d="M4.5 6.5h8l3 3v12h-11z" fill="url(#paper)" {S}/>',
+    'page-settings': f'<circle cx="12" cy="12" r="6.5" fill="url(#steel)" stroke="{INK}" stroke-width="1"/>'
+                     f'<path d="M12 2.5v3M12 18.5v3M2.5 12h3M18.5 12h3M5.3 5.3l2.1 2.1M16.6 16.6l2.1 2.1M5.3 18.7l2.1-2.1M16.6 7.4l2.1-2.1" stroke="{INK}" stroke-width="2.2"/>'
+                     f'<circle cx="12" cy="12" r="2.5" fill="#ffffff" stroke="{INK}" stroke-width="1"/>',
     # --- Kurven und Knoten (Freihand- und Formwerkzeug) -------------------------------------
     'tool-freehand': f'<path d="M3.5 18.5c2.5-6 5-7.5 7-4.5s4 2.5 6-3" fill="none" stroke="{INK}" stroke-width="1.4"/>'
                      f'<path d="M15.6 9.2l3.6-5.6 1.9 1.2-3.6 5.6-2.5 1.1z" fill="url(#steel)" {S}/>',

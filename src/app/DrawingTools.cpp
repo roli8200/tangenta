@@ -398,58 +398,92 @@ void ThreePointTool::paintOverlay(QPainter& p)
 void SmartFillTool::activate()
 {
     m_hover = QPainterPath();
+    m_arrangement.reset();
     m_canvas.setCursor(Qt::PointingHandCursor);
+    // Netz neu aufbauen, sobald sich das Dokument oder die Seite ändert
+    if (!m_docConnection)
+        m_docConnection = QObject::connect(&m_canvas.editor(), &Editor::documentChanged, &m_canvas, [this] {
+            m_arrangement.reset();
+            m_hover = QPainterPath();
+        });
+    if (!m_pageConnection)
+        m_pageConnection = QObject::connect(&m_canvas.editor(), &Editor::currentPageChanged, &m_canvas, [this] {
+            m_arrangement.reset();
+            m_hover = QPainterPath();
+        });
+}
+
+QList<SubPath> SmartFillTool::boundaryPaths(const QList<const DrawObject*>& objects)
+{
+    QList<SubPath> paths;
+    for (const DrawObject* o : objects) {
+        if (node_cast<ImageObject>(o))
+            continue;
+        if (node_cast<GroupObject>(o)) {
+            QList<const DrawObject*> children;
+            for (int i = 0; i < o->childCount(); ++i)
+                if (const auto* c = node_cast<DrawObject>(o->child(i)))
+                    children << c;
+            paths << boundaryPaths(children);
+            continue;
+        }
+        paths << CurveObject::fromPath(o->path())->subPaths();
+    }
+    return paths;
+}
+
+const pathops::Arrangement& SmartFillTool::arrangement() const
+{
+    const double gap = std::max(0.0, Options::instance().number(QStringLiteral("ws/tools/smartFill/gap")));
+    if (!m_arrangement || gap != m_arrangementGap) {
+        m_arrangement = std::make_unique<pathops::Arrangement>(boundaryPaths(m_canvas.editor().pickableObjects()), gap);
+        m_arrangementGap = gap;
+    }
+    return *m_arrangement;
+}
+
+QList<SubPath> SmartFillTool::faceAt(const QPointF& doc) const
+{
+    return arrangement().faceAt(doc);
 }
 
 QPainterPath SmartFillTool::regionAt(const QPointF& doc) const
 {
-    QPainterPath inside;
-    bool any = false;
-    QList<QPainterPath> outside;
-    for (const DrawObject* o : m_canvas.editor().pickableObjects()) {
-        if (node_cast<ImageObject>(o))
-            continue;
-        const QPainterPath area = pathops::geometryOf(*o).area;
-        if (area.isEmpty())
-            continue;
-        if (area.contains(doc)) {
-            inside = any ? pathops::intersected(inside, area) : area;
-            any = true;
-        } else if (area.boundingRect().intersects(inside.boundingRect()) || !any) {
-            outside << area;
-        }
+    return CurveObject::toPainterPath(faceAt(doc));
+}
+
+Style SmartFillTool::fillStyle(const Style& defaults)
+{
+    const Options& opt = Options::instance();
+    Style s = defaults;
+    // Füllung: 0 = Vorgabe, 1 = Angeben, 2 = Keine
+    switch (opt.integer(QStringLiteral("ws/tools/smartFill/fillMode"))) {
+    case 0: break;
+    case 2: s.fill = Fill::none(); break;
+    default:
+        s.fill = Fill::solid(Color::fromHex(opt.text(QStringLiteral("ws/tools/smartFill/fill"))).value_or(Color(255, 210, 77)));
+        break;
     }
-    if (!any)
-        return {};
-    for (const QPainterPath& o : std::as_const(outside))
-        if (o.boundingRect().intersects(inside.boundingRect()))
-            inside = pathops::subtracted(inside, o);
-    // Nur der Teil, der den Klick enthält (Schnitt kann mehrere Stücke ergeben)
-    for (const QPolygonF& poly : inside.toFillPolygons()) {
-        QPainterPath piece;
-        piece.addPolygon(poly);
-        if (piece.contains(doc))
-            return inside.intersected(piece).simplified();
+    // Kontur: 0 = Vorgabe, 1 = Angeben (Breite, Farbe), 2 = Keine
+    switch (opt.integer(QStringLiteral("ws/tools/smartFill/outlineMode"))) {
+    case 0: break;
+    case 1:
+        s.stroke = Color::fromHex(opt.text(QStringLiteral("ws/tools/smartFill/outlineColor"))).value_or(Color(0, 0, 0));
+        s.strokeWidth = std::max(0.0, opt.number(QStringLiteral("ws/tools/smartFill/outlineWidth")));
+        break;
+    default: s.stroke.reset(); break;
     }
-    return inside;
+    return s;
 }
 
 NodeId SmartFillTool::fillAt(const QPointF& doc)
 {
-    const QPainterPath region = regionAt(doc);
-    if (region.isEmpty())
-        return 0;
-    QList<SubPath> paths = pathops::fitRegion(region, 0.01);
+    const QList<SubPath> paths = faceAt(doc);
     if (paths.isEmpty())
         return 0;
     Editor& ed = m_canvas.editor();
     auto curve = std::make_unique<CurveObject>(paths);
-    const Options& opt = Options::instance();
-    Style s = ed.defaultStyle();
-    s.fill = Fill::solid(Color::fromHex(opt.text(QStringLiteral("ws/tools/smartFill/fill"))).value_or(Color(255, 210, 77)));
-    if (!opt.flag(QStringLiteral("ws/tools/smartFill/outline")))
-        s.stroke.reset();
-    curve->setStyle(s);
+    curve->setStyle(fillStyle(ed.defaultStyle()));
     return ed.addObject(std::move(curve), QObject::tr("Smart-Füllung"));
 }
 

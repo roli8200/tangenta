@@ -1,12 +1,18 @@
 #include "PathOps.h"
 
+#include "MediaArt.h"
+
 #include <QCoreApplication>
+#include <QHash>
 #include <QLineF>
 
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <limits>
+#include <functional>
 #include <numbers>
+#include <numeric>
 #include <vector>
 
 namespace vek::pathops {
@@ -203,7 +209,7 @@ double polylineLength(const QPolygonF& line)
 
 } // namespace
 
-SubPath fitPolyline(QList<QPointF> points, bool closed, double tolerance, double cornerAngle)
+SubPath fitPolyline(QList<QPointF> points, bool closed, double tolerance, double cornerAngle, bool kinks)
 {
     SubPath result;
     result.closed = closed;
@@ -222,14 +228,31 @@ SubPath fitPolyline(QList<QPointF> points, bool closed, double tolerance, double
 
     // Ecken: Richtungswechsel über 40°
     const int n = int(pts.size());
+    // Richtungswechsel am Punkt i in Grad (an offenen Enden 0)
+    auto turn = [&](int i) {
+        if (!closed && (i <= 0 || i >= n - 1))
+            return 0.0;
+        const QPointF a = pts[((i - 1) % n + n) % n];
+        const QPointF b = pts[(i % n + n) % n];
+        const QPointF c = pts[((i + 1) % n + n) % n];
+        return std::acos(std::clamp(dot(unit(b - a), unit(c - b)), -1.0, 1.0)) * 180.0 / std::numbers::pi;
+    };
     auto isCorner = [&](int i) {
         if (!closed && (i == 0 || i == n - 1))
             return true;
-        const QPointF a = pts[(i - 1 + n) % n];
-        const QPointF b = pts[i];
-        const QPointF c = pts[(i + 1) % n];
-        const double cosAngle = dot(unit(b - a), unit(c - b));
-        return cosAngle < std::cos(cornerAngle * std::numbers::pi / 180.0);
+        const double t = turn(i);
+        if (t > cornerAngle)
+            return true;
+        if (!kinks || t < 3.0 || n < 8)
+            return false;
+        // Abrupter Knick: deutlich stärker als die Krümmung ringsum und ein lokales Maximum
+        // Nachbarn, die selbst Ecken sind (Spitze eines Dreiecks gleich daneben), zählen nicht
+        auto soft = [&](int k) {
+            const double v = turn(k);
+            return v > cornerAngle ? 0.0 : v;
+        };
+        const double around = std::max({soft(i - 3), soft(i - 2), soft(i + 2), soft(i + 3)});
+        return t > 3.0 * around && t >= soft(i - 1) && t >= soft(i + 1);
     };
     QList<int> corners;
     for (int i = 0; i < n; ++i) {
@@ -301,11 +324,64 @@ SubPath fitPolyline(QList<QPointF> points, bool closed, double tolerance, double
     return result;
 }
 
+namespace {
+
+// Qts Boolesche Operationen hinterlassen bei fast tangentialen Kanten "Antennen": der Umriss
+// läuft ein Stück hinaus und auf derselben Linie zurück (Breite null). Die Kurvenanpassung
+// machte daraus lange Sporne oder Haarspalten. Solche Spitzen ohne Fläche entfernen, echte
+// spitze Ecken (mit Breite) bleiben.
+QList<QPointF> withoutSpikes(QList<QPointF> pts, double tolerance)
+{
+    bool changed = true;
+    while (changed && pts.size() > 3) {
+        changed = false;
+        for (int i = 0; i < pts.size() && pts.size() > 3; ++i) {
+            const int n = int(pts.size());
+            const QPointF a = pts[(i - 1 + n) % n];
+            const QPointF b = pts[i];
+            const QPointF c = pts[(i + 1) % n];
+            const QPointF ab = b - a;
+            const QPointF bc = c - b;
+            const double lab = length(ab);
+            const double lbc = length(bc);
+            if (lab < 1e-9 || lbc < 1e-9) {
+                pts.removeAt(i--);
+                changed = true;
+                continue;
+            }
+            const double cross = std::abs(ab.x() * bc.y() - ab.y() * bc.x());
+            // Umkehr (Winkel nahe 180°) und Abstand von b zur Geraden a-c verschwindend klein
+            if (dot(ab, bc) < 0.0 && cross / std::max(lab, lbc) < tolerance * 0.1) {
+                pts.removeAt(i--);
+                changed = true;
+            }
+        }
+    }
+    return pts;
+}
+
+} // namespace
+
 QList<SubPath> fitRegion(const QPainterPath& region, double tolerance)
 {
     QList<SubPath> result;
     for (const QPolygonF& poly : flatten(region)) {
-        SubPath s = fitPolyline(QList<QPointF>(poly.begin(), poly.end()), true, tolerance);
+        const QList<QPointF> spikeFree = withoutSpikes(QList<QPointF>(poly.begin(), poly.end()), tolerance);
+        if (spikeFree.size() < 3)
+            continue;
+        // Lange Strecken unterteilen: Die Anpassung prüft ihren Fehler nur an den Punkten. Ohne
+        // Zwischenpunkte auf einer langen Geraden konnte über ihr eine Schlaufe entstehen.
+        QList<QPointF> clean;
+        const double step = std::max(0.5, tolerance * 25.0);
+        for (int i = 0; i < spikeFree.size(); ++i) {
+            const QPointF a = spikeFree[i];
+            const QPointF b = spikeFree[(i + 1) % spikeFree.size()];
+            clean.append(a);
+            const int parts = int(length(b - a) / step);
+            for (int k = 1; k < parts; ++k)
+                clean.append(a + (b - a) * (double(k) / parts));
+        }
+        SubPath s = fitPolyline(clean, true, tolerance, 40.0, true);
         if (s.nodes.size() >= 2)
             result.append(s);
     }
@@ -644,6 +720,147 @@ Geometry geometryOf(const DrawObject& object)
     return g;
 }
 
+namespace {
+
+// Teilpfade mit ihren Kurven trennen
+QList<QPainterPath> subpathsOf(const QPainterPath& path)
+{
+    QList<QPainterPath> parts;
+    for (int i = 0; i < path.elementCount(); ++i) {
+        const QPainterPath::Element e = path.elementAt(i);
+        switch (e.type) {
+        case QPainterPath::MoveToElement:
+            parts.append(QPainterPath(QPointF(e.x, e.y)));
+            break;
+        case QPainterPath::LineToElement:
+            parts.last().lineTo(e.x, e.y);
+            break;
+        case QPainterPath::CurveToElement: {
+            const QPainterPath::Element c2 = path.elementAt(i + 1);
+            const QPainterPath::Element end = path.elementAt(i + 2);
+            parts.last().cubicTo(QPointF(e.x, e.y), QPointF(c2.x, c2.y), QPointF(end.x, end.y));
+            i += 2;
+            break;
+        }
+        case QPainterPath::CurveToDataElement:
+            break;
+        }
+    }
+    return parts;
+}
+
+} // namespace
+
+QPainterPath withoutHoles(const QPainterPath& path, double keepWiderThan)
+{
+    const QList<QPainterPath> parts = subpathsOf(path);
+    if (parts.size() < 2)
+        return path;
+    QList<QPolygonF> polys;
+    for (const QPainterPath& p : parts)
+        polys.append(p.toFillPolygon());
+    auto inside = [&polys](int i, int j) { // Teilpfad i liegt in Teilpfad j
+        return !polys[i].isEmpty() && polys[j].boundingRect().contains(polys[i].first())
+               && polys[j].containsPoint(polys[i].first(), Qt::OddEvenFill);
+    };
+    // Loch = liegt in einer ungeraden Zahl anderer Teilpfade
+    QList<bool> drop(parts.size(), false);
+    bool removed = false;
+    for (int i = 0; i < parts.size(); ++i) {
+        int depth = 0;
+        for (int j = 0; j < parts.size(); ++j)
+            if (j != i && inside(i, j))
+                ++depth;
+        if (depth % 2 == 0)
+            continue;
+        // Breite eines Lochs: 2 * Fläche / Umfang (beim Kreis der Radius)
+        double area = 0.0, length = 0.0;
+        const QPolygonF& q = polys[i];
+        for (int k = 0; k < q.size(); ++k) {
+            const QPointF a = q[k], b = q[(k + 1) % q.size()];
+            area += a.x() * b.y() - b.x() * a.y();
+            length += QLineF(a, b).length();
+        }
+        const double width = length > 0.0 ? std::abs(area) / length : 0.0;
+        if (keepWiderThan < 0.0 || width < keepWiderThan)
+            drop[i] = removed = true;
+    }
+    if (!removed)
+        return path;
+    // Was in einem geschlossenen Loch liegt (Inseln, Löcher darin), deckt jetzt die Fläche darum
+    QList<bool> covered(parts.size(), false);
+    for (int i = 0; i < parts.size(); ++i)
+        for (int j = 0; j < parts.size() && !covered[i]; ++j)
+            if (j != i && drop[j] && inside(i, j))
+                covered[i] = true;
+    QPainterPath result;
+    result.setFillRule(Qt::OddEvenFill);
+    for (int i = 0; i < parts.size(); ++i)
+        if (!drop[i] && !covered[i])
+            result.addPath(parts[i]);
+    return result;
+}
+
+QPainterPath withoutOverlaps(const QPainterPath& path, double tolerance)
+{
+    const QList<QPainterPath> parts = subpathsOf(path);
+    if (parts.size() < 2)
+        return path;
+    auto signedArea = [](const QPolygonF& p) {
+        double a = 0.0;
+        for (int i = 0; i < p.size(); ++i)
+            a += p[i].x() * p[(i + 1) % p.size()].y() - p[(i + 1) % p.size()].x() * p[i].y();
+        return a / 2.0;
+    };
+    QList<double> areas;
+    for (const QPainterPath& p : parts)
+        areas.append(signedArea(p.toFillPolygon()));
+    // Gruppen sich überschneidender Teilpfade (Union-Find); Löcher liegen ganz innen und laufen andersherum
+    QList<int> root(parts.size());
+    std::iota(root.begin(), root.end(), 0);
+    std::function<int(int)> find = [&](int i) { return root[i] == i ? i : root[i] = find(root[i]); };
+    bool any = false;
+    for (int i = 0; i < parts.size(); ++i) {
+        for (int j = i + 1; j < parts.size(); ++j) {
+            if (!parts[i].boundingRect().intersects(parts[j].boundingRect()) || !parts[i].intersects(parts[j]))
+                continue;
+            const bool nested = parts[i].contains(parts[j]) || parts[j].contains(parts[i]);
+            if (nested && (areas[i] > 0) != (areas[j] > 0))
+                continue; // Loch
+            root[find(i)] = find(j);
+            any = true;
+        }
+    }
+    if (!any)
+        return path;
+    QHash<int, QPainterPath> groups;
+    QHash<int, int> sizes;
+    for (int i = 0; i < parts.size(); ++i) {
+        QPainterPath& g = groups[find(i)];
+        g.setFillRule(Qt::WindingFill);
+        g.addPath(parts[i]);
+        ++sizes[find(i)];
+    }
+    QPainterPath result;
+    result.setFillRule(path.fillRule());
+    for (int i = 0; i < parts.size(); ++i) {
+        const int r = find(i);
+        if (sizes.value(r) == 1) {
+            result.addPath(parts[i]);
+        } else if (groups.contains(r)) {
+            // Schnittmengen rechnen mit Linienzügen (Bögen in festen Schritten von etwa 0,5 Einheiten
+            // abgeflacht): auf rund 20000 Einheiten vergrössern, vereinigen, Kurven anpassen, zurück
+            const QPainterPath group = groups.take(r);
+            const QRectF box = group.boundingRect();
+            const double s = 20000.0 / std::max({box.width(), box.height(), 1e-9});
+            const QTransform up = QTransform::fromScale(s, s);
+            const QPainterPath merged = up.map(group).simplified();
+            result.addPath(up.inverted().map(CurveObject::toPainterPath(fitRegion(merged, tolerance * s))));
+        }
+    }
+    return result;
+}
+
 QPainterPath intersected(const QPainterPath& a, const QPainterPath& b)
 {
     return scaled(scaled(a, kOpScale).intersected(scaled(b, kOpScale)), 1.0 / kOpScale);
@@ -821,12 +1038,6 @@ double pressureAt(const QList<double>& pressure, double t)
     return pressure[i] + (pressure[i + 1] - pressure[i]) * (x - i);
 }
 
-// Eintrag einer Sprühliste: Form um den Ursprung (Grösse 1) und Farbe
-struct SprayItem {
-    QPainterPath shape;
-    Color color;
-};
-
 QPainterPath unitStar(int points, double inner)
 {
     QPolygonF poly;
@@ -841,38 +1052,54 @@ QPainterPath unitStar(int points, double inner)
     return p;
 }
 
-const QList<QList<SprayItem>>& sprayLists()
+// Eingebaute Sprühlisten: je Objekt eine Form um den Ursprung (Grösse 1) in einer Farbe
+const QList<QList<ArtItem>>& sprayLists()
 {
-    static const QList<QList<SprayItem>> lists = [] {
-        QList<QList<SprayItem>> all;
+    static const QList<QList<ArtItem>> lists = [] {
+        auto one = [](const QPainterPath& shape, const Color& c) { return ArtItem{ArtPiece{shape, c}}; };
+        QList<QList<ArtItem>> all;
         QPainterPath dot;
         dot.addEllipse(QPointF(0, 0), 0.5, 0.5);
-        all << QList<SprayItem>{{dot, Color(229, 57, 53)}, {dot, Color(30, 136, 229)}, {dot, Color(67, 160, 71)},
-                                {dot, Color(253, 216, 53)}, {dot, Color(142, 36, 170)}};
-        all << QList<SprayItem>{{unitStar(5, 0.45), Color(255, 193, 7)}, {unitStar(5, 0.45), Color(255, 152, 0)},
-                                {unitStar(6, 0.5), Color(255, 235, 59)}};
+        all << QList<ArtItem>{one(dot, Color(229, 57, 53)), one(dot, Color(30, 136, 229)), one(dot, Color(67, 160, 71)),
+                              one(dot, Color(253, 216, 53)), one(dot, Color(142, 36, 170))};
+        all << QList<ArtItem>{one(unitStar(5, 0.45), Color(255, 193, 7)), one(unitStar(5, 0.45), Color(255, 152, 0)),
+                              one(unitStar(6, 0.5), Color(255, 235, 59))};
         QPainterPath leaf;
         leaf.moveTo(-0.5, 0);
         leaf.quadTo(0, -0.45, 0.5, 0);
         leaf.quadTo(0, 0.45, -0.5, 0);
-        all << QList<SprayItem>{{leaf, Color(46, 125, 50)}, {leaf, Color(102, 187, 106)}, {leaf, Color(156, 204, 101)}};
+        all << QList<ArtItem>{one(leaf, Color(46, 125, 50)), one(leaf, Color(102, 187, 106)), one(leaf, Color(156, 204, 101))};
         QPainterPath heart;
         heart.moveTo(0, -0.25);
         heart.cubicTo(-0.15, -0.55, -0.5, -0.5, -0.5, -0.2);
         heart.cubicTo(-0.5, 0.1, -0.15, 0.25, 0, 0.5);
         heart.cubicTo(0.15, 0.25, 0.5, 0.1, 0.5, -0.2);
         heart.cubicTo(0.5, -0.5, 0.15, -0.55, 0, -0.25);
-        all << QList<SprayItem>{{heart, Color(229, 57, 53)}, {heart, Color(236, 64, 122)}, {heart, Color(244, 143, 177)}};
+        all << QList<ArtItem>{one(heart, Color(229, 57, 53)), one(heart, Color(236, 64, 122)), one(heart, Color(244, 143, 177))};
         QPainterPath bubble;
         bubble.addEllipse(QPointF(0, 0), 0.5, 0.5);
         bubble.addEllipse(QPointF(0, 0), 0.42, 0.42);
         bubble.addEllipse(QPointF(-0.18, -0.18), 0.08, 0.08);
         bubble.setFillRule(Qt::OddEvenFill);
-        all << QList<SprayItem>{{bubble, Color(79, 195, 247)}, {bubble, Color(41, 182, 246)}};
+        all << QList<ArtItem>{one(bubble, Color(79, 195, 247)), one(bubble, Color(41, 182, 246))};
         QPainterPath piece;
         piece.addRect(QRectF(-0.5, -0.2, 1.0, 0.4));
-        all << QList<SprayItem>{{piece, Color(229, 57, 53)}, {piece, Color(30, 136, 229)}, {piece, Color(67, 160, 71)},
-                                {piece, Color(253, 216, 53)}, {piece, Color(255, 112, 67)}, {piece, Color(171, 71, 188)}};
+        all << QList<ArtItem>{one(piece, Color(229, 57, 53)), one(piece, Color(30, 136, 229)), one(piece, Color(67, 160, 71)),
+                              one(piece, Color(253, 216, 53)), one(piece, Color(255, 112, 67)), one(piece, Color(171, 71, 188))};
+        // Blumen: fünf Blütenblätter und eine andersfarbige Mitte
+        auto flower = [](const Color& petals, const Color& center) {
+            QPainterPath p;
+            p.setFillRule(Qt::WindingFill);
+            for (int k = 0; k < 5; ++k) {
+                const double a = k * 2.0 * std::numbers::pi / 5.0;
+                p.addEllipse(QPointF(0.3 * std::cos(a), 0.3 * std::sin(a)), 0.2, 0.2);
+            }
+            QPainterPath c;
+            c.addEllipse(QPointF(0, 0), 0.14, 0.14);
+            return ArtItem{ArtPiece{p, petals}, ArtPiece{c, center}};
+        };
+        all << QList<ArtItem>{flower(Color(236, 64, 122), Color(255, 235, 59)), flower(Color(255, 255, 255), Color(255, 193, 7)),
+                              flower(Color(126, 87, 194), Color(255, 241, 118))};
         return all;
     }();
     return lists;
@@ -887,49 +1114,89 @@ int sprayListCount()
 
 QString sprayListName(int index)
 {
-    static const QStringList names{QObject::tr("Punkte"), QObject::tr("Sterne"), QObject::tr("Blätter"),
-                                   QObject::tr("Herzen"), QObject::tr("Blasen"), QObject::tr("Konfetti")};
-    return names.value(index);
+    static const char* const names[] = {
+        QT_TRANSLATE_NOOP("pathops", "Punkte"), QT_TRANSLATE_NOOP("pathops", "Sterne"),   QT_TRANSLATE_NOOP("pathops", "Blätter"),
+        QT_TRANSLATE_NOOP("pathops", "Herzen"), QT_TRANSLATE_NOOP("pathops", "Blasen"),   QT_TRANSLATE_NOOP("pathops", "Konfetti"),
+        QT_TRANSLATE_NOOP("pathops", "Blumen"),
+    };
+    if (index < 0 || index >= sprayListCount())
+        return {};
+    return QCoreApplication::translate("pathops", names[index]);
+}
+
+const QList<ArtItem>& sprayListItems(int index)
+{
+    return sprayLists().at(std::clamp(index, 0, sprayListCount() - 1));
 }
 
 QList<SprayPiece> sprayPieces(const QPainterPath& spine, const ArtisticMedia& media)
 {
     QList<SprayPiece> out;
     const double total = spine.length();
-    const QList<SprayItem>& items = sprayLists().at(std::clamp(media.sprayList, 0, sprayListCount() - 1));
+    const QList<ArtItem>& items = media.art.isEmpty() ? sprayListItems(media.sprayList) : media.art;
     if (total < 1e-6 || items.isEmpty() || media.width <= 0)
         return out;
+    const int n = int(items.size());
     const double step = std::max(0.2, media.spacing);
+    const double variation = std::clamp(media.sizeVariation, 0.0, 100.0) / 100.0;
+    const double offset = media.offset / 100.0 * media.width;
+    const int perDab = std::clamp(media.dabCount, 1, 50);
     quint32 state = media.seed * 2654435761u + 1u;
     auto random = [&state] {
         state = state * 1664525u + 1013904223u;
         return double(state >> 8) / double(1u << 24);
     };
     int i = 0;
-    for (double s = 0.0; s <= total + 1e-9; s += step, ++i) {
+    for (double s = 0.0; s <= total + 1e-9; s += step) {
         const double pct = spine.percentAtLength(std::min(s, total));
         const QPointF at = spine.pointAtPercent(pct);
         const double tangent = spine.angleAtPercent(pct); // Grad gegen den Uhrzeigersinn
-        const SprayItem& item = items[media.randomOrder ? int(random() * items.size()) % int(items.size()) : i % int(items.size())];
-        const double size = media.width * (0.6 + 0.4 * random());
-        const double rot = media.randomRotate ? random() * 360.0 : -tangent;
         const QPointF normal(-std::sin(qDegreesToRadians(-tangent)), std::cos(qDegreesToRadians(-tangent)));
-        const QPointF offset = normal * ((random() - 0.5) * media.width * 0.6);
-        QTransform m;
-        m.translate(at.x() + offset.x(), at.y() + offset.y());
-        m.rotate(rot);
-        m.scale(size, size);
-        out << SprayPiece{m.map(item.shape), item.color};
+        const QPointF along(std::cos(qDegreesToRadians(-tangent)), std::sin(qDegreesToRadians(-tangent)));
+        for (int d = 0; d < perDab; ++d, ++i) {
+            int index = i % n;
+            if (media.order == ArtisticMedia::Order::Random)
+                index = int(random() * n) % n;
+            else if (media.order == ArtisticMedia::Order::Direction)
+                index = std::clamp(int(std::fmod(tangent + 360.0, 360.0) / 360.0 * n), 0, n - 1);
+            const ArtItem& item = items[index];
+            const double size = media.width * (1.0 - variation + variation * random());
+            const double rot = media.randomRotate ? random() * 360.0 : -tangent;
+            double across = 0.0;
+            if (media.offsetMode == ArtisticMedia::Offset::Random)
+                across = (random() - 0.5) * 2.0 * offset;
+            else if (media.offsetMode == ArtisticMedia::Offset::Alternate)
+                across = i % 2 ? -offset : offset;
+            QPointF pos = at + normal * across;
+            // Weitere Objekte desselben Tupfers streuen um den Punkt
+            if (d > 0)
+                pos += normal * ((random() - 0.5) * media.width) + along * ((random() - 0.5) * std::min(step, media.width));
+            QTransform m;
+            m.translate(pos.x(), pos.y());
+            m.rotate(rot);
+            m.scale(size, size);
+            for (const ArtPiece& piece : item)
+                out << SprayPiece{m.map(piece.path), piece.color};
+        }
     }
     return out;
 }
 
+QList<ArtPiece> mediaPieces(const QPainterPath& spine, const ArtisticMedia& media)
+{
+    if (media.kind == ArtisticMedia::Kind::Sprayer)
+        return sprayPieces(spine, media);
+    if (media.kind == ArtisticMedia::Kind::Brush)
+        return media::brushPieces(spine, media);
+    return {};
+}
+
 QPainterPath mediaOutline(const QPainterPath& spine, const ArtisticMedia& media)
 {
-    if (media.kind == ArtisticMedia::Kind::Sprayer) {
+    if (media.hasPieces()) {
         QPainterPath all;
         all.setFillRule(Qt::WindingFill);
-        for (const SprayPiece& p : sprayPieces(spine, media))
+        for (const ArtPiece& p : mediaPieces(spine, media))
             all.addPath(p.path);
         return all;
     }
@@ -970,4 +1237,263 @@ QPainterPath mediaOutline(const QPainterPath& spine, const ArtisticMedia& media)
     return result;
 }
 
+
+// --- Ecken ----------------------------------------------------------------------------------
+
+namespace {
+
+constexpr int kArcSamples = 64;
+
+// Bogenlänge einer Kurve an gleichmässig verteilten Parametern
+struct ArcTable {
+    std::array<double, kArcSamples + 1> len{};
+    double total() const { return len.back(); }
+};
+
+ArcTable arcTable(const Cubic& c)
+{
+    ArcTable t;
+    QPointF prev = c.p0;
+    for (int i = 1; i <= kArcSamples; ++i) {
+        const QPointF p = eval(c, double(i) / kArcSamples);
+        t.len[std::size_t(i)] = t.len[std::size_t(i - 1)] + length(p - prev);
+        prev = p;
+    }
+    return t;
+}
+
+// Parameter bei der Bogenlänge s (linear zwischen den Abtastpunkten)
+double paramAt(const ArcTable& t, double s)
+{
+    if (s <= 0.0)
+        return 0.0;
+    if (s >= t.total())
+        return 1.0;
+    const auto it = std::lower_bound(t.len.begin(), t.len.end(), s);
+    const int i = std::max(1, int(it - t.len.begin()));
+    const double a = t.len[std::size_t(i - 1)], b = t.len[std::size_t(i)];
+    const double f = b > a ? (s - a) / (b - a) : 0.0;
+    return (i - 1 + f) / kArcSamples;
+}
+
+// Fahrtrichtung (Einheitsvektor) bei t; an entarteten Stellen die nächste brauchbare Richtung
+QPointF direction(const Cubic& c, double t)
+{
+    const double u = 1.0 - t;
+    const QPointF d = 3.0 * (u * u * (c.c1 - c.p0) + 2.0 * u * t * (c.c2 - c.c1) + t * t * (c.p3 - c.c2));
+    if (length(d) > 1e-9)
+        return unit(d);
+    // Steuerpunkt auf dem Endpunkt: Richtung zum nächsten verschiedenen Punkt
+    if (t < 0.5) {
+        for (const QPointF& q : {c.c1, c.c2, c.p3})
+            if (length(q - c.p0) > 1e-9)
+                return unit(q - c.p0);
+    } else {
+        for (const QPointF& q : {c.c2, c.c1, c.p0})
+            if (length(c.p3 - q) > 1e-9)
+                return unit(c.p3 - q);
+    }
+    return {};
+}
+
+double cross(const QPointF& a, const QPointF& b)
+{
+    return a.x() * b.y() - a.y() * b.x();
+}
+
+double signedAngle(const QPointF& a, const QPointF& b)
+{
+    return std::atan2(cross(a, b), dot(a, b));
+}
+
+struct Piece {
+    Cubic c;
+    bool line = false;
+    NodeKind endKind = NodeKind::Cusp;
+};
+
+// Kreisbogen um center von a nach b über den Winkel sweep (Vorzeichen = Richtung); Stücke von
+// höchstens 90°, der Radius geht linear von |a - center| nach |b - center|
+void appendArc(QList<Piece>& out, const QPointF& center, const QPointF& a, const QPointF& b, double sweep,
+               NodeKind endKind)
+{
+    using std::numbers::pi;
+    const int n = std::max(1, int(std::ceil(std::abs(sweep) / (pi / 2.0) - 1e-9)));
+    const double r0 = length(a - center), r1 = length(b - center);
+    const double a0 = std::atan2(a.y() - center.y(), a.x() - center.x());
+    const double step = sweep / n;
+    const double h = 4.0 / 3.0 * std::tan(step / 4.0);
+    QPointF prev = a;
+    for (int k = 0; k < n; ++k) {
+        const double ang0 = a0 + step * k, ang1 = a0 + step * (k + 1);
+        const double ra = r0 + (r1 - r0) * k / n, rb = r0 + (r1 - r0) * (k + 1) / n;
+        const QPointF p3 = k == n - 1 ? b : center + rb * QPointF(std::cos(ang1), std::sin(ang1));
+        const QPointF c1 = prev + h * ra * QPointF(-std::sin(ang0), std::cos(ang0));
+        const QPointF c2 = p3 - h * rb * QPointF(-std::sin(ang1), std::cos(ang1));
+        out.append(Piece{Cubic{prev, c1, c2, p3}, false, k == n - 1 ? endKind : NodeKind::Smooth});
+        prev = p3;
+    }
+}
+
+// Abrundung von p1 (Fahrtrichtung t1) nach p2 (Fahrtrichtung t2): Kreisbogen um den Schnittpunkt
+// der Normalen; bei sehr ungleichen Abständen (Kurvenecken) eine tangentiale Bézierkurve
+void appendFillet(QList<Piece>& out, const QPointF& p1, const QPointF& t1, const QPointF& p2, const QPointF& t2)
+{
+    const double turn = std::abs(signedAngle(t1, t2));
+    const QPointF n1(-t1.y(), t1.x()), n2(-t2.y(), t2.x());
+    const double den = cross(n1, n2);
+    if (std::abs(den) > 1e-9) {
+        // p1 + s*n1 = p2 + u*n2
+        const double s = cross(p2 - p1, n2) / den;
+        const QPointF center = p1 + s * n1;
+        const double r1 = length(p1 - center), r2 = length(p2 - center);
+        if (std::max(r1, r2) < 1.5 * std::min(r1, r2)) {
+            appendArc(out, center, p1, p2, signedAngle(p1 - center, p2 - center), NodeKind::Smooth);
+            return;
+        }
+    }
+    const double chord = length(p2 - p1);
+    const double sinHalf = std::sin(turn / 2.0);
+    const double k = sinHalf > 1e-9 ? 4.0 / 3.0 * std::tan(turn / 4.0) * chord / (2.0 * sinHalf) : chord / 3.0;
+    out.append(Piece{Cubic{p1, p1 + t1 * k, p2 - t2 * k, p2}, false, NodeKind::Smooth});
+}
+
+} // namespace
+
+QList<SubPath> applyCorners(const QList<SubPath>& paths, CornerOp op, double radius, const QList<NodeRef>& only)
+{
+    using std::numbers::pi;
+    QList<SubPath> result;
+    for (int path = 0; path < paths.size(); ++path) {
+        const SubPath& sp = paths[path];
+        const int n = int(sp.nodes.size());
+        const int segs = segmentCount(sp);
+        if (!(radius > 0.0) || segs < 2) {
+            result.append(sp);
+            continue;
+        }
+        // Segment k führt von Knoten k zu Knoten k + 1
+        QList<Cubic> cubics;
+        QList<bool> lines;
+        QList<ArcTable> tables;
+        for (int k = 0; k < segs; ++k) {
+            cubics << cubicOf(sp, k);
+            lines << isLineSegment(sp, k);
+            tables << arcTable(cubics.last());
+        }
+        auto before = [&](int i) { return (i - 1 + n) % n; }; // Segment in Knoten i
+        std::vector<char> corner(std::size_t(n), 0);
+        std::vector<double> want(std::size_t(n), 0.0);
+        for (int i = 0; i < n; ++i) {
+            if (!sp.closed && (i == 0 || i == n - 1))
+                continue;
+            if (!only.isEmpty() && !only.contains(NodeRef{path, i}))
+                continue;
+            if (sp.nodes[i].kind != NodeKind::Cusp)
+                continue;
+            const QPointF t1 = direction(cubics[before(i)], 1.0);
+            const QPointF t2 = direction(cubics[i], 0.0);
+            if (t1.isNull() || t2.isNull())
+                continue;
+            const double turn = std::abs(signedAngle(t1, t2));
+            if (turn < pi / 180.0) // glatt
+                continue;
+            const double inner = pi - turn; // Winkel zwischen den beiden Kanten
+            double d = radius;
+            if (op == CornerOp::Fillet)
+                d = inner < 1e-6 ? std::numeric_limits<double>::max() : radius / std::tan(inner / 2.0);
+            corner[std::size_t(i)] = 1;
+            want[std::size_t(i)] = d;
+        }
+        // Begrenzen: bearbeitete Ecken an beiden Enden teilen sich die Länge eines Segments
+        std::vector<double> trimStart(std::size_t(segs), 0.0), trimEnd(std::size_t(segs), 0.0);
+        std::vector<double> cut(std::size_t(n), 0.0);
+        for (int i = 0; i < n; ++i) {
+            if (!corner[std::size_t(i)])
+                continue;
+            const int kb = before(i), ka = i;
+            const double lb = tables[kb].total(), la = tables[ka].total();
+            const double limitB = corner[std::size_t(kb)] && kb != i ? lb / 2.0 : lb;
+            const double limitA = corner[std::size_t((ka + 1) % n)] && (ka + 1) % n != i ? la / 2.0 : la;
+            const double d = std::min({want[std::size_t(i)], limitB, limitA});
+            if (d < 1e-9) {
+                corner[std::size_t(i)] = 0;
+                continue;
+            }
+            cut[std::size_t(i)] = d;
+            trimEnd[std::size_t(kb)] = d;
+            trimStart[std::size_t(ka)] = d;
+        }
+        if (std::none_of(corner.begin(), corner.end(), [](char c) { return c != 0; })) {
+            result.append(sp);
+            continue;
+        }
+
+        const NodeKind joint = op == CornerOp::Fillet ? NodeKind::Smooth : NodeKind::Cusp;
+        QList<Piece> pieces;
+        for (int k = 0; k < segs; ++k) {
+            const int end = (k + 1) % n;
+            const ArcTable& tab = tables[k];
+            const double s0 = trimStart[std::size_t(k)], s1 = tab.total() - trimEnd[std::size_t(k)];
+            if (s1 - s0 > 1e-9) {
+                const Cubic piece = part(cubics[k], paramAt(tab, s0), paramAt(tab, s1));
+                const NodeKind kind = corner[std::size_t(end)] ? joint : sp.nodes[end].kind;
+                pieces.append(Piece{piece, lines[k], kind});
+            }
+            if (!corner[std::size_t(end)])
+                continue;
+            // Ecke am Knoten end: von p1 (vor der Ecke) nach p2 (danach)
+            const int ka = end % segs;
+            const Cubic& in = cubics[k];
+            const Cubic& out = cubics[ka];
+            const double tIn = paramAt(tab, tab.total() - cut[std::size_t(end)]);
+            const double tOut = paramAt(tables[ka], cut[std::size_t(end)]);
+            const QPointF p1 = eval(in, tIn), p2 = eval(out, tOut);
+            if (length(p2 - p1) < 1e-9)
+                continue;
+            switch (op) {
+            case CornerOp::Chamfer:
+                pieces.append(Piece{Cubic{p1, p1 + (p2 - p1) / 3.0, p1 + (p2 - p1) * (2.0 / 3.0), p2}, true, NodeKind::Cusp});
+                break;
+            case CornerOp::Scallop: {
+                const QPointF c = sp.nodes[end].point;
+                appendArc(pieces, c, p1, p2, signedAngle(p1 - c, p2 - c), NodeKind::Cusp);
+                break;
+            }
+            case CornerOp::Fillet:
+                appendFillet(pieces, p1, direction(in, tIn), p2, direction(out, tOut));
+                break;
+            }
+        }
+        if (pieces.isEmpty()) {
+            result.append(sp);
+            continue;
+        }
+        SubPath out;
+        out.closed = sp.closed;
+        out.nodes.append(CurveNode{pieces.first().c.p0});
+        out.nodes.first().kind = sp.closed ? pieces.last().endKind : sp.nodes.first().kind;
+        for (const Piece& p : pieces) {
+            CurveNode node{p.c.p3};
+            node.kind = p.endKind;
+            if (!p.line) {
+                node.curveIn = true;
+                node.c1 = p.c.c1;
+                node.c2 = p.c.c2;
+            }
+            out.nodes.append(node);
+        }
+        if (sp.closed && out.nodes.size() > 1) {
+            // Der letzte Knoten fällt auf den ersten: sein Segment schliesst den Linienzug
+            const CurveNode last = out.nodes.takeLast();
+            CurveNode& first = out.nodes.first();
+            first.curveIn = last.curveIn;
+            first.c1 = last.c1;
+            first.c2 = last.c2;
+            first.point = last.point;
+        }
+        result.append(out);
+    }
+    return result;
+}
 } // namespace vek::pathops

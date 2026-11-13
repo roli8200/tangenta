@@ -17,8 +17,8 @@ FetchContent_Declare(vek_librevenge
     PATCH_COMMAND ${CMAKE_COMMAND} -DSOURCE=<SOURCE_DIR> -DKIND=revenge -P ${CDR_SUPPORT}/patches/patch.cmake
     SOURCE_SUBDIR nicht-mit-cmake-bauen)
 FetchContent_Declare(vek_libcdr
-    URL https://dev-www.libreoffice.org/src/libcdr/libcdr-0.1.8.tar.xz
-    URL_HASH SHA256=ced677c8300b29c91d3004bb1dddf0b99761bf5544991c26c2ee8f427e87193c
+    URL https://dev-www.libreoffice.org/src/libcdr/libcdr-0.1.9.tar.xz
+    URL_HASH SHA256=f7bb6abdd7f226820f288a93dd8d07759833c0250d9e202af90f9b312c4665a3
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
     PATCH_COMMAND ${CMAKE_COMMAND} -DSOURCE=<SOURCE_DIR> -DKIND=cdr -P ${CDR_SUPPORT}/patches/patch.cmake
     SOURCE_SUBDIR nicht-mit-cmake-bauen)
@@ -52,6 +52,10 @@ target_include_directories(vek_cdr
     PRIVATE ${vek_libcdr_SOURCE_DIR}/src/lib ${CDR_SUPPORT}/include)
 target_compile_definitions(vek_cdr PRIVATE LIBCDR_BUILD BOOST_ALL_NO_LIB)
 target_link_libraries(vek_cdr PUBLIC vek_revenge PRIVATE vek_lcms2 miniz Qt6::Core)
+if(APPLE)
+    # iconv liegt unter macOS in einer eigenen Bibliothek
+    target_link_libraries(vek_cdr PRIVATE iconv)
+endif()
 foreach(t vek_lcms2 vek_revenge vek_cdr)
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         target_compile_options(${t} PRIVATE -w)

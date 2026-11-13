@@ -3,8 +3,10 @@
 #include "Canvas.h"
 #include "GradientSlider.h"
 #include "Icons.h"
+#include "NodePopup.h"
 #include "Options.h"
 
+#include <QComboBox>
 #include <QLineF>
 #include <QtMath>
 
@@ -28,6 +30,22 @@ QPointF constrained(const QPointF& from, const QPointF& to, Qt::KeyboardModifier
 
 } // namespace
 
+QComboBox* createBlendModeCombo(QWidget* parent, const QString& tooltip)
+{
+    auto* combo = new QComboBox(parent);
+    combo->setToolTip(tooltip);
+    for (BlendMode m : blending::all())
+        combo->addItem(blending::label(m), int(m));
+    combo->setMaxVisibleItems(30);
+    return combo;
+}
+
+void setBlendModeComboValue(QComboBox* combo, BlendMode mode)
+{
+    const QSignalBlocker block(combo);
+    combo->setCurrentIndex(std::max(0, combo->findData(int(mode))));
+}
+
 EffectTool::EffectTool(Canvas& canvas, Effect effect) : Tool(canvas), m_effect(effect) {}
 
 void EffectTool::activate()
@@ -42,11 +60,52 @@ void EffectTool::deactivate()
     m_preview.reset();
     m_selectedEnd = -1;
     m_canvas.clearEffectPreview();
+    hidePopup();
 }
 
 QString EffectTool::label() const
 {
     return m_effect == Effect::Blur ? QObject::tr("Interaktive Unschärfe") : QObject::tr("Interaktive Transparenz");
+}
+
+void EffectTool::hidePopup()
+{
+    if (m_popup)
+        m_popup->hide();
+}
+
+void EffectTool::showPopup()
+{
+    const DrawObject* o = target();
+    if (m_effect != Effect::Transparency || !o || !o->effect(m_effect).isGradient() || m_selectedEnd < 0) {
+        hidePopup();
+        return;
+    }
+    if (!m_popup) {
+        m_popup = new NodePopup(&m_canvas);
+        // Regler: beim Ziehen Vorschau, beim Loslassen ein Undo-Schritt
+        QObject::connect(m_popup, &NodePopup::valueEdited, &m_canvas, [this](double value, bool final) {
+            const DrawObject* t = target();
+            if (!t || !t->effect(m_effect).isGradient() || m_selectedEnd < 0)
+                return;
+            Ramp r = t->effect(m_effect);
+            (m_selectedEnd == 0 ? r.from : r.to) = value;
+            if (final) {
+                m_canvas.clearEffectPreview();
+                if (!(r == t->effect(m_effect)))
+                    m_canvas.editor().setObjectEffect(t->id(), m_effect, r, QObject::tr("Knotentransparenz"));
+            } else {
+                m_canvas.setEffectPreview(t->id(), m_effect, r);
+            }
+        });
+        QObject::connect(&m_canvas.editor(), &Editor::selectionChanged, m_popup, [this] {
+            m_selectedEnd = -1;
+            hidePopup();
+        });
+    }
+    const Ramp& r = o->effect(m_effect);
+    const QPointF at = m_canvas.toScreen(fromUnit(*o, m_selectedEnd == 0 ? r.start : r.end));
+    m_popup->showValue(m_selectedEnd == 0 ? r.from : r.to, QObject::tr("Transparenz"), at);
 }
 
 Ramp EffectTool::defaultRamp(Effect effect, Ramp::Type type, const Ramp& current)
@@ -122,11 +181,14 @@ void EffectTool::mousePress(QMouseEvent* event, const QPointF& doc)
             m_selectedEnd = m_drag == Drag::End ? 1 : 0;
             m_target = o->id();
             m_preview = r;
+            m_pressScreen = pos;
+            m_moved = false;
             m_canvas.update();
             return;
         }
         // Mittelpunkt-Regler auf der Linie
         if (slider::hit(pos, s, e, r.midpoint)) {
+            hidePopup();
             m_drag = Drag::Mid;
             m_target = o->id();
             m_preview = r;
@@ -134,6 +196,7 @@ void EffectTool::mousePress(QMouseEvent* event, const QPointF& doc)
             return;
         }
     }
+    hidePopup();
     const DrawObject* hit = ed.objectAt(doc, m_canvas.pixelsToDoc(4.0));
     if (!hit) {
         m_selectedEnd = -1;
@@ -170,10 +233,20 @@ void EffectTool::mouseMove(QMouseEvent* event, const QPointF& doc)
         break;
     }
     case Drag::Start:
-        r.start = toUnit(*o, constrained(fromUnit(*o, r.end), doc, event->modifiers()));
-        break;
     case Drag::End:
-        r.end = toUnit(*o, constrained(fromUnit(*o, r.start), doc, event->modifiers()));
+        if (!m_moved) {
+            // Klick ohne Ziehen wählt den Endpunkt nur aus
+            const QPointF d = event->position() - m_pressScreen;
+            if (std::abs(d.x()) + std::abs(d.y()) < 3.0)
+                return;
+            m_moved = true;
+            hidePopup();
+        }
+        if (m_drag == Drag::End) {
+            r.end = toUnit(*o, constrained(fromUnit(*o, r.start), doc, event->modifiers()));
+            break;
+        }
+        r.start = toUnit(*o, constrained(fromUnit(*o, r.end), doc, event->modifiers()));
         break;
     case Drag::Mid:
         r.midpoint = slider::fraction(m_canvas.toScreen(doc), m_canvas.toScreen(fromUnit(*o, r.start)),
@@ -190,11 +263,15 @@ void EffectTool::mouseRelease(QMouseEvent* event, const QPointF&)
 {
     if (event->button() != Qt::LeftButton)
         return;
-    if (m_drag != Drag::None && m_preview)
+    const Drag drag = m_drag;
+    const DrawObject* o = m_canvas.editor().document().findAs<DrawObject>(m_target);
+    if (m_drag != Drag::None && m_preview && o && !(o->effect(m_effect) == *m_preview))
         m_canvas.editor().setObjectEffect(m_target, m_effect, *m_preview, label());
     m_drag = Drag::None;
     m_preview.reset();
     m_canvas.clearEffectPreview();
+    if (drag == Drag::Start || drag == Drag::End)
+        showPopup();
 }
 
 bool EffectTool::keyPress(QKeyEvent* event)
@@ -207,6 +284,7 @@ bool EffectTool::keyPress(QKeyEvent* event)
         m_canvas.clearEffectPreview();
     } else {
         m_selectedEnd = -1;
+        hidePopup();
         m_canvas.update();
     }
     return true;

@@ -88,6 +88,9 @@ QString ClaudeCode::executable()
 #else
     candidates << QStandardPaths::findExecutable(QStringLiteral("claude")) << home + QStringLiteral("/.local/bin/claude")
                << home + QStringLiteral("/.claude/local/claude") << home + QStringLiteral("/.npm-global/bin/claude");
+#ifdef Q_OS_MACOS
+    candidates << QStringLiteral("/opt/homebrew/bin/claude") << QStringLiteral("/usr/local/bin/claude");
+#endif
 #endif
     for (const QString& c : std::as_const(candidates))
         if (!c.isEmpty() && QFileInfo(c).isFile())
@@ -151,6 +154,13 @@ bool ClaudeCode::login()
     process.setProgram(exe);
     process.setArguments({QStringLiteral("auth"), QStringLiteral("login")});
     return process.startDetached();
+#elif defined(Q_OS_MACOS)
+    // Anmeldung im Programm Terminal; der Pfad kommt als Argument, "quoted form" schützt ihn für die Shell
+    return QProcess::startDetached(QStringLiteral("/usr/bin/osascript"),
+                                   {QStringLiteral("-e"), QStringLiteral("on run argv"),
+                                    QStringLiteral("-e"), QStringLiteral("tell application \"Terminal\" to do script (quoted form of item 1 of argv) & \" auth login\""),
+                                    QStringLiteral("-e"), QStringLiteral("tell application \"Terminal\" to activate"),
+                                    QStringLiteral("-e"), QStringLiteral("end run"), exe});
 #else
     for (const QStringList& terminal : {QStringList{QStringLiteral("x-terminal-emulator"), QStringLiteral("-e")},
                                         QStringList{QStringLiteral("gnome-terminal"), QStringLiteral("--")},

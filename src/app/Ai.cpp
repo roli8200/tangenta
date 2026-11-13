@@ -72,7 +72,7 @@ const QList<Kind>& kinds()
         {QStringLiteral("claude"), QObject::tr("Claude (API-Schlüssel)"), QStringLiteral("https://api.anthropic.com"), true, false,
          QStringLiteral("claude-sonnet-5-5"),
          {QStringLiteral("claude-opus-5-5"), QStringLiteral("claude-sonnet-5-5"), QStringLiteral("claude-haiku-5-5")},
-         QObject::tr("API-Schlüssel aus console.anthropic.com („API Keys“). Wird nach Verbrauch abgerechnet.")},
+         QObject::tr("API-Schlüssel aus platform.claude.com/settings/keys. Wird nach Verbrauch abgerechnet.")},
         {QStringLiteral("openai"), QStringLiteral("OpenAI"), QStringLiteral("https://api.openai.com/v1"), true, false,
          QStringLiteral("gpt-4o"), {QStringLiteral("gpt-4o"), QStringLiteral("gpt-4o-mini"), QStringLiteral("gpt-4-turbo")},
          QObject::tr("API-Schlüssel aus platform.openai.com/api-keys. Für Azure OpenAI hier die eigene Adresse eintragen.")},
@@ -81,8 +81,9 @@ const QList<Kind>& kinds()
          {QStringLiteral("gemini-2.5-flash"), QStringLiteral("gemini-2.5-pro"), QStringLiteral("gemini-2.0-flash")},
          QObject::tr("API-Schlüssel aus aistudio.google.com/apikey.")},
         {QStringLiteral("deepseek"), QStringLiteral("DeepSeek"), QStringLiteral("https://api.deepseek.com/v1"), true, false,
-         QStringLiteral("deepseek-chat"), {QStringLiteral("deepseek-chat"), QStringLiteral("deepseek-reasoner")},
-         QObject::tr("API-Schlüssel aus platform.deepseek.com. DeepSeek sieht keine Bilder (keine Ansicht der Seite).")},
+         QStringLiteral("deepseek-flash"), {QStringLiteral("deepseek-flash"), QStringLiteral("deepseek-v4-pro")},
+         QObject::tr("API-Schlüssel aus platform.deepseek.com. deepseek-flash sieht auch Bilder (Ansicht der Seite), "
+                     "deepseek-v4-pro nicht.")},
         {QStringLiteral("ollama"), QStringLiteral("Ollama"), QStringLiteral("http://localhost:11434/v1"), false, true, QString(), {},
          QObject::tr("Eigener Ollama-Server (Adresse mit /v1). Das Modell muss Werkzeuge beherrschen, z.B. qwen3 oder llama3.1.")},
         {QStringLiteral("litellm"), QStringLiteral("LiteLLM"), QString(), false, true, QString(), {},
@@ -584,7 +585,8 @@ QList<QPair<QByteArray, QByteArray>> OpenAiProvider::headers() const
 
 QJsonObject OpenAiProvider::requestBody(const QString& system, const QList<Message>& history, const QList<Tool>& tools) const
 {
-    const bool images = m_account.kind != QLatin1String("deepseek");
+    // DeepSeek: nur die Flash-Modelle sehen Bilder
+    const bool images = m_account.kind != QLatin1String("deepseek") || !m_account.model.contains(QLatin1String("pro"));
     QJsonArray messages{QJsonObject{{QStringLiteral("role"), QStringLiteral("system")}, {QStringLiteral("content"), system}}};
     QList<QByteArray> pending; // Bilder aus Werkzeugergebnissen: als Benutzer-Nachricht nach den Ergebnissen
     auto flushImages = [&] {

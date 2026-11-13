@@ -859,7 +859,19 @@ QDialog* ImageSearchDialog::showViewer(int row)
     });
     viewer->show();
     viewer->raise();
+    viewer->activateWindow();
     return viewer;
+}
+
+void ImageSearchDialog::keyPressEvent(QKeyEvent* event)
+{
+    // Ohne Fenstermanager oder nach einem Klick in die Liste hat die Vorschau keinen Fokus: Escape kommt hier an
+    if (event->key() == Qt::Key_Escape && m_viewer && m_viewer->isVisible()) {
+        m_viewer->hide();
+        event->accept();
+        return;
+    }
+    QDialog::keyPressEvent(event);
 }
 
 void ImageSearchDialog::insertCurrent()

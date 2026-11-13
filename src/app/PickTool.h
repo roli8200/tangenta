@@ -28,6 +28,9 @@ class Editor;
 //    Loslassen entsteht ein Undo-Schritt.
 //  - Verschieben und Skalieren rasten an Knoten, Mittelpunkten, Rändern, Hilfslinien und
 //    Seite ein; der Hinweis erscheint neben der Einrast-Stelle.
+//  - Kopie beim Ziehen: ein Rechtsklick während des Ziehens (Verschieben, Skalieren, Drehen,
+//    Neigen) lässt das Original stehen, beim Loslassen entsteht eine Kopie in der neuen Lage;
+//    die Leertaste stempelt sofort eine Kopie in der aktuellen Lage und zieht weiter.
 //  - Hilfslinien lassen sich anklicken, ziehen und mit Entf löschen; zurück ins Lineal
 //    gezogen verschwinden sie. Ein zweiter Klick auf die ausgewählte Hilfslinie zeigt
 //    Drehgriffe an ihren Enden und den Ankerpunkt (verschiebbar entlang der Linie).
@@ -43,6 +46,8 @@ public:
     // Doppelklick auf Text: mit dem Textwerkzeug an dieser Stelle bearbeiten (wie)
     void mouseDoubleClick(QMouseEvent* event, const QPointF& doc) override;
     bool keyPress(QKeyEvent* event) override;
+    bool claimsKey(const QKeyEvent* event) const override;
+    bool nudge(const QPointF& delta) override;
     void paintOverlay(QPainter& p) override;
 
     // "Vor..." / "Hinter...": der nächste Klick wählt das Objekt, vor bzw. hinter das die
@@ -100,6 +105,11 @@ private:
     bool m_clickOnSelected = false;
     bool m_addToSelection = false;
     QTransform m_preview;
+    // Kopie beim Ziehen: Rechtsklick während des Ziehens (Original bleibt), Leertaste-Stempel
+    bool m_leaveCopy = false;
+    QList<QTransform> m_stamps;
+    bool transforming() const { return m_drag == Drag::Move || m_drag == Drag::Handle; }
+    QString dragLabel() const;
     // Vom Benutzer verschobener Drehpunkt; sonst Mitte der Auswahl
     QPointF m_center;
     bool m_centerSet = false;

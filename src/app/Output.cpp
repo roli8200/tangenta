@@ -344,7 +344,7 @@ bool exportBitmap(const Canvas& canvas, const QString& path, int page, double dp
 QRectF exportArea(const Canvas& canvas, const ExportOptions& options)
 {
     if (options.only.isEmpty())
-        return QRectF(QPointF(0, 0), pageSize(canvas, options.page));
+        return options.area.isEmpty() ? QRectF(QPointF(0, 0), pageSize(canvas, options.page)) : options.area;
     QRectF area;
     for (NodeId id : options.only) {
         const auto* o = doc(canvas).findAs<DrawObject>(id);
@@ -353,10 +353,14 @@ QRectF exportArea(const Canvas& canvas, const ExportOptions& options)
         // Kontur, Unschärfe und Schatten ragen über das Begrenzungsrechteck hinaus
         double grow = o->style().stroke ? o->style().strokeWidth / 2.0 : 0.0;
         grow += 3.0 * o->blur();
+        if (o->hasBitmapEffects())
+            grow += fx::margin(o->bitmapEffects()) / fx::referencePxPerMm();
         QRectF r = o->boundingRect().adjusted(-grow, -grow, grow, grow);
         if (o->shadow().active)
             r = r.united(Canvas::shadowTransform(o->boundingRect(), o->shadow()).mapRect(o->boundingRect())
                              .adjusted(-2 * o->shadow().feather, -2 * o->shadow().feather, 2 * o->shadow().feather, 2 * o->shadow().feather));
+        if (o->blockShadow().active)
+            r = r.united(Canvas::blockShadowShape(*o, o->blockShadow()).boundingRect());
         area = area.isNull() ? r : area.united(r);
     }
     return area.isNull() ? QRectF(QPointF(0, 0), pageSize(canvas, options.page)) : area;
@@ -512,11 +516,12 @@ QByteArray areaSvg(const Canvas& canvas, const ExportOptions& options)
     gen.setSize(QSize(int(std::ceil(area.width() * pxPerMm)), int(std::ceil(area.height() * pxPerMm))));
     gen.setViewBox(QRectF(0, 0, area.width() * pxPerMm, area.height() * pxPerMm));
     gen.setTitle(QStringLiteral("TANGENTA"));
+    canvas.beginSvgBlendModes();
     {
         QPainter p(&gen);
         renderArea(canvas, p, options, area, pxPerMm, true);
     }
-    return buffer.data();
+    return canvas.svgWithBlendModes(buffer.data());
 }
 
 bool exportSvg(const Canvas& canvas, const QString& path, const ExportOptions& options, QString* error)
@@ -1381,11 +1386,12 @@ QByteArray pageSvg(const Canvas& canvas, int page)
     gen.setSize(QSize(int(std::ceil(mm.width() * pxPerMm)), int(std::ceil(mm.height() * pxPerMm))));
     gen.setViewBox(QRectF(0, 0, mm.width() * pxPerMm, mm.height() * pxPerMm));
     gen.setTitle(QObject::tr("Seite %1").arg(page + 1));
+    canvas.beginSvgBlendModes();
     {
         QPainter p(&gen);
         canvas.renderPage(p, page, pxPerMm, QPointF(0, 0), true);
     }
-    return buffer.data();
+    return canvas.svgWithBlendModes(buffer.data());
 }
 
 bool exportSvg(const Canvas& canvas, const QString& path, int page, QString* error)

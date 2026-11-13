@@ -21,6 +21,10 @@ namespace vek {
 //  - Kurvensegment ziehen verbiegt es; Linien müssen erst "In Kurve" umgewandelt werden
 //  - Doppelklick auf das Segment fügt einen Knoten ein, Doppelklick auf einen Knoten löscht ihn
 //  - Rechtsklick: Knotenmenü; Entf löscht die gewählten Knoten
+//  - Grundformen ohne Umwandlung: Rechteckecke ziehen rundet die Ecken, Ellipsenknoten ziehen
+//    ergibt Kreissegment (innen) oder Bogen (aussen), Polygonknoten ziehen bewegt alle
+//    entsprechenden Knoten symmetrisch
+//  - Mehrere gewählte Knoten: Rahmen zum Skalieren bzw. Drehen/Neigen (Eigenschaftsleiste)
 class ShapeTool final : public Tool {
 public:
     using Tool::Tool;
@@ -48,8 +52,26 @@ public:
     static QString commandIcon(Command c);
     void fillMenu(QMenu& menu);
 
+    // Grundform (Rechteck, Ellipse, Polygon, Stern), die das Formwerkzeug direkt bearbeitet
+    const DrawObject* basicShape() const;
+    // Knoten der Grundform in Seitenkoordinaten (Rechteck: Beginn der Rundung je Ecke oben links,
+    // oben rechts, unten rechts, unten links; Ellipse: Anfang und Ende; Polygon: Ecken und Seitenmitten)
+    QList<QPointF> basicShapeNodes() const;
+
+    // Gewählte Knoten transformieren: Rahmen mit Griffen um die Auswahl
+    enum class NodeTransform { None, Scale, Rotate };
+    NodeTransform nodeTransform() const { return m_nodeTransform; }
+    void setNodeTransform(NodeTransform mode);
+    bool canTransformNodes() const; // mindestens zwei gewählte Knoten
+    void reflectNodes(Qt::Orientation orientation);
+    // Rahmen der gewählten Knoten in Seitenkoordinaten
+    QRectF selectedNodesBounds() const;
+    // Griff des Rahmens (0..3 Ecken ab oben links im Uhrzeigersinn, 4..7 Seiten oben, rechts,
+    // unten, links) in Bildschirmkoordinaten
+    QPointF handlePosition(int handle) const;
+
 private:
-    enum class Drag { None, Nodes, Control, Segment, Marquee };
+    enum class Drag { None, Nodes, Control, Segment, Marquee, BasicNode, Handle };
     struct ControlRef {
         NodeRef owner;
         bool incoming = false;
@@ -71,6 +93,14 @@ private:
     void notify();
     // Änderung an der bearbeiteten Kurve bzw. am Bildrahmen als ein Undo-Schritt
     void modifyTarget(const std::function<void(CurveObject&)>& fn, const QString& label);
+    std::optional<int> basicNodeAt(const QPointF& screen) const;
+    QList<QPointF> basicLocalNodes(const DrawObject& o) const;
+    void updateBasicPreview(const QPointF& doc, Qt::KeyboardModifiers modifiers);
+    void commitBasicPreview();
+    std::optional<int> handleAt(const QPointF& screen) const;
+    QTransform handleTransform(const QPointF& doc, Qt::KeyboardModifiers modifiers) const;
+    QString handleLabel() const;
+    void paintBasicOverlay(QPainter& p);
 
     mutable QList<NodeRef> m_selected;
     mutable NodeId m_object = InvalidNodeId;
@@ -82,6 +112,14 @@ private:
     ControlRef m_control;
     SegmentHit m_segment;
     std::unique_ptr<CurveObject> m_preview; // Vorschau während eines Zugs
+    std::unique_ptr<DrawObject> m_basicPreview; // Vorschau beim Ziehen an einer Grundform
+    NodeId m_basicId = InvalidNodeId;
+    int m_basicNode = -1;
+    double m_angleTravel = 0.0; // Ellipse: überstrichener Winkel seit dem Drücken (Grad)
+    double m_lastAngle = 0.0;
+    NodeTransform m_nodeTransform = NodeTransform::None;
+    int m_handle = -1;
+    QRectF m_handleBox; // Rahmen beim Drücken (Seitenkoordinaten)
     mutable std::unique_ptr<CurveObject> m_frameProxy; // Rahmen des gewählten Bildes als Kurve
     mutable NodeId m_frameProxyOf = InvalidNodeId;
 };

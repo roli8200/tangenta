@@ -47,8 +47,27 @@ QImage rotate3d(const QImage& in, double verticalDeg, double horizontalDeg);
 // Perspektive: + verkürzt die rechte bzw. obere Kante, − die linke bzw. untere (−100 … 100 %)
 QImage perspective(const QImage& in, double horizontal, double vertical);
 QImage emboss(const QImage& in, double depth, double angleDeg);
+// Relief mit Farbwahl (Effekt-Menü): 0 = Originalfarben, 1 = Grau, 2 = Schwarz, 3 = eigene Farbe;
+// durchsichtige Stellen bleiben durchsichtig
+QImage embossColored(const QImage& in, double depth, double angleDeg, int colorMode, const Color& color);
 QImage pinch(const QImage& in, double amount); // Ein-/Ausbuchtung (+ = aus, − = ein)
 QImage sphere(const QImage& in, double amount);
+// Zylinder: Bild waagrecht (um eine senkrechte Achse) oder senkrecht gewölbt;
+// percent −100 … 100, + nach aussen (Mitte gross, Ränder gestaucht), − nach innen
+QImage cylinder(const QImage& in, double percent, bool vertical);
+// Seite aufrollen: eine Ecke rollt sich ein und gibt den Hintergrund frei
+struct PageCurl {
+    enum Corner { TopLeft, TopRight, BottomRight, BottomLeft };
+    Corner corner = BottomRight;
+    bool vertical = true;        // senkrecht: rollt nach oben/unten, sonst seitwärts
+    bool opaque = true;          // undurchsichtig: Rückseite in Rollenfarbe, sonst scheint das Bild durch
+    Color curlColor{255, 255, 255};
+    Color background{255, 255, 255};
+    bool transparentBackground = false;
+    int width = 50;  // Breite des eingerollten Bereichs in % der Bildbreite
+    int height = 50; // Höhe in % der Bildhöhe
+};
+QImage pageCurl(const QImage& in, const PageCurl& curl);
 // Künstlerische Striche
 QImage charcoal(const QImage& in, double size, double edge);
 QImage pencil(const QImage& in, double radius);

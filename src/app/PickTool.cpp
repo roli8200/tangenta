@@ -5,6 +5,7 @@
 #include "TextObject.h"
 #include "Options.h"
 #include "TextTool.h"
+#include "QrCodeObject.h"
 
 #include <QMenu>
 #include <QPixmap>
@@ -224,6 +225,17 @@ bool PickTool::selectionFullyLocked() const
 void PickTool::mousePress(QMouseEvent* event, const QPointF& doc)
 {
     Editor& ed = editor();
+    if (event->button() == Qt::RightButton && (transforming() || m_drag == Drag::Pending)
+        && (event->buttons() & Qt::LeftButton)) {
+        // Rechtsklick während des Ziehens: beim Loslassen eine Kopie ablegen, Original bleibt
+        if (m_drag == Drag::Pending) {
+            m_drag = Drag::Move;
+            m_canvas.setCursor(Qt::SizeAllCursor);
+        }
+        m_leaveCopy = !m_leaveCopy;
+        m_canvas.update();
+        return;
+    }
     if (event->button() == Qt::RightButton && m_canvas.guidesVisible()) {
         if (const int guide = m_canvas.guideAt(event->position()); guide >= 0 && !ed.objectAt(doc, m_canvas.pixelsToDoc(4.0))) {
             m_canvas.setSelectedGuide(guide);
@@ -459,6 +471,12 @@ void PickTool::mouseDoubleClick(QMouseEvent* event, const QPointF& doc)
 {
     if (event->button() != Qt::LeftButton)
         return;
+    if (const auto* code = node_cast<QrCodeObject>(editor().objectAt(doc, m_canvas.pixelsToDoc(3.0)));
+        code && !editor().isLocked(code->id())) {
+        m_drag = Drag::None;
+        emit m_canvas.objectEditRequested(code->id());
+        return;
+    }
     const auto* text = node_cast<TextObject>(editor().objectAt(doc, m_canvas.pixelsToDoc(3.0)));
     if (!text || editor().isLocked(text->id()))
         return;
@@ -536,6 +554,8 @@ void PickTool::rightDrop(DropAction action, NodeId target, const QTransform& mov
 void PickTool::mouseRelease(QMouseEvent* event, const QPointF& doc)
 {
     if (event->button() == Qt::RightButton) {
+        if (transforming() || m_drag == Drag::Pending)
+            return; // Rechtsklick während des linken Ziehens: schon beim Drücken behandelt
         rightRelease(event, doc);
         return;
     }
@@ -552,8 +572,10 @@ void PickTool::mouseRelease(QMouseEvent* event, const QPointF& doc)
     case Drag::Handle:
         m_preview = computePreview(doc, event->modifiers());
         if (Options::instance().integer(QStringLiteral("ws/tools/pick/modifiers")) == 1
-            && (event->modifiers() & Qt::ControlModifier) && !m_preview.isIdentity())
+            && (event->modifiers() & Qt::ControlModifier) && !m_preview.isIdentity() && m_stamps.isEmpty())
             ed.duplicateSelectionWith(m_preview, QObject::tr("Duplizieren"));
+        else if (m_leaveCopy || !m_stamps.isEmpty())
+            ed.transformSelectionStamped(m_stamps, m_preview, m_leaveCopy, m_leaveCopy ? QObject::tr("Kopieren") : dragLabel());
         else
             commitPreview();
         break;
@@ -603,6 +625,8 @@ void PickTool::mouseRelease(QMouseEvent* event, const QPointF& doc)
     m_drag = Drag::None;
     m_handle = NoHandle;
     m_preview = QTransform();
+    m_leaveCopy = false;
+    m_stamps.clear();
     m_dragTimer.invalidate();
     m_snapEngine.reset();
     m_snapResult = SnapResult();
@@ -693,17 +717,20 @@ QTransform PickTool::computePreview(const QPointF& doc, Qt::KeyboardModifiers mo
     return xform::skewing(0.0, deg, anchor);
 }
 
+QString PickTool::dragLabel() const
+{
+    if (m_drag == Drag::Move)
+        return QObject::tr("Verschieben");
+    if (m_mode == Mode::Scale)
+        return isCorner(m_handle) ? QObject::tr("Skalieren") : QObject::tr("Strecken");
+    return isCorner(m_handle) ? QObject::tr("Drehen") : QObject::tr("Neigen");
+}
+
 void PickTool::commitPreview()
 {
     if (m_preview.isIdentity())
         return;
-    QString label;
-    if (m_drag == Drag::Move)
-        label = QObject::tr("Verschieben");
-    else if (m_mode == Mode::Scale)
-        label = isCorner(m_handle) ? QObject::tr("Skalieren") : QObject::tr("Strecken");
-    else
-        label = isCorner(m_handle) ? QObject::tr("Drehen") : QObject::tr("Neigen");
+    const QString label = dragLabel();
 
     // Drehpunkt wandert beim Verschieben mit; nach Skalieren wieder in die Mitte
     if (m_drag == Drag::Move && m_centerSet)
@@ -721,6 +748,8 @@ void PickTool::cancelDrag()
     m_drag = Drag::None;
     m_handle = NoHandle;
     m_preview = QTransform();
+    m_leaveCopy = false;
+    m_stamps.clear();
     m_snapEngine.reset();
     m_snapResult = SnapResult();
     m_canvas.update();
@@ -785,6 +814,13 @@ void PickTool::updateHoverCursor(const QPointF& screen, const QPointF& doc)
 bool PickTool::keyPress(QKeyEvent* event)
 {
     Editor& ed = editor();
+    if (event->key() == Qt::Key_Space && transforming()) {
+        // Leertaste während des Ziehens: Kopie in der aktuellen Lage stempeln und weiterziehen
+        if (!event->isAutoRepeat() && !m_preview.isIdentity())
+            m_stamps << m_preview;
+        m_canvas.update();
+        return true;
+    }
     switch (event->key()) {
     case Qt::Key_Escape:
         if (m_placeInFront || m_pickTarget) {
@@ -800,41 +836,25 @@ bool PickTool::keyPress(QKeyEvent* event)
             m_canvas.setSelectedGuide(-1);
         }
         return true;
-    case Qt::Key_Delete:
-        if (m_canvas.selectedGuide() >= 0) {
-            ed.removeGuide(m_canvas.selectedGuide());
-            m_canvas.setSelectedGuide(-1);
-        } else {
-            ed.deleteSelection();
-        }
-        return true;
-    case Qt::Key_Left:
-    case Qt::Key_Right:
-    case Qt::Key_Up:
-    case Qt::Key_Down: {
-        if (ed.selection().isEmpty())
-            return false;
-        // Schubsen um den Verschiebungsabstand der Seite: Umschalt zehnfach, Strg ein Zehntel
-        double step = ed.nudge();
-        if (event->modifiers() & Qt::ShiftModifier)
-            step *= std::max(1, Options::instance().integer(QStringLiteral("doc/rulers/super")));
-        else if (event->modifiers() & Qt::ControlModifier)
-            step /= std::max(1, Options::instance().integer(QStringLiteral("doc/rulers/micro")));
-        QPointF d;
-        switch (event->key()) {
-        case Qt::Key_Left: d = QPointF(-step, 0); break;
-        case Qt::Key_Right: d = QPointF(step, 0); break;
-        case Qt::Key_Up: d = QPointF(0, -step); break;
-        default: d = QPointF(0, step); break;
-        }
-        if (m_centerSet)
-            m_center += d;
-        ed.transformSelection(xform::translation(d), QObject::tr("Schubsen"));
-        return true;
-    }
     default:
         return false;
     }
+}
+
+bool PickTool::claimsKey(const QKeyEvent* event) const
+{
+    return event->key() == Qt::Key_Space && transforming();
+}
+
+bool PickTool::nudge(const QPointF& delta)
+{
+    Editor& ed = editor();
+    if (ed.selection().isEmpty())
+        return false;
+    if (m_centerSet)
+        m_center += delta;
+    ed.transformSelection(xform::translation(delta), QObject::tr("Schubsen"));
+    return true;
 }
 
 void PickTool::paintOverlay(QPainter& p)
@@ -859,11 +879,25 @@ void PickTool::paintOverlay(QPainter& p)
             for (const DrawObject* o : ed.selectedObjects())
                 m_canvas.paintObjectPreview(p, *o, m_preview);
         }
+        // Gestempelte Kopien (Leertaste) erscheinen schon als Objekt
+        for (const QTransform& stamp : m_stamps)
+            for (const DrawObject* o : ed.selectedObjects())
+                m_canvas.paintObjectPreview(p, *o, stamp);
         p.setPen(QPen(Canvas::previewColor(), 1.0));
         p.setBrush(Qt::NoBrush);
         const QTransform m = m_preview * view;
         for (const DrawObject* o : ed.selectedObjects())
             p.drawPath(m.map(node_cast<TextObject>(o) ? o->snapPath() : o->path()));
+        if (m_leaveCopy && !std::isnan(m_hover.x())) {
+            // Kopie beim Loslassen: Pluszeichen neben dem Mauszeiger
+            const QPointF s = m_canvas.toScreen(m_hover) + QPointF(14, 14);
+            p.setPen(QPen(Qt::white, 4.0));
+            p.drawLine(s - QPointF(5, 0), s + QPointF(5, 0));
+            p.drawLine(s - QPointF(0, 5), s + QPointF(0, 5));
+            p.setPen(QPen(Qt::black, 1.5));
+            p.drawLine(s - QPointF(5, 0), s + QPointF(5, 0));
+            p.drawLine(s - QPointF(0, 5), s + QPointF(0, 5));
+        }
         m_canvas.paintSnapHint(p, m_snapResult);
     } else if (m_drag == Drag::Marquee) {
         QPen pen(QColor(80, 80, 80), 1.0, Qt::DashLine);

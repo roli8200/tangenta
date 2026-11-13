@@ -90,12 +90,13 @@ void installTranslations()
             QApplication::installTranslator(&app);
     }
     // Qt-eigene Texte (Abbrechen, Ja/Nein, Dateidialog): erst neben der Anwendung
-    // (Windows-Fassung), sonst aus der Qt-Installation (Linux)
+    // (Windows-Fassung) bzw. im App-Paket (macOS), sonst aus der Qt-Installation (Linux)
     static QTranslator qt;
     // Qt führt Chinesisch als zh_CN und Portugiesisch als pt_BR
     const QString qtCode = code == QLatin1String("zh") ? QStringLiteral("zh_CN") : code == QLatin1String("pt") ? QStringLiteral("pt_BR") : code;
     const QString name = QStringLiteral("qt_") + qtCode;
     if (qt.load(name, QApplication::applicationDirPath() + QStringLiteral("/translations"))
+        || qt.load(name, QApplication::applicationDirPath() + QStringLiteral("/../Resources/translations"))
         || qt.load(name, QLibraryInfo::path(QLibraryInfo::TranslationsPath)))
         QApplication::installTranslator(&qt);
 }

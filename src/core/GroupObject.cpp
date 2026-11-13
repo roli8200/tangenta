@@ -48,4 +48,12 @@ void GroupObject::setStyle(const Style& s)
     }
 }
 
+void GroupObject::editStyle(const std::function<void(Style&)>& fn)
+{
+    for (int i = 0; i < childCount(); ++i) {
+        if (auto* obj = node_cast<DrawObject>(child(i)))
+            obj->editStyle(fn);
+    }
+}
+
 } // namespace vek

@@ -1,6 +1,7 @@
 #pragma once
 
 #include "DrawObject.h"
+#include "MediaArt.h"
 
 #include <QJsonArray>
 #include <QList>
@@ -46,23 +47,41 @@ struct NodeRef {
 };
 
 // Künstlerische Medien: die Kurve ist nur das Rückgrat, sichtbar ist ein
-// gefüllter Strich mit veränderlicher Breite entlang dieses Rückgrats
+// gefüllter Strich mit veränderlicher Breite entlang dieses Rückgrats, eine entlang des
+// Rückgrats gestreckte Vorlage (Pinsel) oder entlang verteilte Objekte (Sprühdose)
 struct ArtisticMedia {
-    enum class Kind { None, Preset, Calligraphy, Pressure, Sprayer };
+    enum class Kind { None, Preset, Calligraphy, Pressure, Sprayer, Brush };
+    // Sprühdose: Reihenfolge der Objekte und Versatz quer zum Pfad
+    enum class Order { Random, Sequential, Direction };
+    enum class Offset { None, Alternate, Random };
     Kind kind = Kind::None;
     int preset = 0;       // Breitenverlauf (Voreinstellung)
-    double width = 10.0;  // mm (Sprühdose: Grösse der Objekte)
+    double width = 10.0;  // mm (Sprühdose: Grösse der Objekte, Pinsel: Höhe der Vorlage)
     double angle = 0.0;   // Federwinkel in Grad gegen den Uhrzeigersinn (Kalligrafie)
     // Druck: Breite entlang des Strichs 0..1, gleichmässig verteilt (leer = überall voll)
     QList<double> pressure{};
-    // Sprühdose: Sprühliste, Abstand der Objekte (mm), zufällig drehen/mischen, Zufallszahl
+    // Sprühdose: eingebaute Sprühliste (wenn art leer), Abstand der Tupfer (mm), Objekte je
+    // Tupfer, Grössenvariation (%), zufällig drehen (sonst entlang des Pfads), Reihenfolge,
+    // Versatz (% der Grösse), Zufallszahl
     int sprayList = 0;
     double spacing = 8.0;
+    int dabCount = 1;
+    double sizeVariation = 40.0;
     bool randomRotate = true;
-    bool randomOrder = true;
+    Order order = Order::Random;
+    Offset offsetMode = Offset::Random;
+    double offset = 30.0;
     quint32 seed = 1;
+    // Pinsel: Vorlage (ein Eintrag) bzw. eigene Sprühliste (ein Eintrag je Objekt), Name in der
+    // Bibliothek, Seitenverhältnis der Pinselvorlage und ob sie wiederholt statt gestreckt wird
+    QList<ArtItem> art{};
+    QString artName{};
+    double artAspect = 4.0;
+    bool brushRepeat = false;
 
     bool isActive() const { return kind != Kind::None; }
+    // Pinsel oder Sprühdose: mehrfarbig, aus einzelnen Teilen
+    bool hasPieces() const { return kind == Kind::Sprayer || kind == Kind::Brush; }
     friend bool operator==(const ArtisticMedia&, const ArtisticMedia&) = default;
 };
 
@@ -84,6 +103,8 @@ public:
 
     const ArtisticMedia& media() const { return m_media; }
     void setMedia(const ArtisticMedia& media) { m_media = media; }
+    // Pinsel und Sprühdose: die farbigen Teile aller Linienzüge (lokale Koordinaten)
+    ArtItem mediaPieces() const;
     QList<PropertyDescriptor> propertyDescriptors() const override;
     QVariant propertyValue(const QString& id) const override;
     bool setPropertyValue(const QString& id, const QVariant& value) override;
@@ -107,6 +128,9 @@ public:
     // --- Bearbeitung (lokale Koordinaten) ------------------------------------------------
     // Knoten samt ihrer Steuerpunkte verschieben
     void moveNodes(const QList<NodeRef>& nodes, const QPointF& delta);
+    // Knoten mit m abbilden (Knoten drehen, neigen, skalieren, spiegeln); beide Steuerpunkte der
+    // angrenzenden Kurvensegmente gehen mit
+    void transformNodes(const QList<NodeRef>& nodes, const QTransform& m);
     // Steuerpunkt setzen: incoming = c2 des Segments in r, sonst c1 des Segments aus r heraus.
     // Glatte und symmetrische Knoten führen den Gegenpunkt mit.
     void moveControl(NodeRef r, bool incoming, const QPointF& pos);

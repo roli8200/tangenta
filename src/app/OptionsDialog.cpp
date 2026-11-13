@@ -5,6 +5,7 @@
 #include "ColorDialog.h"
 #include "DimensionObject.h"
 #include "Editor.h"
+#include "ExpressionSpinBox.h"
 #include "Options.h"
 #include "ImagePool.h"
 #include "Language.h"
@@ -229,7 +230,7 @@ QDoubleSpinBox* OptionsDialog::number(const QString& key, const QString& label, 
     auto* l = new QLabel(label, m_pageWidget);
     l->setMinimumWidth(170);
     r->addWidget(l);
-    auto* spin = new QDoubleSpinBox(m_pageWidget);
+    auto* spin = new ExpressionSpinBox(m_pageWidget);
     spin->setRange(min, max);
     spin->setDecimals(decimals);
     spin->setSuffix(suffix);
@@ -828,7 +829,7 @@ void OptionsDialog::buildTools()
         d.setWindowTitle(tr("Lineale kalibrieren"));
         auto* l = new QVBoxLayout(&d);
         auto* ruler = new QLabel(&d);
-        auto* factor = new QDoubleSpinBox(&d);
+        auto* factor = new ExpressionSpinBox(&d);
         factor->setRange(10, 400);
         factor->setDecimals(1);
         factor->setSuffix(QStringLiteral(" %"));
@@ -925,12 +926,21 @@ QWidget* OptionsDialog::buildCommandsPage()
     layout->addWidget(tabs, 1);
 
     QList<std::pair<QString, QAction*>> actions;
+    QStringList groupPrefixes;
     if (m_window) {
         for (QAction* top : m_window->menuBar()->actions()) {
             if (top->menu()) {
                 categories->addItem(plain(top->text()));
                 collectActions(top->menu(), plain(top->text()), actions);
             }
+        }
+        // Befehle ausserhalb der Menüleiste (Werkzeuge F6, F7 …, Schubsen mit den Pfeiltasten)
+        for (QMenu* group : m_window->findChildren<QMenu*>()) {
+            if (!group->property("commandGroup").toBool())
+                continue;
+            categories->addItem(plain(group->title()));
+            collectActions(group, plain(group->title()), actions);
+            groupPrefixes << plain(group->title()) + QLatin1Char('/');
         }
     }
     auto shortcuts = std::make_shared<QJsonObject>(
@@ -1010,7 +1020,9 @@ QWidget* OptionsDialog::buildCommandsPage()
         const int i = item->data(Qt::UserRole).toInt();
         const auto& [path, a] = actions[i];
         tip->setText(a->statusTip().isEmpty() ? a->toolTip() : a->statusTip());
-        where->setText(tr("Menüleiste/%1").arg(path));
+        const bool inGroup = std::any_of(groupPrefixes.cbegin(), groupPrefixes.cend(),
+                                         [&path](const QString& prefix) { return path.startsWith(prefix); });
+        where->setText(inGroup ? path : tr("Menüleiste/%1").arg(path));
         title->setText(plain(a->text()));
         image->setPixmap(a->icon().pixmap(48));
         const QKeySequence s = shortcutFor(path, a);
@@ -1118,13 +1130,13 @@ void OptionsDialog::buildDocument()
         r->addStretch(1);
         QBoxLayout* r2 = row();
         r2->addWidget(new QLabel(tr("Breite:"), m_pageWidget));
-        auto* w = new QDoubleSpinBox(m_pageWidget);
+        auto* w = new ExpressionSpinBox(m_pageWidget);
         w->setRange(1, 10000);
         w->setDecimals(1);
         w->setSuffix(QStringLiteral(" mm"));
         r2->addWidget(w);
         r2->addWidget(new QLabel(tr("Höhe:"), m_pageWidget));
-        auto* h = new QDoubleSpinBox(m_pageWidget);
+        auto* h = new ExpressionSpinBox(m_pageWidget);
         h->setRange(1, 10000);
         h->setDecimals(1);
         h->setSuffix(QStringLiteral(" mm"));
@@ -1256,6 +1268,12 @@ void OptionsDialog::buildDocument()
     note(tr("Wenn 'Doppelseiten' aktiviert ist, wird der Inhalt auf einer Seite zusammengeführt. Ein Teil des Inhalts "
             "kann je nach Ebenenstruktur auf eine weitere Seite gelangen. Ein Klick auf die zweite Seite macht sie zur "
             "aktuellen."));
+    group(tr("Mehrseitenansicht"));
+    check(QStringLiteral("doc/layout/multiPage"), tr("Alle Seiten gleichzeitig anzeigen"));
+    choice(QStringLiteral("doc/layout/multiArrangement"), tr("Anordnung:"), {tr("Raster"), tr("Waagrecht"), tr("Senkrecht", "Anordnung der Seiten")});
+    number(QStringLiteral("doc/layout/multiColumns"), tr("Spalten:"), 1, 50, 0, QString());
+    number(QStringLiteral("doc/layout/multiSpacing"), tr("Abstand zwischen Seiten:"), 0, 1000, 1, QStringLiteral(" mm"));
+    endGroup();
 
     page(doc + tr("/Etikett"), tr("Etikett"));
     {
@@ -1341,7 +1359,7 @@ void OptionsDialog::buildDocument()
             d.setWindowTitle(tr("Etikett anpassen"));
             auto* form = new QFormLayout(&d);
             auto spin = [&](double v, double max, int decimals) {
-                auto* sp = new QDoubleSpinBox(&d);
+                auto* sp = new ExpressionSpinBox(&d);
                 sp->setRange(0, max);
                 sp->setDecimals(decimals);
                 sp->setValue(v);
@@ -1542,15 +1560,15 @@ void OptionsDialog::buildGuidePages()
         auto* holder = new QWidget(m_pageWidget);
         auto* l = new QHBoxLayout(holder);
         auto* left = new QVBoxLayout;
-        auto* x = new QDoubleSpinBox(holder);
+        auto* x = new ExpressionSpinBox(holder);
         x->setRange(-100000, 100000);
         x->setDecimals(3);
         x->setSuffix(QStringLiteral(" mm"));
-        auto* y = new QDoubleSpinBox(holder);
+        auto* y = new ExpressionSpinBox(holder);
         y->setRange(-100000, 100000);
         y->setDecimals(3);
         y->setSuffix(QStringLiteral(" mm"));
-        auto* angle = new QDoubleSpinBox(holder);
+        auto* angle = new ExpressionSpinBox(holder);
         angle->setRange(-360, 360);
         angle->setDecimals(3);
         angle->setSuffix(tr(" Grad"));
@@ -1739,7 +1757,11 @@ void OptionsDialog::buildGlobal()
                {QStringLiteral("nef"), tr("NEF (Nikon-Rohdaten)")}, {QStringLiteral("png"), tr("PNG")}});
 #ifndef Q_OS_WIN
     laterRest();
+#ifdef Q_OS_MACOS
+    note(tr("Unter macOS ordnet das Programmpaket die Dateitypen zu; andere Programme wählt der Finder unter Informationen > Öffnen mit."));
+#else
     note(tr("Unter Linux ordnet die Desktop-Datei (tangenta.desktop) die Dateitypen zu."));
+#endif
 #else
     note(tr("VEK-Dateien öffnen sich danach per Doppelklick in TANGENTA. Die übrigen Typen erscheinen im "
             "Explorer unter 'Öffnen mit', ohne das bisherige Standardprogramm zu ersetzen."));
@@ -1766,7 +1788,7 @@ void OptionsDialog::buildGlobal()
         auto* edit = qobject_cast<QLineEdit*>(field(key));
         if (!edit)
             continue;
-        edit->setEchoMode(QLineEdit::PasswordEchoOnEdit);
+        edit->setEchoMode(QLineEdit::Password); // auch beim Tippen verdeckt (Bildschirmaufnahmen)
         edit->setMaximumWidth(320);
         edit->setToolTip(s.hint);
         // Test: kleiner echter Abruf mit dem Schlüssel im Feld (auch ungespeichert), Ergebnis darunter
@@ -1783,6 +1805,9 @@ void OptionsDialog::buildGlobal()
         m_layout->addWidget(result);
         const QString sourceKey = s.key;
         connect(test, &QPushButton::clicked, this, [tester, sourceKey, edit, test, result] {
+            // Ein gesperrter Knopf gibt den Fokus ans nächste Feld weiter (das Schlüsselfeld darunter)
+            if (test->hasFocus())
+                edit->setFocus();
             test->setEnabled(false);
             result->setStyleSheet(QString());
             result->setText(tr("Prüfe …"));
@@ -1987,7 +2012,7 @@ void OptionsDialog::buildGlobal()
     textField(QStringLiteral("global/web/braveKey"), tr("Brave-Schlüssel:"));
     for (const char* k : {"global/web/searxngKey", "global/web/braveKey"})
         if (auto* e = qobject_cast<QLineEdit*>(field(QLatin1String(k)))) {
-            e->setEchoMode(QLineEdit::PasswordEchoOnEdit);
+            e->setEchoMode(QLineEdit::Password);
             e->setMaximumWidth(320);
         }
     {
@@ -2033,6 +2058,7 @@ bool OptionsDialog::editAiAccount(ai::Account& account)
     kind->setCurrentIndex(std::max(0, kind->findData(account.kind)));
     form->addRow(tr("Art:"), kind);
     auto* hint = new QLabel(&dialog);
+    hint->setObjectName(QStringLiteral("hint"));
     hint->setWordWrap(true);
     hint->setStyleSheet(QStringLiteral("color: #555;"));
     hint->setMinimumWidth(420);
@@ -2043,7 +2069,7 @@ bool OptionsDialog::editAiAccount(ai::Account& account)
     form->addRow(tr("Bezeichnung:"), label);
     auto* key = new QLineEdit(account.key, &dialog);
     key->setObjectName(QStringLiteral("key"));
-    key->setEchoMode(QLineEdit::PasswordEchoOnEdit);
+    key->setEchoMode(QLineEdit::Password); // auch beim Tippen und Einfügen verdeckt
     form->addRow(tr("API-Schlüssel:"), key);
     auto* url = new QLineEdit(account.baseUrl, &dialog);
     url->setObjectName(QStringLiteral("url"));
@@ -2070,7 +2096,14 @@ bool OptionsDialog::editAiAccount(ai::Account& account)
         model->addItems(ids);
         model->setCurrentText(keep);
     };
-    auto updateKind = [&, kind, key, url, hint, fillModels](bool first) {
+    // Hinweis und sichtbare Zeilen ändern sich mit der Art: Fensterhöhe neu bestimmen, sonst wird der
+    // umbrochene Hinweis abgeschnitten und überlappt die nächste Zeile
+    auto fit = [&dialog, form] {
+        form->invalidate();
+        form->activate();
+        dialog.resize(dialog.width(), std::max(form->totalHeightForWidth(dialog.width()), form->totalMinimumSize().height()));
+    };
+    auto updateKind = [&, kind, key, url, hint, fillModels, fit](bool first) {
         const ai::Kind* k = ai::kind(kind->currentData().toString());
         hint->setText(k->hint);
         key->setEnabled(k->key != QLatin1String("claude_code"));
@@ -2080,6 +2113,8 @@ bool OptionsDialog::editAiAccount(ai::Account& account)
                                             : tr("leer = %1").arg(k->baseUrl));
         key->setPlaceholderText(k->needsKey ? QString() : tr("optional"));
         fillModels(k->fallbackModels, first && !account.model.isEmpty() ? account.model : k->defaultModel);
+        if (!first)
+            fit();
     };
     updateKind(true);
     connect(kind, &QComboBox::currentIndexChanged, &dialog, [updateKind] { updateKind(false); });

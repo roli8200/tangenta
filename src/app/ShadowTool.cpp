@@ -42,8 +42,9 @@ DropShadow ShadowTool::shadowFor(const DrawObject& o, const QPointF& press, cons
     s.active = true;
     const QRectF b = o.boundingRect();
     const double edge = std::max(1.0, b.height() * 0.15);
-    const bool bottom = std::abs(press.y() - b.bottom()) <= edge;
-    const bool top = !bottom && std::abs(press.y() - b.top()) <= edge;
+    // Innenschatten: immer flach mit Versatz
+    const bool bottom = !base.inner && std::abs(press.y() - b.bottom()) <= edge;
+    const bool top = !base.inner && !bottom && std::abs(press.y() - b.top()) <= edge;
     if (bottom || top) {
         // Perspektivisch: Kantenmitte -> Zugende bestimmt Neigung und Länge
         s.perspective = true;
@@ -178,9 +179,14 @@ void ShadowTool::paintOverlay(QPainter& p)
         return;
     p.save();
     if (m_preview) {
-        // Vorschau: Schatten, darüber das Objekt
-        m_canvas.paintShadow(p, *o, *m_preview);
-        m_canvas.paintObjectDirect(p, *o);
+        // Vorschau: Schatten, darüber das Objekt (Innenschatten über dem Objekt)
+        if (m_preview->inner) {
+            m_canvas.paintObjectDirect(p, *o);
+            m_canvas.paintShadow(p, *o, *m_preview);
+        } else {
+            m_canvas.paintShadow(p, *o, *m_preview);
+            m_canvas.paintObjectDirect(p, *o);
+        }
     }
     const DropShadow s = m_preview ? *m_preview : o->shadow();
     if (s.active) {

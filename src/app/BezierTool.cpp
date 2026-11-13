@@ -106,6 +106,12 @@ void BezierTool::mouseDoubleClick(QMouseEvent* event, const QPointF& doc)
     finish(false);
 }
 
+bool BezierTool::claimsKey(const QKeyEvent* event) const
+{
+    // Leertaste beendet die Kurve (statt nur das Werkzeug zu wechseln)
+    return event->key() == Qt::Key_Space && !m_nodes.isEmpty();
+}
+
 bool BezierTool::keyPress(QKeyEvent* event)
 {
     if (m_nodes.isEmpty())
@@ -120,7 +126,8 @@ bool BezierTool::keyPress(QKeyEvent* event)
         return true;
     case Qt::Key_Space:
         finish(false);
-        return false; // Leertaste wechselt danach wie gewohnt zum Auswahlwerkzeug
+        m_canvas.setTool(ToolId::Pick); // wie gewohnt danach zum Auswahlwerkzeug
+        return true;
     default:
         return false;
     }

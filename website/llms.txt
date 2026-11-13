@@ -2,7 +2,7 @@
 
 > TANGENTA: Vektorgrafik, frei unter der GPL, für Windows und Linux. Mit KI-Assistent, der wirklich zeichnet, SuperTrace und Bildersuche.
 
-TANGENTA ist freie Software (GPLv3) von Intersoft Networks, Version 0.86, für Windows 10/11, Debian 12/13 und Ubuntu 24.04/26.04. Quellcode und Downloads: https://github.com/roli8200/tangenta. Die Seiten gibt es auf Deutsch, Englisch, Französisch und Italienisch; jede Seite liegt zusätzlich als Markdown unter ihrer Adresse mit angehängtem .md.
+TANGENTA ist freie Software (GPLv3) von Intersoft Networks (https://intersoft-networks.ch, IT-Dienstleister in Frauenfeld), Version 0.86, für Windows 10/11, Debian 12/13 und Ubuntu 24.04/26.04. Quellcode und Downloads: https://github.com/roli8200/tangenta. Die Seiten gibt es auf Deutsch, Englisch, Französisch und Italienisch; jede Seite liegt zusätzlich als Markdown unter ihrer Adresse mit angehängtem .md.
 
 ## Deutsch
 

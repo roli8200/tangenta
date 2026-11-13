@@ -18,7 +18,7 @@ enum class ToolId {
     Star, ComplexStar, InteractiveFill, Text, Transparency, Blur, Spiral, GraphPaper, Pan, DimensionParallel,
     DimensionHV, DimensionAngle, Connector, ConnectorAngle, ConnectorRound, SmartDrawing, Table, Mesh, ColorPipette, AttributePipette, Perspective, DropShadow, Blend, Contour, Distort, Envelope, Extrude, BSpline, VirtualDelete, Pen, Polyline, ThreePointCurve,
     ThreePointRectangle, ThreePointEllipse, Smear, Smudge, Roughen, Twirl, Attract, Repel, FreeTransform, SmartFill, PerfectBasic, PerfectArrow,
-    PerfectFlowchart, PerfectBanner, PerfectCallout, Count
+    PerfectFlowchart, PerfectBanner, PerfectCallout, BlockShadow, Count
 };
 
 // Lage eines Mengentextrahmens (für Ketten): lokal 0..size, transform = lokal -> Seite
@@ -51,6 +51,10 @@ public:
     const Editor& editor() const { return m_editor; }
 
     void setTool(ToolId id);
+    // Leertaste: zwischen Auswahl und zuletzt benutztem Zeichenwerkzeug wechseln
+    void togglePickTool();
+    // Auswahl schubsen; scale 1 = Super-Schubsen, -1 = Mikro-Schubsen
+    void nudge(int dx, int dy, int scale);
     ToolId toolId() const { return m_toolId; }
     ShapeTool& shapeTool() const;
     MeshTool& meshTool() const;
@@ -119,8 +123,40 @@ public:
     void paintObjectPreview(QPainter& p, const DrawObject& o, const QTransform& extra) const;
     // Objekt, das (noch) nicht im Dokument steht, wie im Dokument zeichnen (Arbeitskopien der Werkzeuge)
     void paintObjectDirect(QPainter& p, const DrawObject& o) const;
+    // Objekt samt seinen Bitmap-Effekten gerastert (ohne Unschärfe/Transparenz/Schatten):
+    // image deckt rect (Seite, mm) mit pxPerMm. count = nur die ersten count Effekte (-1 = alle).
+    // silhouette: statt Füllung und Kontur die Form deckend (Maske eines SuperClip-Rahmens).
+    struct EffectRaster {
+        QImage image;
+        QRectF rect;
+    };
+    EffectRaster rasterizeWithEffects(const DrawObject& o, double pxPerMm, int count = -1, bool silhouette = false) const;
     // Doppelseiten: zweite Seite neben der aktuellen (Index, Versatz in mm), -1 = keine
     std::pair<int, double> facingPartner() const;
+
+    // --- Mehrseitenansicht --------------------------------------------------------------------
+    // Alle Seiten nebeneinander und bearbeitbar (Dokumentoption doc/layout/multiPage). Werkzeuge
+    // rechnen weiter in Koordinaten der aktuellen Seite; ein Klick auf eine andere Seite macht
+    // sie zur aktuellen, ohne dass sich die Ansicht verschiebt.
+    bool multiPageView() const;
+    // Schaltet um und passt alle Seiten (bzw. die aktuelle Seite) ein
+    void setMultiPageView(bool on);
+    // Lage aller Seiten im Arbeitsbereich (mm); in der Einzelseitenansicht alle bei (0,0)
+    QList<QRectF> pageLayout() const;
+    // Seite index in Koordinaten der aktuellen Seite
+    QRectF pageRect(int index) const;
+    // Seite unter einem Bildschirmpunkt (-1 = keine); Einzelseitenansicht: nur die aktuelle
+    int pageAt(const QPointF& screen) const;
+    // Seitenname über einer Seite (Bildschirmkoordinaten), -1 = keiner
+    QRectF pageLabelRect(int index) const;
+    int pageLabelAt(const QPointF& screen) const;
+    QString pageTitle(int index) const;
+    void fitAllPages();
+    // Am Namen markierte Seite (blau, mit Griffen zum Ändern der Grösse)
+    bool pageSelected() const { return m_pageSelected; }
+    void setPageSelected(bool on);
+    // Griffe der markierten Seite: 0..7 im Uhrzeigersinn ab oben links, -1 = keiner
+    int pageHandleAt(const QPointF& screen) const;
 
     // Blauer Hinweis wie "Knoten" oder "Hilfslinie" an der Einrast-Stelle
     void paintSnapHint(QPainter& p, const SnapResult& snap) const;
@@ -135,6 +171,10 @@ signals:
     void contextMenuRequested(const QPoint& globalPos);
     // Rechtsklick auf eine Hilfslinie (Index in Editor::guides(), schon ausgewählt)
     void guideContextMenuRequested(int index, const QPoint& globalPos);
+    // Mehrseitenansicht: Rechtsklick auf den Namen einer Seite (schon aktuell und markiert)
+    void pageContextMenuRequested(int index, const QPoint& globalPos);
+    // Doppelklick mit dem Auswahlwerkzeug auf ein Objekt mit eigenem Dialog (QR-Code)
+    void objectEditRequested(vek::NodeId id);
     void viewChanged();
 
 protected:
@@ -156,6 +196,11 @@ private:
     void paintPage(QPainter& p, const Page& page) const;
     void paintObject(QPainter& p, const DrawObject& o) const;
     void paintObjectSharp(QPainter& p, const DrawObject& o) const;
+    // Wie paintObjectSharp, aber mit den Bitmap-Effekten des Objekts (gerastert)
+    void paintObjectBody(QPainter& p, const DrawObject& o) const;
+    bool showsBitmapEffects(const DrawObject& o) const;
+    // Gerastertes Objekt mit Effekten für die aktuelle Ansicht bzw. Ausgabe (zwischengespeichert)
+    EffectRaster liveEffectRaster(const DrawObject& o, bool silhouette = false) const;
     // Linse: was unter o liegt (Seite, Masterseite, Objekte davor) in ein Bild, verändert, auf o beschnitten
     void paintLens(QPainter& p, const DrawObject& o) const;
     void paintBelow(QPainter& p, const DrawObject& stop) const;
@@ -191,8 +236,53 @@ public:
         bool front; // über dem Objekt (Stufen nach innen)
     };
     static QList<ContourStep> contourSteps(const DrawObject& o, const ContourEffect& c);
-    // Seitenflächen der Extrusion (Seitenkoordinaten, von hinten nach vorn) mit Farben
+    // Seitenflächen der Extrusion (Seitenkoordinaten, von hinten nach vorn) mit Farben; nur die
+    // hinter dem Objekt liegenden
     static QList<std::pair<QPolygonF, QColor>> extrusionFaces(const DrawObject& o, const Extrusion& e);
+    // Alle Flächen von hinten nach vorn; front = vor der (gedrehten) Vorderfläche
+    struct ExtrusionFace {
+        QPolygonF polygon;
+        QColor color;
+        bool front = false;
+    };
+    static QList<ExtrusionFace> extrusionModel(const DrawObject& o, const Extrusion& e);
+    // Fläche des Objekts (Seitenkoordinaten): Füllfläche, bei Text die Glyphen; withOutline:
+    // samt Konturbreite
+    static QPainterPath objectArea(const DrawObject& o, bool withOutline);
+    // Fläche des Blockschattens (Seitenkoordinaten); zwischengespeichert, solange sich Objekt und
+    // Einstellungen nicht ändern
+    static QPainterPath blockShadowShape(const DrawObject& o, const BlockShadow& s);
+    // Innenschatten: im Objekt über seiner Füllung, auf die Form beschnitten
+    void paintInnerShadow(QPainter& p, const DrawObject& o, const DropShadow& shadow) const;
+    // Was beim Mischen als Untergrund gilt, wenn er neu gezeichnet werden muss (PDF, SVG, Drucker)
+    enum class Backdrop { Below, Underlay, Whole };
+    // Zwischenbild layer (logische Lage topLeft) mit Mischmodus auf p zeichnen. Rastergeräte:
+    // QPainter-Modus bzw. Untergrund aus dem Gerät gelesen; sonst Untergrund neu zeichnen und
+    // das Ergebnis als Bild einsetzen (was unter o liegt; Underlay: samt Schatten/Extrusion von
+    // o, Whole: samt o)
+    void drawBlended(QPainter& p, const QImage& layer, const QPointF& topLeft, BlendMode mode, const DrawObject& o,
+                     Backdrop backdrop) const;
+    // SVG-Ausgabe: Mischmodi mit CSS-Entsprechung als mix-blend-mode statt gerastert. Solange die
+    // Seite in einen QSvgGenerator gezeichnet wird, bekommen gemischte Teile eine Kenn-Deckkraft;
+    // svgWithBlendModes ersetzt sie danach durch Deckkraft und style="mix-blend-mode:…".
+    void beginSvgBlendModes() const;
+    QByteArray svgWithBlendModes(const QByteArray& svg) const;
+private:
+    struct SvgBlendMark {
+        QString mark;
+        double opacity;
+        QString css;
+    };
+    mutable std::optional<QList<SvgBlendMark>> m_svgBlend;
+    // Kenn-Deckkraft für ein gemischtes Teil, nullopt = hier nicht möglich (dann rastern)
+    std::optional<double> svgBlendMark(const QPainter& p, double opacity, BlendMode mode) const;
+    // Alles unter stop (Seite, Masterseite, frühere Objekte auch in Gruppen und SuperClips)
+    void paintBackdrop(QPainter& p, const DrawObject& stop, Backdrop backdrop) const;
+    // Schatten, hintere Extrusionsflächen und hintere Konturstufen eines Objekts
+    void paintUnderlay(QPainter& p, const DrawObject& o) const;
+    mutable int m_warp = 0;                        // gedrehte Extrusion: Maler projektiv verzerrt
+    mutable const DrawObject* m_noInner = nullptr; // Innenschatten dieses Objekts auslassen
+public:
 private:
     void strokeOnly(QPainter& p, const DrawObject& o) const;
 public:
@@ -225,6 +315,23 @@ public:
     // Schwenken (Hilfsmittel 'Schwenken'): Ansicht um Bildschirmpixel verschieben
     void panBy(const QPointF& delta);
 private:
+    // Mehrseitenansicht: Ansicht so nachführen, dass der Arbeitsbereich stehen bleibt, wenn die
+    // aktuelle Seite wechselt oder sich die Anordnung ändert
+    void syncLayoutOrigin();
+    void paintOtherPages(QPainter& p, const QList<QRectF>& layout) const;
+    void paintPageLabels(QPainter& p, const QList<QRectF>& layout) const;
+    // Klick soll auf der aktuellen Seite bleiben (Auswahl oder eines ihrer Objekte unter dem Zeiger)
+    bool keepsCurrentPage(const QPointF& screen) const;
+    // Nach dem Verschieben: liegt die Mitte der Auswahl auf einer anderen Seite, kommt sie dorthin
+    void moveSelectionToPageUnderIt(std::size_t undoMark);
+    QRectF draggedPageRect(const QPointF& doc, Qt::KeyboardModifiers mods) const;
+    QRectF labelRectAbove(const QRectF& screenPage) const;
+    bool m_layoutMulti = false;
+    QPointF m_layoutOffset;
+    bool m_pageSelected = false;
+    int m_pageHandle = -1;
+    QPointF m_pageDragStart;
+    std::optional<QRectF> m_pageDragRect;
 
     Editor& m_editor;
     std::array<std::unique_ptr<Tool>, static_cast<std::size_t>(ToolId::Count)> m_tools;
@@ -261,6 +368,17 @@ private:
         qreal dpr = 1.0;
     };
     mutable QHash<NodeId, EffectCache> m_effectCache;
+    // Gerasterte Bitmap-Effekte je Objekt: gültig, solange sich das Objekt (Inhalt laut
+    // Serialisierung) und die Zoomstufe (Zweierpotenz) nicht ändern; Verschieben der Ansicht
+    // rechnet nichts neu
+    struct FxCache {
+        QByteArray key;
+        double pxPerMm = 0.0;
+        EffectRaster raster;
+    };
+    mutable QHash<quint64, FxCache> m_fxCache;
+    mutable QHash<NodeId, QByteArray> m_fxKeys; // Inhaltsschlüssel bis zur nächsten Dokumentänderung
+    QByteArray fxKey(const DrawObject& o) const;
 };
 
 } // namespace vek

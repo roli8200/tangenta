@@ -763,8 +763,28 @@ void TextTool::paintOtherSpelling(QPainter& p) const
     p.restore();
 }
 
+void TextTool::syncFrames()
+{
+    if (!editing() || m_target == 0)
+        return;
+    const QList<TextFrameGeometry> now = m_canvas.textChainGeometry(m_target);
+    if (now.size() != m_frames.size())
+        return;
+    bool moved = false, resized = false;
+    for (int i = 0; i < now.size(); ++i) {
+        moved = moved || now[i].transform != m_frames[i].transform || now[i].visible != m_frames[i].visible;
+        resized = resized || now[i].size != m_frames[i].size;
+    }
+    if (!moved && !resized)
+        return;
+    m_frames = now;
+    if (resized)
+        m_flow.reset();
+}
+
 void TextTool::paintOverlay(QPainter& p)
 {
+    syncFrames();
     p.save();
     const QTransform view = m_canvas.viewTransform();
     if (m_dragging) {

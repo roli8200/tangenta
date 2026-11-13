@@ -1,5 +1,6 @@
 #include "PolygonObject.h"
 
+#include <QJsonArray>
 #include <QJsonObject>
 
 #include <algorithm>
@@ -13,6 +14,7 @@ namespace {
 
 const QString kPoints = QStringLiteral("points");
 const QString kSharpness = QStringLiteral("sharpness");
+const QString kNodeShape = QStringLiteral("nodeShape");
 constexpr int kMaxPoints = 500;
 
 } // namespace
@@ -61,12 +63,24 @@ QPainterPath PolygonObject::localPath() const
         }
         return p;
     }
+    const QList<QPointF> ring = shapeNodes();
+    if (m_kind == Kind::Polygon && m_nodeShape.innerMoved()) {
+        // Geschwungenes Polygon: glatt durch die Seitenmitten, spitz an den Ecken
+        p.moveTo(ring[0]);
+        for (int i = 0; i < n; ++i) {
+            const QPointF v0 = ring[2 * i], m = ring[2 * i + 1], v1 = ring[(2 * i + 2) % (2 * n)];
+            const QPointF side = (v1 - v0) / 6.0;
+            // Steuerpunkte parallel zur ursprünglichen Seite: keine Wendepunkte
+            p.cubicTo(v0 + side, m - side, m);
+            p.cubicTo(m + side, v1 - side, v1);
+        }
+        p.closeSubpath();
+        return p;
+    }
     QPolygonF poly;
-    if (m_kind == Kind::Star) {
-        // Einbuchtungen auf einem inneren Ring; Schärfe 0 entspräche dem Polygon
-        const double inner = std::cos(pi / n) * (1.0 - m_sharpness / 100.0);
-        for (int i = 0; i < 2 * n; ++i)
-            poly << vertex(i, 2 * n, i % 2 == 0 ? 1.0 : inner);
+    if (m_kind == Kind::Star || !m_nodeShape.isDefault()) {
+        for (const QPointF& q : ring)
+            poly << q;
     } else {
         for (int i = 0; i < n; ++i)
             poly << vertex(i, n, 1.0);
@@ -74,6 +88,33 @@ QPainterPath PolygonObject::localPath() const
     p.addPolygon(poly);
     p.closeSubpath();
     return p;
+}
+
+double PolygonObject::baseRadius(bool inner) const
+{
+    using std::numbers::pi;
+    if (!inner)
+        return 1.0;
+    const double mid = std::cos(pi / m_points);
+    return m_kind == Kind::Star ? mid * (1.0 - m_sharpness / 100.0) : mid;
+}
+
+QList<QPointF> PolygonObject::shapeNodes() const
+{
+    using std::numbers::pi;
+    QList<QPointF> out;
+    if (m_kind == Kind::ComplexStar)
+        return out;
+    const QPointF c(m_size.width() / 2.0, m_size.height() / 2.0);
+    const int count = 2 * m_points;
+    for (int j = 0; j < count; ++j) {
+        const bool inner = j % 2 == 1;
+        const double twist = (inner ? m_nodeShape.innerTwist : m_nodeShape.outerTwist) * pi / 180.0;
+        const double radius = baseRadius(inner) * (inner ? m_nodeShape.innerScale : m_nodeShape.outerScale);
+        const double a = -pi / 2.0 + 2.0 * pi * j / count + twist;
+        out << QPointF(c.x() + std::cos(a) * c.x() * radius, c.y() + std::sin(a) * c.y() * radius);
+    }
+    return out;
 }
 
 void PolygonObject::applyTransform(const QTransform& m)
@@ -143,6 +184,9 @@ void PolygonObject::writeProperties(QJsonObject& out) const
     out[kPoints] = m_points;
     if (m_kind != Kind::Polygon)
         out[kSharpness] = m_sharpness;
+    if (!m_nodeShape.isDefault())
+        out[kNodeShape] = QJsonArray{m_nodeShape.outerScale, m_nodeShape.outerTwist, m_nodeShape.innerScale,
+                                     m_nodeShape.innerTwist};
 }
 
 void PolygonObject::readProperties(const QJsonObject& in)
@@ -155,6 +199,10 @@ void PolygonObject::readProperties(const QJsonObject& in)
                                                     : Kind::Polygon;
     m_points = std::clamp(in.value(kPoints).toInt(5), minPoints(m_kind), kMaxPoints);
     m_sharpness = clampSharpness(m_kind, m_points, in.value(kSharpness).toInt(53));
+    const QJsonArray shape = in.value(kNodeShape).toArray();
+    m_nodeShape = shape.size() == 4 ? NodeShape{shape[0].toDouble(1.0), shape[1].toDouble(), shape[2].toDouble(1.0),
+                                                shape[3].toDouble()}
+                                    : NodeShape{};
 }
 
 } // namespace vek

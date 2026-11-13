@@ -24,7 +24,7 @@ GITHUB = 'https://github.com/roli8200/tangenta'
 RELEASES = GITHUB + '/releases/latest'
 # Direkte Links auf die Dateien der aktuellen Version (GitHub ersetzt ~ im Namen durch .)
 ASSETS = GITHUB + '/releases/download/v{}/'
-VERSION = '0.86'
+VERSION = '0.91'
 DEBS = ['debian12', 'debian13', 'ubuntu24.04', 'ubuntu26.04']
 DEB_NAMES = {'debian12': 'Debian 12', 'debian13': 'Debian 13', 'ubuntu24.04': 'Ubuntu 24.04', 'ubuntu26.04': 'Ubuntu 26.04'}
 PUBLISHER = {'@type': 'Organization', 'name': 'Intersoft Networks', 'url': 'https://intersoft-networks.ch'}
@@ -706,7 +706,8 @@ def llms_txt(texts):
     """llms.txt (llmstxt.org): Überblick und Links auf die Markdown-Fassungen aller Seiten."""
     de = texts['de']
     lines = ['# TANGENTA', '', f'> {de["meta"]["index"][1]}', '',
-             f'TANGENTA ist freie Software (GPLv3) von Intersoft Networks, Version {VERSION}, '
+             f'TANGENTA ist freie Software (GPLv3) von Intersoft Networks (https://intersoft-networks.ch, '
+             f'IT-Dienstleister in Frauenfeld), Version {VERSION}, '
              'für Windows 10/11, Debian 12/13 und Ubuntu 24.04/26.04. Quellcode und Downloads: '
              f'{GITHUB}. Die Seiten gibt es auf Deutsch, Englisch, Französisch und Italienisch; '
              'jede Seite liegt zusätzlich als Markdown unter ihrer Adresse mit angehängtem .md.', '']

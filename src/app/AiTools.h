@@ -4,6 +4,7 @@
 #include "ImageSearch.h"
 
 #include <QHash>
+#include <QSet>
 #include <QObject>
 
 #include <functional>
@@ -51,6 +52,9 @@ public:
     // Für Tests: Treffer der Bildersuche unter einem Kürzel ablegen
     QString rememberHit(const imagesearch::Hit& hit);
     ImageSearch* imageSearch() const { return m_images; }
+    // Objekte, die die KI in diesem Gespräch angelegt hat (Neues Gespräch: vergessen)
+    const QSet<NodeId>& ownObjects() const { return m_own; }
+    void forgetOwnObjects() { m_own.clear(); }
 
 private:
     QHash<QString, QAction*> commandActions() const;
@@ -69,6 +73,9 @@ private:
     // Eingefügtes Objekt an x/y (links oben, mm) und auf breite/hoehe bringen
     void place(NodeId id, const QJsonObject& input);
     QString selectionText() const;
+    QSet<NodeId> objectIds() const;
+    // Eigene Objekte, die es auf der aktuellen Seite noch gibt
+    QList<NodeId> ownOnPage() const;
 
     Editor& m_editor;
     Canvas& m_canvas;
@@ -78,6 +85,7 @@ private:
     WebSearch* m_web = nullptr;
     QHash<QString, imagesearch::Hit> m_hits;
     int m_hitCount = 0;
+    QSet<NodeId> m_own;
 };
 
 } // namespace vek

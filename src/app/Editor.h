@@ -6,6 +6,7 @@
 #include "Document.h"
 #include "DrawObject.h"
 #include "EllipseObject.h"
+#include "PathOps.h"
 #include "PolygonObject.h"
 #include "TextObject.h"
 #include "Vectorizer.h"
@@ -133,6 +134,8 @@ public:
     // Vektorimport (SVG, DXF, PDF …): die Objekte kommen als Gruppe auf die aktuelle Ebene,
     // mit centerOnPage mittig auf die Seite (sonst an ihre Koordinaten); wird ausgewählt
     NodeId importGroup(std::unique_ptr<GroupObject> group, bool centerOnPage, const QString& label);
+    // Inhalt der Gruppe einzeln auf die aktive Ebene (Datei als neues Dokument öffnen)
+    QList<NodeId> importObjects(std::unique_ptr<GroupObject> group, const QString& label);
     void transformSelection(const QTransform& m, const QString& label);
     // Eigenschaftsleiste
     void setSelectionBounds(const QRectF& target);
@@ -159,8 +162,17 @@ public:
     void breakConnectors();
     // Kopie der Auswahl mit Transformation (Ziehen mit Strg im Windows-Modus)
     void duplicateSelectionWith(const QTransform& m, const QString& label);
+    // An Ort und Stelle duplizieren (Ziffernblock +): Kopie ohne Versatz, die Kopie wird gewählt
+    void duplicateInPlace();
+    // Auswahlwerkzeug, Kopie beim Ziehen: je Stempel (Leertaste) eine Kopie; final gilt für das
+    // Original oder, mit finalAsCopy (Rechtsklick während des Ziehens), für eine weitere Kopie.
+    // Ein Rückgängig-Schritt
+    void transformSelectionStamped(const QList<QTransform>& stamps, const QTransform& final, bool finalAsCopy,
+                                   const QString& label);
     void groupSelection();
     void ungroupSelection();
+    bool canGroupSelection() const;   // mindestens zwei Objekte
+    bool canUngroupSelection() const; // mindestens eine Gruppe in der Auswahl
     // Anordnen-Menü
     void ungroupAll();                 // Gruppierung aller Objekte aufheben (auch verschachtelt)
     void unlockAll();                  // Alle Objekte freigeben
@@ -209,10 +221,19 @@ public:
     void setSelectionShadow(const DropShadow& shadow, const QString& label);
     // Interaktive Effekte
     NodeId blendObjects(NodeId from, NodeId to, int steps);
+    // Überblendung an einen Pfad hängen (der Pfad wird ihr drittes Kind) bzw. wieder lösen
+    bool blendAlongPath(NodeId blend, NodeId path);
+    bool detachBlendPath(NodeId blend);
     void setObjectContour(NodeId id, const ContourEffect& c, const QString& label);
     void setSelectionContour(const ContourEffect& c, const QString& label);
     void setObjectExtrusion(NodeId id, const Extrusion& e, const QString& label);
     void setSelectionExtrusion(const Extrusion& e, const QString& label);
+    // Erzeugtes Objekt (Fotomosaik, Punktraster; auch eine Gruppe mit Inhalt) direkt über above
+    // einfügen und die Objekte in replaced entfernen. Ein Undo-Schritt, das Ergebnis wird ausgewählt.
+    NodeId insertGenerated(std::unique_ptr<DrawObject> object, NodeId above, const QList<NodeId>& replaced, const QString& label);
+    // Blockschatten (ein Undo-Schritt)
+    void setObjectBlockShadow(NodeId id, const BlockShadow& s, const QString& label);
+    void setSelectionBlockShadow(const BlockShadow& s, const QString& label);
     // Objekt durch eine Kurve mit gleichem Stil und gleichen Effekten ersetzen (Verzerren, Hülle)
     NodeId replaceObjectWithCurve(NodeId id, const QList<SubPath>& paths, const QString& label);
     // Überblendung, Kontur, Extrusion in Einzelobjekte trennen (Strg+K); false = nichts zu trennen
@@ -220,6 +241,12 @@ public:
     void setObjectShadow(NodeId id, const DropShadow& shadow, const QString& label);
     void clearSelectionEffects();    // Effekt löschen
     void copyEffectsFrom(NodeId source, const QString& label);
+    // Effektstapel (nicht-destruktive Bitmap-Effekte): an alle ausgewählten Objekte anhängen,
+    // einen Stapel ersetzen, oder einbrennen (Objekt durch ein Bild ersetzen; Unschärfe,
+    // Transparenz, Mischmodus und Schatten bleiben am Bild). Je ein Rückgängig-Schritt.
+    bool addBitmapEffect(const BitmapEffect& effect, const QString& label);
+    void setBitmapEffects(NodeId id, const QList<BitmapEffect>& effects, const QString& label);
+    NodeId bakeBitmapEffects(NodeId id, const QImage& pixels, const QRectF& bounds, const QString& label);
 
     // Hülle (Effekte > Hülle): Grundformen, Kurven und Text; das Objekt bleibt, was es ist
     static bool canEnvelope(const DrawObject& o);
@@ -228,8 +255,11 @@ public:
     // des Objekts eingepasst; pageCoordinates = shape liegt auf der Seite (ein anderes Objekt) und
     // wird erst in die lokalen Koordinaten des Ziels gebracht. addNew: weitere Hülle über die
     // bestehende, sonst ersetzt sie die oberste. Leere Form = Rechteck (Neue Hülle).
-    bool applyEnvelopeShape(const QPainterPath& shape, bool pageCoordinates, Envelope::Mode mode, bool addNew);
+    bool applyEnvelopeShape(const QPainterPath& shape, bool pageCoordinates, Envelope::Mode mode, bool addNew,
+                            Envelope::Mapping mapping = Envelope::Mapping::Standard);
     void setSelectionEnvelopeMode(Envelope::Mode mode);
+    // Zuordnungsmodus der obersten Hülle (Frei, Horizontal, Original, Kitt, Vertikal)
+    void setSelectionEnvelopeMapping(Envelope::Mapping mapping);
     void clearSelectionEnvelopes();
     // Linse "Fixiert": was die Linse gerade zeigt, wird zu eigenen Objekten (SuperClip in der
     // Form der Linse, Inhalt mit der Linse verändert); ersetzt die Linse, liefert den SuperClip
@@ -262,6 +292,8 @@ public:
     // Transparenz/Unschärfe: ein Objekt (interaktives Werkzeug) bzw. alle ausgewählten
     void setObjectEffect(NodeId id, Effect effect, const Ramp& ramp, const QString& label);
     void setSelectionEffect(Effect effect, const std::function<void(Ramp&)>& fn, const QString& label);
+    // Mischmodus der Auswahl (Transparenzwerkzeug, Objekteigenschaften)
+    void setSelectionBlendMode(BlendMode mode);
     // Formwerkzeug: Knotenbearbeitung an einer Kurve als ein Undo-Schritt
     void modifyCurve(NodeId id, const std::function<void(CurveObject&)>& fn, const QString& label);
     void modifyText(NodeId id, const std::function<void(TextObject&)>& fn, const QString& label);
@@ -314,6 +346,9 @@ public:
     void combineSelection();
     bool canCombineSelection() const;
     void breakApartSelection();
+    // Künstlerische Medien auf die Auswahl anwenden (ein Rückgängig-Schritt); Grundformen
+    // werden dabei zu Kurven. Pinsel und Sprühdose lassen sich mit breakApartSelection trennen.
+    bool applyMediaToSelection(const ArtisticMedia& media, const QString& label);
     bool canBreakApartSelection() const;
 
     // Sperren: gesperrte Objekte bleiben wählbar, Befehle lassen sie aber unverändert
@@ -338,6 +373,11 @@ public:
     bool shapeWithTarget(ShapeOp op, const QList<NodeId>& sources, NodeId target, bool keepSources, bool keepTarget);
     // Auf die Auswahl (Menü, Leiste); Ziel ist das zuletzt ausgewählte Objekt
     bool shapeSelection(ShapeOp op);
+    // Andockfenster "Ecken": Abrunden, Ausbuchten oder Abschrägen der spitzen Ecken der Auswahl
+    // (Kurven, Rechtecke, Ellipsen, Polygone; Grundformen werden zu Kurven). Radius in mm auf der
+    // Seite. nodes: nur diese Knoten, wenn genau eine Kurve gewählt ist (leer = alle Ecken)
+    bool applyCorners(pathops::CornerOp op, double radius, const QList<NodeRef>& nodes = {});
+    bool canApplyCorners() const;
     bool canShapeSelection(ShapeOp op) const;
 
     void moveSelectionToMaster();
@@ -345,6 +385,30 @@ public:
     void insertPage(int index);
     void deletePage(int index);
     void setPageSize(const QSizeF& size, bool allPages);
+    // Schalter der Seiten-Eigenschaftsleiste: Seitengrösse (Feld oder Ziehen) für alle Seiten oder nur
+    // für die aktuelle
+    bool pageSizeForAllPages() const { return m_pageSizeForAllPages; }
+    void setPageSizeForAllPages(bool all) { m_pageSizeForAllPages = all; }
+    // Seitenbefehle (je ein Undo-Schritt). Leerer Name = wieder "Seite n".
+    void renamePage(int index, const QString& name);
+    // count leere Seiten (Grösse der aktuellen Seite) ab index einfügen; die erste wird aktuell
+    void insertPages(int index, int count);
+    // Kopie der Seite (Ebenen, mit withContent auch die Objekte) davor oder danach; wird aktuell.
+    // Liefert den Index der Kopie.
+    int duplicatePage(int index, bool withContent, bool after);
+    // Seite an Position to verschieben (Index nach dem Verschieben); die aktuelle Seite bleibt aktuell
+    void movePage(int from, int to);
+    // Hoch-/Querformat nur dieser Seite (Breite und Höhe tauschen, wenn nötig)
+    void setPageOrientation(int index, bool landscape);
+    bool isPageLandscape(int index) const;
+    // Mehrseitenansicht: Objekte auf eine andere Seite legen (in die gleichnamige Ebene, sonst die
+    // oberste bearbeitbare), um shift (mm) versetzt; die Seite wird aktuell, die Objekte bleiben ausgewählt
+    bool moveObjectsToPage(const QList<NodeId>& ids, int pageIndex, const QPointF& shift, const QString& label);
+    // Seitengrösse durch Ziehen: area = neue Seitenfläche in bisherigen Seitenkoordinaten. Objekte
+    // und Hilfslinien der Seite bleiben an ihrer Stelle (werden um -area.topLeft() versetzt).
+    // Mit pageSizeForAllPages() bekommen alle Seiten (und die Masterseite) die neue Grösse, ihre
+    // Objekte werden gleich versetzt.
+    void resizePage(int index, const QRectF& area);
     // Dokumenteinstellungen der Seiten-Eigenschaftsleiste (liegen auf der Masterseite)
     double nudge() const { return m_doc->masterPage().nudge(); }
     void setNudge(double mm);
@@ -393,6 +457,7 @@ private:
     int m_currentPage = 0;
     QList<NodeId> m_selection;
     bool m_marquee = false;
+    bool m_pageSizeForAllPages = true;
     std::function<void()> m_repeat;
     QString m_repeatLabel;
     void remember(const QString& label, std::function<void()> fn)

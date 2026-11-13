@@ -1,6 +1,7 @@
 #include "PatternDialog.h"
 
 #include "ColorDialog.h"
+#include "ExpressionSpinBox.h"
 #include "ImagePool.h"
 
 #include <QButtonGroup>
@@ -60,7 +61,7 @@ PatternFillDialog::PatternFillDialog(const PatternFill& pattern, QWidget* parent
     m_bgLabel = new QLabel(this);
     form->addRow(m_fgLabel, m_fg);
     form->addRow(m_bgLabel, m_bg);
-    m_tile = new QDoubleSpinBox(this);
+    m_tile = new ExpressionSpinBox(this);
     m_tile->setRange(0.5, 1000);
     m_tile->setDecimals(1);
     m_tile->setSuffix(QStringLiteral(" mm"));

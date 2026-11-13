@@ -2,6 +2,7 @@
 
 #include "Canvas.h"
 #include "ColorDialog.h"
+#include "ExpressionSpinBox.h"
 #include "Outline.h"
 
 #include <QButtonGroup>
@@ -133,7 +134,7 @@ OutlinePenDialog::OutlinePenDialog(const Style& style, QWidget* parent)
     colorRow->addWidget(m_noOutline);
     colorRow->addStretch();
     form->addRow(tr("Farbe:"), colorRow);
-    m_width = new QDoubleSpinBox(this);
+    m_width = new ExpressionSpinBox(this);
     m_width->setRange(0.0, 500.0);
     m_width->setDecimals(3);
     m_width->setSingleStep(0.1);
@@ -204,12 +205,12 @@ OutlinePenDialog::OutlinePenDialog(const Style& style, QWidget* parent)
     // Kalligrafie: Strecken, Winkel, Feder als Vorschau
     auto* calli = new QGroupBox(tr("Kalligrafie"), this);
     auto* cform = new QFormLayout(calli);
-    m_stretch = new QDoubleSpinBox(calli);
+    m_stretch = new ExpressionSpinBox(calli);
     m_stretch->setRange(1, 100);
     m_stretch->setDecimals(0);
     m_stretch->setSuffix(QStringLiteral(" %"));
     m_stretch->setValue(style.nibStretch);
-    m_angle = new QDoubleSpinBox(calli);
+    m_angle = new ExpressionSpinBox(calli);
     m_angle->setRange(-360, 360);
     m_angle->setDecimals(1);
     m_angle->setSuffix(QStringLiteral(" °"));

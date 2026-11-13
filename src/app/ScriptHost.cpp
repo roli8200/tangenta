@@ -133,9 +133,7 @@ void ScriptObject::setFill(const QVariant& v)
     if (!object())
         return;
     m_host.tx().modify<DrawObject>(m_id, [&c](DrawObject& o) {
-        Style s = o.style();
-        s.fill = c ? Fill::solid(*c) : Fill::none();
-        o.setStyle(s);
+        o.editStyle([&](Style& s) { s.fill = c ? Fill::solid(*c) : Fill::none(); });
     });
 }
 
@@ -156,9 +154,7 @@ void ScriptObject::setStroke(const QVariant& v)
     if (!object())
         return;
     m_host.tx().modify<DrawObject>(m_id, [&c](DrawObject& o) {
-        Style s = o.style();
-        s.stroke = c;
-        o.setStyle(s);
+        o.editStyle([&](Style& s) { s.stroke = c; });
     });
 }
 
@@ -173,9 +169,7 @@ void ScriptObject::setStrokeWidth(double v)
     if (!object())
         return;
     m_host.tx().modify<DrawObject>(m_id, [v](DrawObject& o) {
-        Style s = o.style();
-        s.strokeWidth = std::max(0.0, v);
-        o.setStyle(s);
+        o.editStyle([&](Style& s) { s.strokeWidth = std::max(0.0, v); });
     });
 }
 

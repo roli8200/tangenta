@@ -370,6 +370,8 @@ int reloadInstalledFonts()
 #ifdef Q_OS_WIN
     dirs << qEnvironmentVariable("WINDIR", QStringLiteral("C:/Windows")) + QStringLiteral("/Fonts")
          << qEnvironmentVariable("LOCALAPPDATA") + QStringLiteral("/Microsoft/Windows/Fonts");
+#elif defined(Q_OS_MACOS)
+    dirs << QDir::homePath() + QStringLiteral("/Library/Fonts") << QStringLiteral("/Library/Fonts");
 #else
     dirs << QDir::homePath() + QStringLiteral("/.local/share/fonts") << QDir::homePath() + QStringLiteral("/.fonts") << QStringLiteral("/usr/share/fonts")
          << QStringLiteral("/usr/local/share/fonts");

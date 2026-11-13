@@ -2,6 +2,7 @@
 
 #include "Canvas.h"
 #include "Editor.h"
+#include "ExpressionSpinBox.h"
 
 #include <QButtonGroup>
 #include <QCheckBox>
@@ -325,7 +326,7 @@ QWidget* PdfSettingsDialog::prepressTab()
     auto* v = new QVBoxLayout(w);
     auto* row = new QHBoxLayout;
     m_bleedLimit = new QCheckBox(tr("Randanschnittgrenze:"), w);
-    m_bleed = new QDoubleSpinBox(w);
+    m_bleed = new ExpressionSpinBox(w);
     m_bleed->setRange(0, 50);
     m_bleed->setDecimals(3);
     m_bleed->setSuffix(tr(" mm"));

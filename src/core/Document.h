@@ -79,6 +79,7 @@ private:
     void unindexSubtree(const Node& node);
     void apply(const Change& change, bool forward);
     void commitChanges(ChangeSet set);
+    void commitWithoutUndo();
     void emitChanged(bool wasModified);
     // Textketten neu verknüpfen und den Text durch die Rahmen fliessen lassen
     void updateTextFlow();

@@ -3,6 +3,7 @@
 
 #include "GroupObject.h"
 #include "PathOps.h"
+#include "RectangleObject.h"
 #include "Transaction.h"
 
 #include <algorithm>
@@ -97,8 +98,11 @@ bool Editor::shapeWithTarget(ShapeOp op, const QList<NodeId>& sourceIds, NodeId 
         g.lines = pathops::clipLines(t.lines, sourceArea, false);
         break;
     case ShapeOp::Intersect:
+        // Offene Linien auf beiden Seiten: es bleiben ihre Stücke innerhalb der Fläche der anderen
         g.area = pathops::intersected(t.area, sourceArea);
         g.lines = pathops::clipLines(t.lines, sourceArea, true);
+        if (!t.area.isEmpty())
+            g.lines += pathops::clipLines(sourceLines, t.area, true);
         break;
     default:
         return false;
@@ -208,12 +212,13 @@ bool Editor::shapeSelection(ShapeOp op)
         return true;
     }
     case ShapeOp::Boundary: {
-        // Umriss um alles, ohne Füllung, über den Objekten; die Originale bleiben
+        // Umriss um alles (ohne Löcher, wie für eine Schneidelinie), ohne Füllung, über den
+        // Objekten; die Originale bleiben
         QList<QPainterPath> areas;
         for (const DrawObject* o : stack)
             areas << pathops::geometryOf(*o).area;
         pathops::Geometry g;
-        g.area = unionOf(areas);
+        g.area = pathops::withoutHoles(unionOf(areas));
         std::unique_ptr<CurveObject> outline = pathops::rebuild(*stack.last(), g, kShapeTolerance);
         if (!outline)
             return false;
@@ -233,6 +238,91 @@ bool Editor::shapeSelection(ShapeOp op)
     }
     }
     return false;
+}
+
+// --- Ecken (Andockfenster "Ecken") ------------------------------------------------------------
+
+namespace {
+
+bool cornerCandidate(const DrawObject& o)
+{
+    if (o.hasEnvelope())
+        return false;
+    if (const auto* c = node_cast<CurveObject>(&o))
+        return !c->media().isActive();
+    return node_cast<RectangleObject>(&o) || node_cast<EllipseObject>(&o) || node_cast<PolygonObject>(&o);
+}
+
+QList<SubPath> mapped(QList<SubPath> paths, const QTransform& m)
+{
+    for (SubPath& sp : paths) {
+        for (CurveNode& n : sp.nodes) {
+            n.point = m.map(n.point);
+            n.c1 = m.map(n.c1);
+            n.c2 = m.map(n.c2);
+        }
+    }
+    return paths;
+}
+
+} // namespace
+
+bool Editor::canApplyCorners() const
+{
+    for (NodeId id : topLevelSelection()) {
+        const DrawObject* o = m_doc->findAs<DrawObject>(id);
+        if (o && cornerCandidate(*o))
+            return true;
+    }
+    return false;
+}
+
+bool Editor::applyCorners(pathops::CornerOp op, double radius, const QList<NodeRef>& nodes)
+{
+    if (!(radius > 0.0))
+        return false;
+    const QList<NodeId> ids = topLevelSelection();
+    Transaction tx(*m_doc, tr("Ecken"));
+    QList<NodeId> result;
+    for (NodeId id : ids) {
+        const DrawObject* o = m_doc->findAs<DrawObject>(id);
+        bool invertible = false;
+        const QTransform back = o ? o->transform().inverted(&invertible) : QTransform();
+        if (!o || !cornerCandidate(*o) || !invertible) {
+            result.append(id);
+            continue;
+        }
+        // In Seitenkoordinaten rechnen: der Radius gilt in mm auch bei skalierten Objekten
+        const auto* curve = node_cast<CurveObject>(o);
+        const QList<SubPath> local = curve ? curve->subPaths() : CurveObject::fromPath(o->localPath())->subPaths();
+        const QList<SubPath> page = mapped(local, o->transform());
+        const QList<SubPath> done = pathops::applyCorners(page, op, radius, curve && ids.size() == 1 ? nodes : QList<NodeRef>{});
+        if (done == page) {
+            result.append(id);
+            continue;
+        }
+        if (curve) {
+            const QList<SubPath> paths = mapped(done, back);
+            tx.modify<CurveObject>(id, [&paths](CurveObject& c) { c.setSubPaths(paths); });
+            result.append(id);
+            continue;
+        }
+        // Grundform wird zur Kurve: gleiche Lage, Stil und Effekte
+        auto c = std::make_unique<CurveObject>(mapped(done, back));
+        c->setTransform(o->transform());
+        c->setStyle(o->style());
+        c->copyEffects(*o);
+        c->setName(o->name());
+        const NodeId parent = o->parent()->id();
+        const int index = o->indexInParent();
+        tx.remove(id);
+        result.append(tx.insert(parent, index, std::move(c)));
+    }
+    if (tx.isEmpty())
+        return false;
+    tx.commit();
+    setSelection(result);
+    return true;
 }
 
 } // namespace vek

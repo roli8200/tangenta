@@ -1,11 +1,16 @@
 #include "ShapeTool.h"
 
 #include "Canvas.h"
+#include "EllipseObject.h"
 #include "ImageObject.h"
+#include "PolygonObject.h"
+#include "RectangleObject.h"
+#include "Serialization.h"
 
 #include <QMenu>
 
 #include <cmath>
+#include <numbers>
 
 namespace vek {
 
@@ -21,6 +26,34 @@ double distance(const QPointF& a, const QPointF& b)
     return std::hypot(a.x() - b.x(), a.y() - b.y());
 }
 
+constexpr double kHandleRadius = 5.0; // px
+
+std::unique_ptr<DrawObject> cloneObject(const DrawObject& o)
+{
+    std::unique_ptr<Node> copy = serial::fromJson(serial::toJson(o, serial::Ids::Drop), serial::Ids::Drop);
+    auto* d = dynamic_cast<DrawObject*>(copy.get());
+    if (!d)
+        return nullptr;
+    copy.release();
+    return std::unique_ptr<DrawObject>(d);
+}
+
+// Punkt der Ellipse beim Winkel (Grad gegen den Uhrzeigersinn, 0° rechts), lokal
+QPointF ellipsePoint(const QSizeF& size, double degrees)
+{
+    const double a = degrees * std::numbers::pi / 180.0;
+    return QPointF(size.width() / 2.0 * (1.0 + std::cos(a)), size.height() / 2.0 * (1.0 - std::sin(a)));
+}
+
+double wrapDegrees(double a)
+{
+    a = std::fmod(a + 180.0, 360.0);
+    if (a < 0)
+        a += 360.0;
+    return a - 180.0;
+}
+
+
 } // namespace
 
 void ShapeTool::activate()
@@ -33,6 +66,7 @@ void ShapeTool::deactivate()
 {
     m_drag = Drag::None;
     m_preview.reset();
+    m_basicPreview.reset();
     m_selected.clear();
 }
 
@@ -249,6 +283,25 @@ void ShapeTool::mousePress(QMouseEvent* event, const QPointF& doc)
     if (event->button() != Qt::LeftButton)
         return;
 
+    if (const auto h = handleAt(pos)) {
+        m_handle = *h;
+        m_handleBox = selectedNodesBounds();
+        m_drag = Drag::Handle;
+        beginPreview();
+        return;
+    }
+    if (const auto b = basicNodeAt(pos)) {
+        const DrawObject* o = basicShape();
+        m_basicId = o->id();
+        m_basicNode = *b;
+        m_basicPreview = cloneObject(*o);
+        if (const auto* e = node_cast<EllipseObject>(o))
+            m_lastAngle = *b == 1 ? e->endAngle() : e->startAngle();
+        m_angleTravel = 0.0;
+        m_drag = Drag::BasicNode;
+        notify();
+        return;
+    }
     if (const auto ctl = controlAt(pos)) {
         m_control = *ctl;
         m_drag = Drag::Control;
@@ -301,13 +354,19 @@ void ShapeTool::mouseMove(QMouseEvent* event, const QPointF& doc)
 {
     m_currentScreen = event->position();
     if (m_drag == Drag::None) {
-        const bool overHandle = controlAt(event->position()) || nodeAt(event->position());
+        const bool overHandle = controlAt(event->position()) || nodeAt(event->position()) || basicNodeAt(event->position())
+                                || handleAt(event->position());
         m_canvas.setCursor(overHandle ? Qt::SizeAllCursor : Qt::ArrowCursor);
         return;
     }
     if (!m_moved && distance(event->position(), m_pressScreen) < kDragThreshold)
         return;
     m_moved = true;
+    if (m_drag == Drag::BasicNode) {
+        updateBasicPreview(doc, event->modifiers());
+        m_canvas.update();
+        return;
+    }
     const CurveObject* c = curve();
     if (m_drag == Drag::Marquee || !c || !m_preview) {
         m_canvas.update();
@@ -334,6 +393,9 @@ void ShapeTool::mouseMove(QMouseEvent* event, const QPointF& doc)
     case Drag::Segment:
         m_preview->bendSegment(m_segment.end, m_segment.t, localDelta);
         break;
+    case Drag::Handle:
+        m_preview->transformNodes(m_selected, c->transform() * handleTransform(doc, event->modifiers()) * toLocal);
+        break;
     default:
         break;
     }
@@ -356,6 +418,14 @@ void ShapeTool::mouseRelease(QMouseEvent* event, const QPointF& doc)
         break;
     case Drag::Segment:
         commitPreview(QObject::tr("Kurve verbiegen"));
+        break;
+    case Drag::Handle:
+        commitPreview(handleLabel());
+        break;
+    case Drag::BasicNode:
+        commitBasicPreview();
+        m_moved = false;
+        notify();
         break;
     case Drag::Marquee: {
         const CurveObject* c = curve();
@@ -415,10 +485,294 @@ bool ShapeTool::keyPress(QKeyEvent* event)
     if (event->key() == Qt::Key_Escape && m_drag != Drag::None) {
         m_drag = Drag::None;
         m_preview.reset();
+        m_basicPreview.reset();
         m_canvas.update();
         return true;
     }
     return false;
+}
+
+// --- Grundformen ohne Umwandlung in Kurven ------------------------------------------------------
+
+
+const DrawObject* ShapeTool::basicShape() const
+{
+    const Editor& ed = m_canvas.editor();
+    const QList<const DrawObject*> objects = ed.selectedObjects();
+    if (objects.size() != 1 || ed.isLocked(objects.first()->id()) || objects.first()->hasEnvelope())
+        return nullptr;
+    const DrawObject* o = objects.first();
+    if (node_cast<RectangleObject>(o) || node_cast<EllipseObject>(o))
+        return o;
+    if (const auto* poly = node_cast<PolygonObject>(o); poly && poly->kind() != PolygonObject::Kind::ComplexStar)
+        return o;
+    return nullptr;
+}
+
+QList<QPointF> ShapeTool::basicLocalNodes(const DrawObject& o) const
+{
+    if (const auto* r = node_cast<RectangleObject>(&o)) {
+        const double w = r->size().width(), h = r->size().height();
+        using C = RectangleObject::Corner;
+        auto radius = [r](C c) { return std::min(r->cornerRadius(c), std::min(std::abs(r->size().width()), std::abs(r->size().height())) / 2.0); };
+        return {QPointF(radius(C::TopLeft), 0), QPointF(w - radius(C::TopRight), 0), QPointF(w - radius(C::BottomRight), h),
+                QPointF(radius(C::BottomLeft), h)};
+    }
+    if (const auto* e = node_cast<EllipseObject>(&o)) {
+        if (e->kind() == EllipseObject::Kind::Ellipse)
+            return {ellipsePoint(e->size(), e->startAngle())};
+        return {ellipsePoint(e->size(), e->startAngle()), ellipsePoint(e->size(), e->endAngle())};
+    }
+    if (const auto* p = node_cast<PolygonObject>(&o))
+        return p->shapeNodes();
+    return {};
+}
+
+QList<QPointF> ShapeTool::basicShapeNodes() const
+{
+    const DrawObject* o = basicShape();
+    if (!o)
+        return {};
+    QList<QPointF> out = basicLocalNodes(*o);
+    for (QPointF& p : out)
+        p = o->transform().map(p);
+    return out;
+}
+
+std::optional<int> ShapeTool::basicNodeAt(const QPointF& screen) const
+{
+    const QList<QPointF> nodes = basicShapeNodes();
+    const QTransform view = m_canvas.viewTransform();
+    std::optional<int> best;
+    double bestDistance = kNodeRadius;
+    for (int i = 0; i < nodes.size(); ++i) {
+        const double d = distance(view.map(nodes[i]), screen);
+        if (d <= bestDistance) {
+            bestDistance = d;
+            best = i;
+        }
+    }
+    return best;
+}
+
+void ShapeTool::updateBasicPreview(const QPointF& doc, Qt::KeyboardModifiers modifiers)
+{
+    const DrawObject* o = basicShape();
+    if (!o || !m_basicPreview)
+        return;
+    bool invertible = false;
+    const QPointF q = o->transform().inverted(&invertible).map(doc);
+    if (!invertible)
+        return;
+    const bool ctrl = modifiers & Qt::ControlModifier;
+
+    if (const auto* r = node_cast<RectangleObject>(o)) {
+        // Abstand von der Ecke entlang der Kanten, nach innen gemessen
+        auto* p = static_cast<RectangleObject*>(m_basicPreview.get());
+        const double w = r->size().width(), h = r->size().height();
+        const QPointF corners[4] = {QPointF(0, 0), QPointF(w, 0), QPointF(w, h), QPointF(0, h)};
+        const QPointF c = corners[m_basicNode];
+        const double sx = c.x() == 0 ? 1.0 : -1.0, sy = c.y() == 0 ? 1.0 : -1.0;
+        const double radius = std::max({0.0, sx * (q.x() - c.x()), sy * (q.y() - c.y())});
+        for (int i = 0; i < 4; ++i) {
+            const auto corner = static_cast<RectangleObject::Corner>(i);
+            p->setCornerRadius(corner, r->cornerRadius(corner));
+            if (r->cornersLinked() || i == m_basicNode)
+                p->setCornerRadius(corner, radius);
+        }
+        return;
+    }
+    if (const auto* e = node_cast<EllipseObject>(o)) {
+        auto* p = static_cast<EllipseObject*>(m_basicPreview.get());
+        const double hw = e->size().width() / 2.0, hh = e->size().height() / 2.0;
+        if (hw <= 0 || hh <= 0)
+            return;
+        const QPointF u((q.x() - hw) / hw, -(q.y() - hh) / hh);
+        double angle = std::atan2(u.y(), u.x()) * 180.0 / std::numbers::pi;
+        if (ctrl)
+            angle = std::round(angle / 15.0) * 15.0;
+        angle = std::fmod(angle + 360.0, 360.0);
+        m_angleTravel += wrapDegrees(angle - m_lastAngle);
+        m_lastAngle = angle;
+        p->setKind(std::hypot(u.x(), u.y()) < 1.0 ? EllipseObject::Kind::Pie : EllipseObject::Kind::Arc);
+        if (e->kind() == EllipseObject::Kind::Ellipse) {
+            // Die Lücke öffnet sich hinter der Maus, in Zugrichtung
+            const double origin = e->startAngle();
+            if ((m_angleTravel >= 0) != e->clockwise())
+                p->setAngles(angle, origin);
+            else
+                p->setAngles(origin, angle);
+        } else if (m_basicNode == 0) {
+            p->setAngles(angle, e->endAngle());
+        } else {
+            p->setAngles(e->startAngle(), angle);
+        }
+        return;
+    }
+    if (const auto* poly = node_cast<PolygonObject>(o)) {
+        // Alle Knoten derselben Art folgen: Radius und Drehung des Rings
+        auto* p = static_cast<PolygonObject*>(m_basicPreview.get());
+        const double hw = poly->size().width() / 2.0, hh = poly->size().height() / 2.0;
+        if (hw <= 0 || hh <= 0)
+            return;
+        const QPointF u((q.x() - hw) / hw, (q.y() - hh) / hh);
+        const bool inner = m_basicNode % 2 == 1;
+        const double base = -90.0 + 360.0 * m_basicNode / (2.0 * poly->points());
+        const double baseRadius = poly->baseRadius(inner);
+        PolygonObject::NodeShape s = poly->nodeShape();
+        const double scale = baseRadius > 1e-9 ? std::hypot(u.x(), u.y()) / baseRadius : 1.0;
+        const double twist = ctrl ? 0.0 : wrapDegrees(std::atan2(u.y(), u.x()) * 180.0 / std::numbers::pi - base);
+        if (inner) {
+            s.innerScale = scale;
+            s.innerTwist = twist;
+        } else {
+            s.outerScale = scale;
+            s.outerTwist = twist;
+        }
+        p->setNodeShape(s);
+    }
+}
+
+void ShapeTool::commitBasicPreview()
+{
+    if (m_basicPreview && m_moved) {
+        const QJsonObject props = serial::properties(*m_basicPreview);
+        QString label = QObject::tr("Polygon bearbeiten");
+        if (node_cast<RectangleObject>(m_basicPreview.get()))
+            label = QObject::tr("Eckenrundung bearbeiten");
+        else if (node_cast<EllipseObject>(m_basicPreview.get()))
+            label = QObject::tr("Ellipse bearbeiten");
+        m_canvas.editor().modifyObject(m_basicId, [&props](DrawObject& o) { o.readProperties(props); }, label);
+    }
+    m_basicPreview.reset();
+}
+
+// --- Knoten transformieren --------------------------------------------------------------------
+
+void ShapeTool::setNodeTransform(NodeTransform mode)
+{
+    m_nodeTransform = mode;
+    notify();
+}
+
+bool ShapeTool::canTransformNodes() const
+{
+    validateSelection();
+    return curve() && !m_selected.isEmpty();
+}
+
+QRectF ShapeTool::selectedNodesBounds() const
+{
+    validateSelection();
+    const CurveObject* c = curve();
+    if (!c || m_selected.isEmpty())
+        return {};
+    const CurveObject& shown = m_preview && m_moved ? *m_preview : *c;
+    // Ein einzelner Knoten dreht und spiegelt sich wie beim Vorbild um den Rahmen aller Knoten der Kurve
+    QPolygonF pts;
+    if (m_selected.size() == 1) {
+        for (const SubPath& sub : shown.subPaths())
+            for (const CurveNode& n : sub.nodes)
+                pts << c->transform().map(n.point);
+        return pts.boundingRect();
+    }
+    for (NodeRef r : m_selected)
+        if (shown.isValid(r))
+            pts << c->transform().map(shown.node(r).point);
+    return pts.boundingRect();
+}
+
+QPointF ShapeTool::handlePosition(int handle) const
+{
+    const QRectF r = m_canvas.viewTransform().mapRect(selectedNodesBounds()).adjusted(-6, -6, 6, 6);
+    switch (handle) {
+    case 0: return r.topLeft();
+    case 1: return r.topRight();
+    case 2: return r.bottomRight();
+    case 3: return r.bottomLeft();
+    case 4: return QPointF(r.center().x(), r.top());
+    case 5: return QPointF(r.right(), r.center().y());
+    case 6: return QPointF(r.center().x(), r.bottom());
+    default: return QPointF(r.left(), r.center().y());
+    }
+}
+
+std::optional<int> ShapeTool::handleAt(const QPointF& screen) const
+{
+    if (m_nodeTransform == NodeTransform::None || !canTransformNodes())
+        return std::nullopt;
+    for (int h = 0; h < 8; ++h)
+        if (distance(handlePosition(h), screen) <= kHandleRadius)
+            return h;
+    return std::nullopt;
+}
+
+QTransform ShapeTool::handleTransform(const QPointF& doc, Qt::KeyboardModifiers modifiers) const
+{
+    const QRectF b = m_handleBox;
+    const QPointF corners[4] = {b.topLeft(), b.topRight(), b.bottomRight(), b.bottomLeft()};
+    const QPointF sides[4] = {QPointF(b.center().x(), b.top()), QPointF(b.right(), b.center().y()),
+                              QPointF(b.center().x(), b.bottom()), QPointF(b.left(), b.center().y())};
+    const bool corner = m_handle < 4;
+    const QPointF h = corner ? corners[m_handle] : sides[m_handle - 4];
+    const QPointF opposite = corner ? corners[(m_handle + 2) % 4] : sides[(m_handle - 4 + 2) % 4];
+    auto around = [](const QPointF& a, const QTransform& m) {
+        return QTransform::fromTranslate(-a.x(), -a.y()) * m * QTransform::fromTranslate(a.x(), a.y());
+    };
+    if (m_nodeTransform == NodeTransform::Scale) {
+        // Umschalt: von der Mitte aus; Ecken proportional, Seiten nur in einer Richtung
+        const QPointF a = (modifiers & Qt::ShiftModifier) ? b.center() : opposite;
+        const QPointF span = h - a;
+        if (corner) {
+            const double len2 = QPointF::dotProduct(span, span);
+            const double s = len2 > 1e-12 ? QPointF::dotProduct(doc - a, span) / len2 : 1.0;
+            return around(a, QTransform::fromScale(s, s));
+        }
+        const bool horizontal = m_handle == 5 || m_handle == 7;
+        const double extent = horizontal ? span.x() : span.y();
+        const double s = std::abs(extent) > 1e-9 ? (horizontal ? doc.x() - a.x() : doc.y() - a.y()) / extent : 1.0;
+        return around(a, horizontal ? QTransform::fromScale(s, 1) : QTransform::fromScale(1, s));
+    }
+    if (corner) {
+        // Drehen um die Mitte; Strg in 15°-Schritten
+        const QPointF c = b.center();
+        double angle = (std::atan2(doc.y() - c.y(), doc.x() - c.x()) - std::atan2(m_pressDoc.y() - c.y(), m_pressDoc.x() - c.x()))
+                       * 180.0 / std::numbers::pi;
+        if (modifiers & Qt::ControlModifier)
+            angle = std::round(angle / 15.0) * 15.0;
+        return around(c, QTransform().rotate(angle));
+    }
+    // Neigen gegen die gegenüberliegende Seite
+    const bool topBottom = m_handle == 4 || m_handle == 6;
+    const double extent = topBottom ? h.y() - opposite.y() : h.x() - opposite.x();
+    if (std::abs(extent) < 1e-9)
+        return {};
+    if (topBottom)
+        return around(opposite, QTransform(1, 0, (doc.x() - m_pressDoc.x()) / extent, 1, 0, 0));
+    return around(opposite, QTransform(1, (doc.y() - m_pressDoc.y()) / extent, 0, 1, 0, 0));
+}
+
+QString ShapeTool::handleLabel() const
+{
+    if (m_nodeTransform == NodeTransform::Scale)
+        return QObject::tr("Knoten skalieren");
+    return m_handle < 4 ? QObject::tr("Knoten drehen") : QObject::tr("Knoten neigen");
+}
+
+void ShapeTool::reflectNodes(Qt::Orientation orientation)
+{
+    if (!canTransformNodes())
+        return;
+    const CurveObject* c = curve();
+    const QPointF m = selectedNodesBounds().center();
+    const QTransform flip = QTransform::fromTranslate(-m.x(), -m.y())
+                            * (orientation == Qt::Horizontal ? QTransform::fromScale(-1, 1) : QTransform::fromScale(1, -1))
+                            * QTransform::fromTranslate(m.x(), m.y());
+    const QTransform local = c->transform() * flip * c->transform().inverted();
+    const QList<NodeRef> nodes = m_selected;
+    modifyTarget([&](CurveObject& curve) { curve.transformNodes(nodes, local); }, QObject::tr("Knoten spiegeln"));
+    validateSelection();
+    notify();
 }
 
 // --- Befehle --------------------------------------------------------------------------------
@@ -579,8 +933,10 @@ void ShapeTool::paintOverlay(QPainter& p)
 {
     validateSelection();
     const CurveObject* original = curve();
-    if (!original)
+    if (!original) {
+        paintBasicOverlay(p);
         return;
+    }
     const CurveObject& c = m_preview && m_moved ? *m_preview : *original;
     const QTransform t = toScreen();
     const QColor blue = Canvas::previewColor();
@@ -626,6 +982,64 @@ void ShapeTool::paintOverlay(QPainter& p)
         p.setPen(QPen(QColor(80, 80, 80), 1.0, Qt::DashLine));
         p.setBrush(Qt::NoBrush);
         p.drawRect(QRectF(m_pressScreen, m_currentScreen).normalized());
+    }
+
+    // Rahmen zum Transformieren der gewählten Knoten
+    if (m_nodeTransform != NodeTransform::None && canTransformNodes()) {
+        p.setRenderHint(QPainter::Antialiasing, true);
+        p.setPen(QPen(QColor(80, 80, 80), 1.0, Qt::DashLine));
+        p.setBrush(Qt::NoBrush);
+        p.drawPolygon(QPolygonF{handlePosition(0), handlePosition(1), handlePosition(2), handlePosition(3)});
+        p.setPen(QPen(QColor(20, 20, 20), 1.0));
+        p.setBrush(Qt::black);
+        for (int h = 0; h < 8; ++h) {
+            const QPointF at = handlePosition(h);
+            if (m_nodeTransform == NodeTransform::Scale) {
+                p.drawRect(QRectF(at.x() - 3, at.y() - 3, 6, 6));
+            } else if (h < 4) {
+                p.setBrush(Qt::NoBrush);
+                p.drawEllipse(at, 4.0, 4.0); // Drehen
+                p.setBrush(Qt::black);
+            } else {
+                const bool horizontal = h == 4 || h == 6;
+                const QPointF d = horizontal ? QPointF(5, 0) : QPointF(0, 5);
+                p.drawLine(at - d, at + d); // Neigen
+                const QPointF n = horizontal ? QPointF(0, 2) : QPointF(2, 0);
+                p.drawLine(at - d - n, at - d + n);
+                p.drawLine(at + d - n, at + d + n);
+            }
+        }
+        const QPointF c = m_canvas.viewTransform().map(selectedNodesBounds().center());
+        p.drawLine(c - QPointF(4, 0), c + QPointF(4, 0));
+        p.drawLine(c - QPointF(0, 4), c + QPointF(0, 4));
+    }
+    p.restore();
+}
+
+void ShapeTool::paintBasicOverlay(QPainter& p)
+{
+    const DrawObject* o = basicShape();
+    if (!o)
+        return;
+    const QColor blue = Canvas::previewColor();
+    const QTransform view = m_canvas.viewTransform();
+    const bool previewing = m_drag == Drag::BasicNode && m_moved && m_basicPreview;
+    const DrawObject& shown = previewing ? *m_basicPreview : *o;
+    p.save();
+    if (previewing) {
+        p.setRenderHint(QPainter::Antialiasing, true);
+        p.setPen(QPen(blue, 1.0));
+        p.setBrush(Qt::NoBrush);
+        p.drawPath(view.map(shown.path()));
+    }
+    p.setRenderHint(QPainter::Antialiasing, false);
+    const QList<QPointF> nodes = basicLocalNodes(shown);
+    for (int i = 0; i < nodes.size(); ++i) {
+        const QPointF at = view.map(shown.transform().map(nodes[i]));
+        const bool active = m_drag == Drag::BasicNode && i == m_basicNode;
+        p.setPen(QPen(active ? blue : QColor(40, 40, 40), 1.0));
+        p.setBrush(active ? QBrush(blue) : QBrush(Qt::white));
+        p.drawRect(QRectF(at.x() - 3, at.y() - 3, 6, 6));
     }
     p.restore();
 }

@@ -1,6 +1,7 @@
 #include "AlignDialog.h"
 
 #include "Editor.h"
+#include "ExpressionSpinBox.h"
 #include "Icons.h"
 
 #include <QCheckBox>
@@ -62,7 +63,7 @@ AlignDialog::AlignDialog(Editor& editor, QWidget* parent) : QDialog(parent), m_e
     targetBox->addWidget(m_target);
     auto* point = new QHBoxLayout;
     auto spin = [alignPage](const QString& prefix) {
-        auto* s = new QDoubleSpinBox(alignPage);
+        auto* s = new ExpressionSpinBox(alignPage);
         s->setRange(-100000, 100000);
         s->setDecimals(3);
         s->setPrefix(prefix);

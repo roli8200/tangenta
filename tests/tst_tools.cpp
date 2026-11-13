@@ -1,7 +1,14 @@
 // Bedienung der Werkzeuge mit echten Mausereignissen auf der Zeichenfläche.
 // Mit VEK_SCREENSHOT_DIR=<Ordner> legen die Tests Bildschirmfotos der Zwischenstände ab.
 
+#include "CorrectionDialogs.h"
 #include "Canvas.h"
+#include "BitmapEffect.h"
+#include "EffectDockers.h"
+#include "ImageDialogs.h"
+#include "ImagePool.h"
+#include "SuperClipObject.h"
+#include <QListWidget>
 #include "CdrImport.h"
 #include "ColorDialog.h"
 #include "ColorPalette.h"
@@ -12,6 +19,7 @@
 #include "Editor.h"
 #include "CurveObject.h"
 #include "ExpressionSpinBox.h"
+#include "NodePopup.h"
 #include "ShapeTool.h"
 #include "ArtisticMediaTool.h"
 #include "CutTools.h"
@@ -29,6 +37,7 @@
 #include "Serialization.h"
 #include "EffectTool.h"
 #include "ShapingDocker.h"
+#include "CornersDocker.h"
 #include "OptionsDialog.h"
 #include "Options.h"
 #include "EllipseObject.h"
@@ -47,6 +56,7 @@
 #include "ShapingTools.h"
 #include "PerfectShapeTool.h"
 #include "PatternDialog.h"
+#include "QrCodeDialog.h"
 #include "PathOps.h"
 #include "ExportDialog.h"
 #include "ImageCodecs.h"
@@ -110,6 +120,7 @@
 #include <QDoubleSpinBox>
 #include <QFontComboBox>
 #include <QElapsedTimer>
+#include <QCompleter>
 #include <QLineEdit>
 #include <QMenu>
 #include <QTimer>
@@ -119,7 +130,9 @@
 #include <QSet>
 
 #include <QtTest>
+#include <QPlainTextEdit>
 #include <QTreeWidget>
+#include <QContextMenuEvent>
 #include <QTranslator>
 #include <QGroupBox>
 #include <QAbstractButton>
@@ -127,6 +140,17 @@
 #include <QDockWidget>
 #include <QPushButton>
 #include <QCheckBox>
+
+#include <numbers>
+#include "DrawingTools.h"
+#include <QSvgGenerator>
+#include "PropertyBar.h"
+#include <QRadioButton>
+#include "PagesDocker.h"
+#include "MosaicDialogs.h"
+#include "BlockShadowTool.h"
+#include "MediaDocker.h"
+#include "MediaLibrary.h"
 
 using namespace vek;
 
@@ -514,6 +538,38 @@ private slots:
         QVERIFY2(near(c->boundingRect(), QRectF(30, 120, 80, 30), 1.2), qPrintable(describe(c->boundingRect())));
     }
 
+    void freehandSmoothingReducesNodes()
+    {
+        // Zittriger Bogen: mit Freihandglättung 100 deutlich weniger Knoten als ohne Glättung
+        QCoreApplication::setOrganizationName(QStringLiteral("VektoreditorTest")); // sonst kein QSettings
+        for (const char* key : {"ws/tools/freehand/corner", "ws/tools/freehand/straight", "ws/tools/freehand/autoJoin"})
+            Options::instance().set(QString::fromLatin1(key), 5); // Vorgaben (andere Tests ändern sie)
+        auto drawShaky = [&](int smoothing) {
+            Options::instance().set(QStringLiteral("ws/tools/freehand/smoothing"), smoothing);
+            m_canvas->setTool(ToolId::Freehand);
+            const QPoint from = screen(QPointF(30, 150));
+            press(from);
+            // etwa alle 3 Bildschirmpunkte ein Mauspunkt, unabhängig von der Vergrösserung
+            const int steps = std::max(60, int(M_PI * 35.0 / m_canvas->pixelsToDoc(3.0)));
+            for (int i = 1; i <= steps; ++i) {
+                const double a = M_PI * i / steps;
+                const int wobble = (i % 2 ? 2 : -2) * (i % 3 ? 1 : 2); // Bildschirmpunkte: Zittern der Hand
+                // direkt senden: QTest::mouseMove fasst unter Windows dicht folgende Bewegungen zusammen
+                const QPointF pos = screen(QPointF(30 + 40 * (1 - std::cos(a)), 150 - 30 * std::sin(a))) + QPoint(wobble, -wobble);
+                QMouseEvent ev(QEvent::MouseMove, pos, m_canvas->mapToGlobal(pos), Qt::NoButton, Qt::LeftButton, Qt::NoModifier);
+                QApplication::sendEvent(m_canvas.get(), &ev);
+            }
+            release(screen(QPointF(110, 150)));
+            const int nodes = m_editor->document().findAs<CurveObject>(m_editor->selection().value(0))->nodeCount();
+            m_editor->deleteSelection(); // sonst setzt der nächste Strich am Ende dieser Linie an
+            return nodes;
+        };
+        const int raw = drawShaky(0);
+        const int smooth = drawShaky(100);
+        Options::instance().set(QStringLiteral("ws/tools/freehand/smoothing"), 50);
+        QVERIFY2(smooth * 2 <= raw && smooth <= 12, qPrintable(QStringLiteral("%1 -> %2").arg(raw).arg(smooth)));
+    }
+
     void lineToolDrawsStraightLine()
     {
         m_canvas->setTool(ToolId::Line);
@@ -729,7 +785,7 @@ private slots:
         const QRectF before = m_editor->selectionBounds();
         // Ziehen, Pfeiltaste, Löschen und Radieren lassen es unverändert
         drag(screen(QPointF(50, 60)), screen(QPointF(90, 90)));
-        QTest::keyClick(m_canvas.get(), Qt::Key_Right);
+        m_canvas->nudge(1, 0, 0); // Schubsen nach rechts (Pfeiltaste)
         m_editor->deleteSelection();
         QVERIFY(m_editor->document().find(id));
         QCOMPARE(m_editor->selectionBounds(), before);
@@ -740,7 +796,7 @@ private slots:
         std::unique_ptr<Document> loaded = io::loadFromBytes(io::saveToBytes(m_editor->document(), &error), &error);
         QVERIFY(loaded && loaded->findAs<DrawObject>(id)->locked());
         m_editor->setSelectionLocked(false);
-        QTest::keyClick(m_canvas.get(), Qt::Key_Right);
+        m_canvas->nudge(1, 0, 0);
         QVERIFY(m_editor->selectionBounds().left() > before.left());
     }
 
@@ -760,6 +816,17 @@ private slots:
         QCOMPARE(m_editor->document().undoText(), QStringLiteral("Kombination aufheben"));
         QCOMPARE(m_editor->selection().size(), 2);
         QVERIFY(!m_editor->canBreakApartSelection());
+
+        // Gruppe (z.B. Text in Kurven) mit einer Kurve kombinieren: der Inhalt der Gruppe zählt
+        m_editor->groupSelection();
+        const NodeId third = drawRect(QRectF(20, 90, 30, 30));
+        m_editor->selectAll();
+        QVERIFY(m_editor->canCombineSelection());
+        m_editor->combineSelection();
+        const auto* all = m_editor->document().findAs<CurveObject>(m_editor->selection().value(0));
+        QVERIFY(all);
+        QCOMPARE(all->subPaths().size(), 3);
+        QVERIFY(!m_editor->document().find(third));
     }
 
     void outlineGetsArrowsAndDashes()
@@ -1122,10 +1189,10 @@ private slots:
         drawRect(QRectF(20, 40, 100, 50));
         const QPointF start = m_editor->selectionBounds().topLeft();
         m_editor->setNudge(0.5);
-        QTest::keyClick(m_canvas.get(), Qt::Key_Right);
+        m_canvas->nudge(1, 0, 0); // Pfeil rechts
         QVERIFY2(std::abs(m_editor->selectionBounds().left() - start.x() - 0.5) < 1e-6,
                  qPrintable(describe(m_editor->selectionBounds())));
-        QTest::keyClick(m_canvas.get(), Qt::Key_Down, Qt::ShiftModifier); // grössere Schrittweite: ×2
+        m_canvas->nudge(0, 1, 1); // Super-Schubsen (Umschalt+Pfeil): ×2
         QVERIFY(std::abs(m_editor->selectionBounds().top() - start.y() - 1.0) < 1e-6);
         m_editor->setDuplicateOffset(QPointF(10, 0));
         m_editor->duplicateSelection();
@@ -2052,6 +2119,289 @@ private slots:
         m_canvas->setTool(ToolId::Pick);
     }
 
+    void textHeightAndEnvelopeAfterCurves()
+    {
+        // Video 30: Höhe eines Grafiktexts über die Eigenschaftsleiste streckt die Buchstaben
+        auto ink = [this](NodeId id) {
+            output::ExportOptions o;
+            o.only = {id};
+            o.dpi = 200;
+            o.transparent = true;
+            const QImage img = output::renderImage(*m_canvas, o);
+            int n = 0;
+            for (int y = 0; y < img.height(); ++y)
+                for (int x = 0; x < img.width(); ++x)
+                    n += qAlpha(img.pixel(x, y)) > 128;
+            return std::pair{img.size(), n};
+        };
+        auto text = std::make_unique<TextObject>(TextObject::Kind::Artistic);
+        text->setPlainText(QStringLiteral("HALLO"), CharFormat(QStringLiteral("Arial"), 72));
+        text->applyTransform(xform::translation(QPointF(20, 40)));
+        const NodeId t = m_editor->addObject(std::move(text), QStringLiteral("T"));
+        m_editor->setSelection({t});
+        const QRectF before = m_editor->selectionBounds();
+        const double glyphs0 = m_editor->document().findAs<TextObject>(t)->path().boundingRect().height();
+        const auto [size0, ink0] = ink(t);
+        m_editor->setSelectionBounds(QRectF(before.left(), before.top(), before.width(), 2 * before.height()));
+        const auto* scaled = m_editor->document().findAs<TextObject>(t);
+        QVERIFY2(std::abs(scaled->path().boundingRect().height() - 2 * glyphs0) < 0.5,
+                 qPrintable(QStringLiteral("%1 -> %2, Rahmen %3 -> %4").arg(glyphs0).arg(scaled->path().boundingRect().height())
+                                .arg(before.height()).arg(m_editor->selectionBounds().height())));
+        const auto [size1, ink1] = ink(t);
+        QVERIFY2(std::abs(size1.height() - 2 * size0.height()) <= 2, qPrintable(QStringLiteral("%1 -> %2").arg(size0.height()).arg(size1.height())));
+        QVERIFY2(ink1 > 1.3 * ink0, qPrintable(QStringLiteral("%1 -> %2").arg(ink0).arg(ink1)));
+
+        // Video 30: Text in Kurven (Strg+Q, Strg+L), dann «Hülle aus Objekt»: die Form wird verformt gezeichnet
+        m_editor->setSelection({t});
+        m_editor->convertSelectionToCurves();
+        m_editor->combineSelection();
+        QCOMPARE(m_editor->selection().size(), 1);
+        const NodeId c = m_editor->selection().first();
+        QVERIFY(m_editor->document().findAs<CurveObject>(c));
+        const QRectF cb = m_editor->selectionBounds();
+        auto arc = std::make_unique<EllipseObject>(QSizeF(cb.width(), cb.height() + 40));
+        arc->applyTransform(xform::translation(QPointF(cb.left(), cb.top() - 20)));
+        const NodeId target = m_editor->addObject(std::move(arc), QStringLiteral("E"));
+        // Die Hülle aus einer Ellipse wird in den Rahmen der Kurve eingepasst: die Ecken des Rahmens bleiben leer
+        const QRectF plain = m_editor->document().findAs<CurveObject>(c)->path().boundingRect();
+        const QRectF corner(plain.topLeft(), QSizeF(plain.width() * 0.04, plain.height() * 0.04));
+        QVERIFY(m_editor->document().findAs<CurveObject>(c)->path().intersects(corner)); // Ecke des H
+        m_editor->setSelection({c});
+        QVERIFY(m_editor->applyEnvelopeShape(m_editor->document().findAs<DrawObject>(target)->path(), true,
+                                             Envelope::Mode::Unconstrained, false, Envelope::Mapping::Putty));
+        const auto* enveloped = m_editor->document().findAs<CurveObject>(c);
+        QVERIFY(enveloped->hasEnvelope());
+        QVERIFY(!enveloped->path().intersects(corner));
+        // Gezeichnet wird die verformte Form (nicht erst ein Duplikat)
+        output::ExportOptions shotOptions;
+        shotOptions.area = plain;
+        shotOptions.dpi = 300;
+        const QImage shot = output::renderImage(*m_canvas, shotOptions);
+        const QRect cornerPx(0, 0, int(shot.width() * 0.04), int(shot.height() * 0.04));
+        int darkPx = 0;
+        for (int y = cornerPx.top(); y <= cornerPx.bottom(); ++y)
+            for (int x = cornerPx.left(); x <= cornerPx.right(); ++x)
+                darkPx += qGray(shot.pixel(x, y)) < 128;
+        QCOMPARE(darkPx, 0);
+        // Verlauf und Kontur auf dem verformten Objekt
+        m_editor->setSelection({c});
+        m_editor->setSelectionStrokeWidth(1.0);
+        QCOMPARE(m_editor->document().findAs<CurveObject>(c)->style().strokeWidth, 1.0);
+        QVERIFY(m_editor->document().findAs<CurveObject>(c)->hasEnvelope());
+        m_editor->setSelection({c, target});
+        m_editor->deleteSelection();
+    }
+
+    void decimalPointAndEnterInNumberFields()
+    {
+        // Video 29: «2.5» im Umrissstift-Dialog ergab 25 mm (Punkt als Tausendertrenner der Sprache);
+        // die Eingabetaste schloss den Dialog, statt den Wert zu übernehmen
+        const QLocale previous;
+        QLocale::setDefault(QLocale(QLocale::German, QLocale::Germany));
+        Style style;
+        style.stroke = Color(0, 0, 0);
+        style.strokeWidth = 0.2;
+        OutlinePenDialog dialog(style);
+        dialog.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&dialog));
+        auto* width = dialog.findChild<ExpressionSpinBox*>();
+        QVERIFY(width);
+        for (const auto& [typed, expected] : {std::pair{QStringLiteral("2.5"), 2.5}, std::pair{QStringLiteral("0,7"), 0.7},
+                                              std::pair{QStringLiteral("1.25 mm"), 1.25}}) {
+            width->setFocus();
+            width->selectAll();
+            QTest::keyClicks(width, typed);
+            QTest::keyClick(width, Qt::Key_Return);
+            QVERIFY2(dialog.isVisible(), qPrintable(typed)); // erste Eingabetaste übernimmt nur
+            QCOMPARE(width->value(), expected);
+        }
+        QTest::keyClick(width, Qt::Key_Return); // Wert steht: jetzt wie OK
+        QVERIFY(!dialog.isVisible());
+        QCOMPARE(dialog.result(), int(QDialog::Accepted));
+        QCOMPARE(dialog.style().strokeWidth, 1.25);
+        // Alle übrigen Zahlenfelder der Programmoberfläche sind solche Felder
+        MainWindow window;
+        for (QDoubleSpinBox* box : window.findChildren<QDoubleSpinBox*>())
+            QVERIFY2(qobject_cast<ExpressionSpinBox*>(box), qPrintable(box->objectName() + QLatin1Char(' ') + box->toolTip()));
+        QLocale::setDefault(previous);
+    }
+
+    // Fehler aus den Videos 34 bis 40
+    void enterAppliesInEveryNumberField()
+    {
+        // Video 36/39: In Effekt- und Vektorisierungsdialogen (QSpinBox) schloss die Eingabetaste den
+        // Dialog sofort; jetzt übernimmt sie zuerst den Wert
+        installEnterAppliesFilter();
+        QImage pixels(20, 20, QImage::Format_RGB32);
+        pixels.fill(Qt::gray);
+        EffectDialog dialog(QStringLiteral("Test"), pixels, {SliderSpec{QStringLiteral("Wert:"), 0, 100, 10}},
+                            [](const QImage& i, const QList<int>&) { return i; });
+        dialog.show();
+        dialog.activateWindow();
+        QVERIFY(QTest::qWaitForWindowActive(&dialog));
+        auto* spin = dialog.findChild<QSpinBox*>();
+        QVERIFY(spin);
+        spin->setFocus();
+        QTRY_VERIFY(spin->hasFocus());
+        spin->selectAll();
+        QTest::keyClicks(spin, QStringLiteral("42"));
+        QTest::keyClick(spin, Qt::Key_Return);
+        QVERIFY(dialog.isVisible());
+        QCOMPARE(dialog.values().value(0), 42);
+        QTest::keyClick(spin, Qt::Key_Return); // Wert steht: jetzt wie OK
+        QVERIFY(!dialog.isVisible());
+        QCOMPARE(dialog.QDialog::result(), int(QDialog::Accepted));
+    }
+
+    void videoFixes34to40()
+    {
+        QCoreApplication::setOrganizationName(QStringLiteral("VektoreditorTest"));
+        MainWindow window;
+        window.resize(1200, 800);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        Canvas* canvas = window.canvas();
+        Editor& ed = canvas->editor();
+        Document& doc = ed.document();
+
+        // Video 38: Mehrseitenansicht ein/aus ist nur Ansicht: kein Rückgängig-Schritt, nicht geändert
+        doc.setClean();
+        const int undo = doc.undoCount();
+        canvas->setMultiPageView(true);
+        QVERIFY(canvas->multiPageView());
+        QVERIFY(!doc.isModified());
+        QCOMPARE(doc.undoCount(), undo);
+        canvas->setMultiPageView(false);
+        QVERIFY(!doc.isModified());
+
+        // Video 36: Begrenzung schliesst Löcher (Ring -> volle Scheibe)
+        QPainterPath ring;
+        ring.addEllipse(QPointF(60, 60), 30, 30);
+        ring.addEllipse(QPointF(60, 60), 15, 15);
+        auto curve = CurveObject::fromPath(ring);
+        const NodeId ringId = ed.addObject(std::move(curve), QStringLiteral("Ring"));
+        ed.setSelection({ringId});
+        QVERIFY(ed.shapeSelection(Editor::ShapeOp::Boundary));
+        const auto* outline = doc.findAs<DrawObject>(ed.selection().value(0));
+        QVERIFY(outline && outline->id() != ringId);
+        QPainterPath area = outline->path();
+        area.setFillRule(Qt::OddEvenFill);
+        QVERIFY(area.contains(QPointF(60, 60)));
+
+        // Video 39: Punktraster rechnet die Rasterweite in mm der platzierten Grösse
+        QImage pixels(1536, 1024, QImage::Format_RGB32);
+        pixels.fill(Qt::darkGreen);
+        auto image = std::make_unique<ImageObject>(imagepool::addImage(pixels), QSizeF(406.4, 270.9));
+        image->setTransform(QTransform::fromScale(63.0 / 406.4, 63.0 / 406.4) * QTransform::fromTranslate(10, 10));
+        const NodeId imageId = ed.addObject(std::move(image), QStringLiteral("Bild"));
+        ed.setSelection({imageId});
+        const std::optional<MosaicSource> src = mosaicSource(*canvas, 150.0, true);
+        QVERIFY(src);
+        QVERIFY2(std::abs(src->size.width() - 63.0) < 0.01, qPrintable(QString::number(src->size.width())));
+        QVERIFY(near(src->toPage.mapRect(QRectF(QPointF(0, 0), src->size)), doc.findAs<DrawObject>(imageId)->boundingRect(), 0.01));
+    }
+
+    void textToolFollowsResize()
+    {
+        // Video 30: Höhe eines Grafiktexts ändern, während das Textwerkzeug ihn bearbeitet: die Buchstaben
+        // der Arbeitskopie folgen (vorher nur der Auswahlrahmen)
+        MainWindow window;
+        window.resize(1200, 800);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        Canvas* canvas = window.canvas();
+        Editor& ed = canvas->editor();
+        auto text = std::make_unique<TextObject>(TextObject::Kind::Artistic);
+        text->setPlainText(QStringLiteral("HALLO"), CharFormat(QStringLiteral("Arial"), 48));
+        text->setStyle([] { Style s; s.fill = Fill::solid(Color(0, 0, 0)); return s; }());
+        text->applyTransform(xform::translation(QPointF(30, 40)));
+        const NodeId t = ed.addObject(std::move(text), QStringLiteral("T"));
+        canvas->setTool(ToolId::Text);
+        canvas->textTool().beginEditing(t);
+        auto dark = [&] {
+            QImage img = canvas->grab().toImage();
+            int n = 0;
+            for (int y = 0; y < img.height(); y += 2)
+                for (int x = 0; x < img.width(); x += 2)
+                    n += qGray(img.pixel(x, y)) < 60;
+            return n;
+        };
+        const int before = dark();
+        const QRectF b = ed.document().findAs<TextObject>(t)->boundingRect();
+        ed.setSelection({t});
+        ed.setSelectionBounds(QRectF(b.left(), b.top(), b.width(), 2 * b.height()));
+        const int after = dark();
+        QVERIFY2(after > 1.6 * before, qPrintable(QStringLiteral("%1 -> %2").arg(before).arg(after)));
+        canvas->textTool().finishEditing();
+        QVERIFY(std::abs(ed.document().findAs<TextObject>(t)->boundingRect().height() - 2 * b.height()) < 0.01);
+    }
+
+    void envelopeOnScreenAfterCurves()
+    {
+        // Video 30: Text in Kurven, dann «Hülle aus Objekt» über die Eigenschaftsleiste: auf dem Bildschirm
+        // erscheint die verformte Form sofort, Füllung und Kontur wirken danach weiter
+        MainWindow window;
+        window.resize(1200, 800);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        Canvas* canvas = window.canvas();
+        Editor& ed = canvas->editor();
+        auto text = std::make_unique<TextObject>(TextObject::Kind::Artistic);
+        text->setPlainText(QStringLiteral("HALLO"), CharFormat(QStringLiteral("Arial"), 60));
+        Style black;
+        black.fill = Fill::solid(Color(0, 0, 0));
+        text->setStyle(black);
+        text->applyTransform(xform::translation(QPointF(30, 40)));
+        const NodeId t = ed.addObject(std::move(text), QStringLiteral("T"));
+        ed.setSelection({t});
+        ed.convertSelectionToCurves();
+        ed.combineSelection();
+        const NodeId c = ed.selection().first();
+        const QRectF plain = ed.document().findAs<DrawObject>(c)->path().boundingRect();
+        auto oval = std::make_unique<EllipseObject>(QSizeF(plain.width(), plain.height() * 2));
+        oval->applyTransform(xform::translation(QPointF(plain.left(), plain.bottom() + 20)));
+        const NodeId target = ed.addObject(std::move(oval), QStringLiteral("E"));
+        ed.setSelection({c});
+        canvas->setTool(ToolId::Envelope);
+        QApplication::processEvents();
+        auto darkInCorner = [&] {
+            const QImage img = canvas->grab().toImage();
+            const QRectF r = canvas->viewTransform().mapRect(QRectF(plain.topLeft(), QSizeF(plain.width() * 0.05, plain.height() * 0.2)));
+            int n = 0;
+            for (int y = int(r.top()) + 1; y < int(r.bottom()); ++y)
+                for (int x = int(r.left()) + 1; x < int(r.right()); ++x)
+                    n += qGray(img.pixel(x, y)) < 100;
+            return n;
+        };
+        QVERIFY(darkInCorner() > 0); // Ecke des H
+        // Wie der Knopf «Hülle aus Objekt erstellen»: Zielobjekt anklicken
+        canvas->setTool(ToolId::Pick);
+        bool picked = false;
+        canvas->pickTool().beginPickTarget([&](NodeId source) {
+            ed.applyEnvelopeShape(ed.document().findAs<DrawObject>(source)->path(), true, Envelope::Mode::Unconstrained, false,
+                                  Envelope::Mapping::Putty);
+            canvas->setTool(ToolId::Envelope);
+            picked = true;
+        });
+        const QPointF onOval = canvas->viewTransform().map(QPointF(plain.center().x(), plain.bottom() + 20 + plain.height()));
+        QTest::mouseClick(canvas, Qt::LeftButton, {}, onOval.toPoint());
+        QVERIFY(picked);
+        QVERIFY(ed.document().findAs<DrawObject>(c)->hasEnvelope());
+        // ohne Auswahl und Griffe nachsehen
+        ed.setSelection({});
+        canvas->setTool(ToolId::Pick);
+        QApplication::processEvents();
+        QCOMPARE(darkInCorner(), 0);
+        // Füllung und Kontur auf der verformten Kurve
+        ed.setSelection({c});
+        ed.setSelectionStrokeWidth(0.5);
+        const auto* curve = ed.document().findAs<CurveObject>(c);
+        QCOMPARE(curve->style().strokeWidth, 0.5);
+        QVERIFY(curve->hasEnvelope());
+        ed.setSelection({c, target});
+        ed.deleteSelection();
+    }
+
     void fontListFollowsOptions()
     {
         QCoreApplication::setOrganizationName(QStringLiteral("VektoreditorTest"));
@@ -2074,6 +2424,44 @@ private slots:
         QCOMPARE(FontBox::recentFamilies(), (QStringList{QStringLiteral("Times New Roman"), QStringLiteral("Courier New")}));
         FontBox box(*m_editor);
         QCOMPARE(box.itemData(0).toString(), QStringLiteral("Times New Roman"));
+        // Die Liste öffnet sich bei der Schrift in der alphabetischen Liste, nicht bei "zuletzt benutzt"
+        if (QFontDatabase::families().contains(QStringLiteral("Courier New"))) {
+            box.setCurrentFamily(QStringLiteral("courier new"));
+            QVERIFY(box.currentIndex() > 2);
+            QCOMPARE(box.itemData(box.currentIndex()).toString(), QStringLiteral("Courier New"));
+            // Suchen: Teil des Namens tippen, Vorschlag wählen
+            QStringList chosen;
+            connect(&box, &FontBox::familyActivated, this, [&chosen](const QString& f) { chosen << f; });
+            box.completer()->setCompletionPrefix(QStringLiteral("ourier"));
+            QVERIFY(box.completer()->completionCount() >= 1);
+            QCOMPARE(box.completer()->currentCompletion(), QStringLiteral("Courier New"));
+            emit box.completer()->activated(box.completer()->currentCompletion());
+            QCOMPARE(chosen, QStringList{QStringLiteral("Courier New")});
+            // Unbekannter Text stellt die aktuelle Schrift wieder her
+            box.lineEdit()->setText(QStringLiteral("xyz"));
+            emit box.lineEdit()->editingFinished();
+            QCOMPARE(box.currentText(), QStringLiteral("Courier New"));
+            QCOMPARE(chosen.size(), 1);
+            // Genau getippter Name mit weiteren Treffern (Arial, Arial Black …): schliesst sich die
+            // Trefferliste durch einen Klick daneben, gilt der getippte Name
+            // eine Schrift, deren Name in weiteren steckt (Arial -> Arial Black …)
+            const QStringList names = FontBox::families(m_editor->document());
+            QString prefix;
+            for (const QString& f : names)
+                if (prefix.isEmpty() && f != QStringLiteral("Courier New")
+                    && std::count_if(names.begin(), names.end(), [&f](const QString& g) { return g.contains(f, Qt::CaseInsensitive); }) >= 2)
+                    prefix = f;
+            if (!prefix.isEmpty()) {
+                box.show();
+                box.lineEdit()->setText(prefix.toLower());
+                box.completer()->setCompletionPrefix(prefix.toLower());
+                box.completer()->complete();
+                QVERIFY(box.completer()->completionCount() >= 2);
+                box.completer()->popup()->hide();
+                QTRY_COMPARE(chosen.last(), prefix);
+                box.hide();
+            }
+        }
         box.setCurrentFamily(QStringLiteral("Gibt Es Nicht"));
         QCOMPARE(box.currentFamily(), QStringLiteral("Gibt Es Nicht"));
         QSettings().remove(QStringLiteral("fonts/recent"));
@@ -2231,6 +2619,57 @@ private slots:
             if (act->shortcut() == QKeySequence(Qt::Key_T))
                 top = act;
         QVERIFY(top);
+    }
+
+    void toolShortcutsAreCommands()
+    {
+        // Werkzeugtasten sind vorbelegte Tastaturbefehle (Optionen > Befehle > Hilfsmittel) und frei belegbar
+        QCoreApplication::setOrganizationName(QStringLiteral("VektoreditorTest")); // sonst kein QSettings
+        Options::instance().set(QStringLiteral("ws/custom/shortcuts"),
+                                QStringLiteral(R"({"Hilfsmittel/Ellipse":"Ctrl+Shift+F7"})"));
+        {
+            MainWindow window;
+            window.show();
+            window.activateWindow();
+            QVERIFY(QTest::qWaitForWindowActive(&window));
+            auto* canvas = window.findChild<Canvas*>();
+            QVERIFY(canvas);
+            canvas->setFocus();
+            QTest::keyClick(canvas, Qt::Key_F6);
+            QCOMPARE(canvas->toolId(), ToolId::Rectangle);
+            QTest::keyClick(canvas, Qt::Key_F7); // Vorgabe F7 ist abgelöst
+            QCOMPARE(canvas->toolId(), ToolId::Rectangle);
+            QTest::keyClick(canvas, Qt::Key_F7, Qt::ControlModifier | Qt::ShiftModifier);
+            QCOMPARE(canvas->toolId(), ToolId::Ellipse);
+            QTest::keyClick(canvas, Qt::Key_Y);
+            QCOMPARE(canvas->toolId(), ToolId::Polygon);
+            QAction* ellipse = nullptr;
+            for (QAction* a : window.findChild<QMenu*>(QStringLiteral("toolCommands"))->actions())
+                if (a->property("toolName").toString() == QStringLiteral("Ellipse"))
+                    ellipse = a;
+            QVERIFY(ellipse);
+            QVERIFY(ellipse->toolTip().contains(QKeySequence(QStringLiteral("Ctrl+Shift+F7")).toString(QKeySequence::NativeText)));
+            // Leertaste und Schubsen sind ebenfalls Befehle der Arbeitsfläche
+            QTest::keyClick(canvas, Qt::Key_Space);
+            QCOMPARE(canvas->toolId(), ToolId::Pick);
+            QTest::keyClick(canvas, Qt::Key_Space);
+            QCOMPARE(canvas->toolId(), ToolId::Polygon);
+            QTest::keyClick(canvas, Qt::Key_F6);
+            QTest::mouseMove(canvas, QPoint(100, 100));
+            QTest::mousePress(canvas, Qt::LeftButton, {}, QPoint(100, 100));
+            QTest::mouseMove(canvas, QPoint(200, 160));
+            QTest::mouseRelease(canvas, Qt::LeftButton, {}, QPoint(200, 160));
+            auto& editor = window.findChild<Canvas*>()->editor();
+            QCOMPARE(editor.selection().size(), 1);
+            canvas->setTool(ToolId::Pick);
+            const double left = editor.selectionBounds().left();
+            QTest::keyClick(canvas, Qt::Key_Right);
+            QVERIFY(std::abs(editor.selectionBounds().left() - left - editor.nudge()) < 1e-6);
+            const int count = int(editor.pickableObjects().size());
+            QTest::keyClick(canvas, Qt::Key_Plus, Qt::KeypadModifier);
+            QCOMPARE(int(editor.pickableObjects().size()), count + 1);
+        }
+        Options::instance().set(QStringLiteral("ws/custom/shortcuts"), QString());
     }
 
     void arrangeMenuCommands()
@@ -2745,11 +3184,25 @@ private slots:
         m_editor->setSelection({blend->id()});
         m_editor->setObjectProperty(QStringLiteral("steps"), 9, QStringLiteral("Schritte"));
         QCOMPARE(node_cast<BlendObject>(obj(blend->id()))->intermediates().size(), 9);
+        // Zwischenstufen werden nur neu berechnet, wenn sich Start, Ende oder Schritte ändern
+        {
+            const auto* bl = node_cast<BlendObject>(obj(blend->id()));
+            QVERIFY(bl->intermediates().first() == bl->intermediates().first());
+            const auto before = bl->intermediates().first();
+            m_editor->setSelection({b});
+            m_editor->transformSelection(QTransform::fromTranslate(0, 10), QStringLiteral("Verschieben"));
+            const auto after = node_cast<BlendObject>(obj(blend->id()))->intermediates().first();
+            QVERIFY(after != before);
+            QVERIFY(after->boundingRect().center().y() > before->boundingRect().center().y());
+            QVERIFY(node_cast<BlendObject>(obj(blend->id()))->boundingRect().bottom() > 34.0);
+            m_editor->setSelection({blend->id()});
+        }
+        // Strg+K ist bei einer Überblendung wählbar
+        QVERIFY(m_editor->canBreakApartSelection());
         // Trennen (Strg+K): Gruppe aus 11 Objekten
         QVERIFY(m_editor->separateEffects());
         QCOMPARE(m_editor->document().find(m_editor->selection().first())->childCount(), 11);
         Q_UNUSED(a);
-        Q_UNUSED(b);
 
         // Kontur aussen per Ziehen
         const NodeId c = add(std::make_unique<RectangleObject>(QSizeF(20, 20)), QRectF(20, 60, 20, 20), Color(0, 200, 0));
@@ -3581,6 +4034,56 @@ private slots:
     }
 
     // Kurs "alle Werkzeuge": Muster- und Texturfüllung, Mustertransparenz
+    void qrCodeDialogInsertsAndEdits()
+    {
+        // Dialog: WLAN-Code mit Feldern
+        QrCodeObject start;
+        QrCodeDialog dialog(start, true);
+        QVERIFY(dialog.isValid());
+        QVERIFY(dialog.info().contains(QStringLiteral("Version")));
+        dialog.kindBox()->setCurrentIndex(int(qr::Kind::Wifi));
+        auto* ssid = qobject_cast<QLineEdit*>(dialog.field(QStringLiteral("ssid")));
+        auto* password = qobject_cast<QLineEdit*>(dialog.field(QStringLiteral("password")));
+        auto* security = qobject_cast<QComboBox*>(dialog.field(QStringLiteral("security")));
+        QVERIFY(ssid && password && security);
+        ssid->setText(QStringLiteral("Gast"));
+        password->setText(QStringLiteral("sommer26"));
+        security->setCurrentIndex(0);
+        QrCodeObject result;
+        dialog.applyTo(result);
+        QCOMPARE(result.payload(), QStringLiteral("WIFI:T:WPA;S:Gast;P:sommer26;;"));
+        if (const QString shots = qEnvironmentVariable("VEK_SCREENSHOT_DIR"); !shots.isEmpty()) {
+            dialog.adjustSize();
+            dialog.grab().save(shots + QStringLiteral("/95-qrcode-dialog.png"));
+        }
+        QCOMPARE(result.size(), QSizeF(30, 30));
+        // Zu langer Inhalt sperrt OK
+        dialog.kindBox()->setCurrentIndex(int(qr::Kind::Text));
+        qobject_cast<QPlainTextEdit*>(dialog.field(QStringLiteral("text")))->setPlainText(QString(4000, u'x'));
+        QVERIFY(!dialog.isValid());
+
+        // Einfügen über den Editor, dann Bearbeiten als ein Undo-Schritt
+        auto code = std::make_unique<QrCodeObject>();
+        code->setSize(QSizeF(25, 25));
+        const NodeId id = m_editor->addObject(std::move(code), QStringLiteral("QR"));
+        const auto* placed = m_editor->document().findAs<QrCodeObject>(id);
+        QVERIFY(placed);
+        QCOMPARE(placed->payload(), QStringLiteral("https://tangenta.ch"));
+        QCOMPARE(placed->boundingRect().size(), QSizeF(25, 25));
+        QrCodeDialog edit(*placed, false);
+        edit.kindBox()->setCurrentIndex(int(qr::Kind::Phone));
+        qobject_cast<QLineEdit*>(edit.field(QStringLiteral("number")))->setText(QStringLiteral("052 123 45 67"));
+        m_editor->modifyObject(id, [&edit](DrawObject& o) { edit.applyTo(*node_cast<QrCodeObject>(&o)); }, QStringLiteral("QR"));
+        QCOMPARE(m_editor->document().findAs<QrCodeObject>(id)->payload(), QStringLiteral("tel:0521234567"));
+        QCOMPARE(m_editor->document().findAs<QrCodeObject>(id)->size(), QSizeF(25, 25));
+        m_editor->document().undo();
+        QCOMPARE(m_editor->document().findAs<QrCodeObject>(id)->payload(), QStringLiteral("https://tangenta.ch"));
+        // Leiste: Fehlerkorrektur über setObjectProperty
+        m_editor->setSelection({id});
+        m_editor->setObjectProperty(QStringLiteral("qrEcc"), 3, QStringLiteral("Fehlerkorrektur"));
+        QCOMPARE(m_editor->document().findAs<QrCodeObject>(id)->errorCorrection(), 3);
+    }
+
     void patternAndTextureFills()
     {
         m_canvas->resize(800, 600);
@@ -4927,9 +5430,9 @@ private slots:
 
         // Kurven- und Beschneiden-Gruppe als Ausklapplisten
         QCOMPARE(window.findChildren<FlyoutButton*>().size(), 14); // Beschneiden, Zoom, Kurven, Rechteck, Ellipse, Polygon, Bemassung, Verbindung, Kontur, Füllung, interaktiv
-        for (const QString& name : {QStringLiteral("Freihand\tF5"), QStringLiteral("2-Punkt-Linie"), QStringLiteral("Bézier"),
-                                    QStringLiteral("Künstlerische Medien\tI"), QStringLiteral("Beschneiden"),
-                                    QStringLiteral("Messer"), QStringLiteral("Radierer\tX")}) {
+        for (const QString& name : {QStringLiteral("Freihand"), QStringLiteral("2-Punkt-Linie"), QStringLiteral("Bézier"),
+                                    QStringLiteral("Künstlerische Medien"), QStringLiteral("Beschneiden"),
+                                    QStringLiteral("Messer"), QStringLiteral("Radierer")}) {
             bool found = false;
             for (QAction* a : window.findChildren<QAction*>())
                 found = found || (a->text() == name && a->isEnabled());
@@ -5206,6 +5709,134 @@ private slots:
         QVERIFY(texts.contains(QStringLiteral("A&nordnung")));
     }
 
+    // Rückmeldung ROKA 04.11.: Bild auf/ab blättert, Kontextmenü gruppiert, Strg+Bild auf/ab über
+    // Ebenengrenzen, geöffnete Dateien ohne äussere Gruppe, Fenster passt auf den Bildschirm
+    void pagesGroupsAndStacking()
+    {
+        QCoreApplication::setOrganizationName(QStringLiteral("VektoreditorTest"));
+        QSettings().remove(QStringLiteral("window/geometry"));
+        MainWindow window;
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        Editor& ed = window.canvas()->editor();
+        Canvas* canvas = window.canvas();
+        const QRect avail = window.screen()->availableGeometry();
+        // Kleiner Laptop (1366 x 768 abzüglich Taskleiste): das Fenster muss sich so klein machen lassen
+        QVERIFY2(window.minimumSizeHint().height() <= 700, qPrintable(QString::number(window.minimumSizeHint().height())));
+        QVERIFY2(window.frameGeometry().height() <= avail.height() && window.frameGeometry().top() >= avail.top(),
+                 qPrintable(QStringLiteral("Fenster %1, Bildschirm %2, Mindesthöhe %3")
+                                .arg(window.frameGeometry().height()).arg(avail.height()).arg(window.minimumSizeHint().height())));
+
+        auto byShortcut = [&window](const QKeySequence& key) -> QAction* {
+            for (QAction* a : window.findChildren<QAction*>())
+                if (a->shortcut() == key)
+                    return a;
+            return nullptr;
+        };
+        // Bild ab / Bild auf blättern
+        ed.insertPages(1, 2);
+        ed.setCurrentPageIndex(0);
+        QAction* next = byShortcut(QKeySequence(Qt::Key_PageDown));
+        QAction* prev = byShortcut(QKeySequence(Qt::Key_PageUp));
+        QVERIFY(next && prev);
+        next->trigger();
+        QCOMPARE(ed.currentPageIndex(), 1);
+        next->trigger();
+        next->trigger();
+        QCOMPARE(ed.currentPageIndex(), 2);
+        prev->trigger();
+        QCOMPARE(ed.currentPageIndex(), 1);
+        ed.setCurrentPageIndex(0);
+
+        // Kontextmenü: Gruppieren nur bei mehreren Objekten, Gruppierung aufheben nur bei Gruppen
+        auto add = [&ed](const QRectF& r) {
+            auto o = std::make_unique<RectangleObject>(r.size());
+            o->setTransform(QTransform::fromTranslate(r.left(), r.top()));
+            return ed.addObject(std::move(o), QStringLiteral("R"));
+        };
+        const NodeId a = add(QRectF(20, 20, 30, 20));
+        const NodeId b = add(QRectF(40, 30, 30, 20));
+        QMap<QString, bool> entries;
+        QTimer poll;
+        poll.setInterval(20);
+        QObject::connect(&poll, &QTimer::timeout, [&] {
+            auto* menu = qobject_cast<QMenu*>(QApplication::activePopupWidget());
+            if (!menu || !menu->isVisible())
+                return;
+            for (QAction* act : menu->actions())
+                entries.insert(act->text(), act->isEnabled());
+            menu->close();
+            poll.stop();
+        });
+        auto openMenu = [&] {
+            entries.clear();
+            poll.start();
+            QTest::mouseClick(canvas, Qt::RightButton, {}, canvas->toScreen(ed.selectionBounds().center()).toPoint());
+            QTRY_VERIFY(!entries.isEmpty());
+        };
+        const QString group = QStringLiteral("&Gruppieren"), ungroup = QStringLiteral("Gruppierung &aufheben");
+        ed.setSelection({a, b});
+        openMenu();
+        QVERIFY(entries.contains(group) && entries.contains(ungroup));
+        QVERIFY(entries.value(group));
+        QVERIFY(!entries.value(ungroup));
+        ed.groupSelection();
+        openMenu();
+        QVERIFY(!entries.value(group));
+        QVERIFY(entries.value(ungroup));
+        ed.ungroupSelection();
+
+        // Strg+Bild auf: zuoberst in der Ebene geht es in die nächste Ebene darüber und weiter
+        const Node* page = &ed.currentPage();
+        const NodeId lower = page->child(page->childCount() - 1)->id();
+        NodeId upper = InvalidNodeId;
+        {
+            Transaction tx(ed.document(), QStringLiteral("Ebene"));
+            auto layer = std::make_unique<Layer>();
+            layer->setName(QStringLiteral("Oben"));
+            upper = tx.insert(page->id(), -1, std::move(layer));
+            tx.commit();
+        }
+        const NodeId c = add(QRectF(60, 40, 20, 20)); // landet in der neuen, obersten Ebene
+        QCOMPARE(ed.document().find(c)->parent()->id(), upper);
+        QAction* forward = byShortcut(QKeySequence(Qt::CTRL | Qt::Key_PageUp));
+        QAction* back = byShortcut(QKeySequence(Qt::CTRL | Qt::Key_PageDown));
+        QVERIFY(forward && back);
+        ed.setSelection({b}); // zuoberst in der unteren Ebene
+        QApplication::processEvents();
+        QVERIFY(forward->isEnabled());
+        forward->trigger();
+        QCOMPARE(ed.document().find(b)->parent()->id(), upper);
+        QCOMPARE(ed.document().find(b)->indexInParent(), 0); // zuunterst in der oberen Ebene
+        forward->trigger();
+        QCOMPARE(ed.document().find(b)->indexInParent(), 1); // vor c
+        QApplication::processEvents();
+        QVERIFY(!forward->isEnabled());
+        back->trigger();
+        back->trigger();
+        QCOMPARE(ed.document().find(b)->parent()->id(), lower); // wieder unten, dort zuoberst
+        QCOMPARE(ed.document().find(b)->indexInParent(), ed.document().find(lower)->childCount() - 1);
+        back->trigger();
+        QCOMPARE(ed.document().find(b)->indexInParent(), ed.document().find(a)->indexInParent() - 1);
+
+        // Als neues Dokument geöffnet: Objekte einzeln auf der Ebene, nicht in einer Seitengruppe
+        const QString svgPath = QDir::temp().filePath(QStringLiteral("vek-open-test.svg"));
+        {
+            QFile f(svgPath);
+            QVERIFY(f.open(QIODevice::WriteOnly));
+            f.write("<svg xmlns='http://www.w3.org/2000/svg' width='100mm' height='100mm' viewBox='0 0 100 100'>"
+                    "<rect x='10' y='10' width='20' height='20' fill='#0B2545'/><g><circle cx='60' cy='60' r='10'/>"
+                    "<circle cx='80' cy='60' r='10'/></g></svg>");
+        }
+        ed.document().setClean();
+        QVERIFY(window.openFile(svgPath));
+        const Node* layer = ed.document().page(0).child(ed.document().page(0).childCount() - 1);
+        QCOMPARE(layer->childCount(), 2);
+        QVERIFY(!ed.document().findAs<GroupObject>(layer->child(0)->id()));
+        QVERIFY(ed.document().findAs<GroupObject>(layer->child(1)->id()));
+        QFile::remove(svgPath);
+    }
+
     // SuperTrace wie im Video: Strichgrafik eines Monitor-Symbols
     void imageSearchLikeThurWiki()
     {
@@ -5344,6 +5975,15 @@ private slots:
         QCOMPARE(inserted->name(), attribution(icon));
         QVERIFY(inserted->name().contains(QStringLiteral("Flaticon")));
         QVERIFY(inserted->name().contains(QStringLiteral("Freepik")));
+        // Langer Titel: an der Wortgrenze gekürzt mit «…», doppelte Leerzeichen zusammengefasst
+        Hit longTitle = icon;
+        longTitle.title = QStringLiteral("Bergsee im Herbst mit  üppigem Lärchenwald, Spiegelung der Gipfel und Wolken über dem "
+                                         "Tal bei Sonnenaufgang");
+        const QString shortName = attribution(longTitle);
+        QVERIFY2(shortName.contains(QStringLiteral("mit üppigem")), qPrintable(shortName));
+        QVERIFY2(shortName.contains(QStringLiteral("… von ")) || shortName.contains(QStringLiteral("… (")), qPrintable(shortName));
+        QVERIFY(!shortName.contains(QStringLiteral("Sonnenaufgang")));
+        QVERIFY(!shortName.contains(QStringLiteral("  ")));
         QImage png(20, 20, QImage::Format_ARGB32);
         png.fill(Qt::red);
         QByteArray pngData;
@@ -5416,7 +6056,10 @@ private slots:
         QCOMPARE(list->currentRow(), 1);
         if (const QString shots = qEnvironmentVariable("VEK_SCREENSHOT_DIR"); !shots.isEmpty())
             dialog.viewer()->grab().save(shots + QStringLiteral("/55-bildersuche-betrachter.png"));
-        dialog.viewer()->hide();
+        // Escape im Suchfenster schliesst nur die Vorschau, das Suchfenster bleibt offen
+        QTest::keyClick(&dialog, Qt::Key_Escape);
+        QVERIFY(!dialog.viewer()->isVisible());
+        QVERIFY(dialog.isVisible());
         list->setCurrentRow(1);
         // Anzeige über den Kacheln eingrenzen: nur Icons8 und Flaticon, "Alle" teilweise gewählt
         QCheckBox* all = nullptr;
@@ -5462,6 +6105,21 @@ private slots:
         testPexels->click();
         auto* resultPexels = options.findChild<QLabel*>(QStringLiteral("result-pexels"));
         QVERIFY(resultPexels->text().contains(QStringLiteral("Kein Schlüssel")));
+        // Schlüssel verdeckt; «Test» schiebt den Fokus nicht ins nächste Schlüsselfeld
+        options.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&options));
+        auto* testUnsplash = options.findChild<QPushButton*>(QStringLiteral("test-unsplash"));
+        QVERIFY(testUnsplash);
+        testUnsplash->setFocus();
+        QTest::mouseClick(testUnsplash, Qt::LeftButton);
+        QWidget* focus = QApplication::focusWidget();
+        QVERIFY(focus);
+        QVERIFY2(focus == testUnsplash || focus->toolTip() == imagesearch::source(QStringLiteral("unsplash"))->hint,
+                 qPrintable(focus->toolTip()));
+        for (QLineEdit* e : options.findChildren<QLineEdit*>())
+            if (e->echoMode() != QLineEdit::Normal)
+                QCOMPARE(e->echoMode(), QLineEdit::Password);
+        options.hide();
         if (!dir.isEmpty())
             options.grab().save(dir + QStringLiteral("/54-bildersuche-schluessel.png"));
     }
@@ -5697,21 +6355,30 @@ private slots:
         };
         const QStringList top = names(bitmaps);
         for (const char* item : {"In Bitmap konvertieren", "Automatische Anpassung", "Bild geraderichten", "Modus", "3D-Effekte",
-                                 "Künstlerische Striche", "Unschärfe", "Kreativ", "Blitzvektorisierung"})
+                                 "Künstlerische Striche", "Unschärfe", "Farbtransformation", "Kontur", "Kreativ", "Verzerren", "Rauschen",
+                                 "Schärfe", "Blitzvektorisierung"})
             QVERIFY2(top.contains(QString::fromUtf8(item)), item);
-        for (const char* gone : {"Kamera", "Farbänderung", "Kontur", "Verzerren", "Rauschen", "Schärfe"})
+        for (const char* gone : {"Kamera", "Farbänderung"})
             QVERIFY2(!top.contains(QString::fromUtf8(gone)), gone);
         QCOMPARE(names(submenu(QStringLiteral("Modus"))),
                  QStringList({QStringLiteral("Schwarzweiss (1 Bit)"), QStringLiteral("Graustufen (8 Bit)"), QStringLiteral("Graustufen (16 Bit)"),
                               QStringLiteral("Duoton (8 Bit)"), QStringLiteral("Duoton (16 Bit)")}));
         QCOMPARE(names(submenu(QStringLiteral("3D-Effekte"))),
-                 QStringList({QStringLiteral("3D-Drehung"), QStringLiteral("Perspektive"), QStringLiteral("Sphäre")}));
+                 QStringList({QStringLiteral("3D-Drehung"), QStringLiteral("Perspektive"), QStringLiteral("Sphäre"), QStringLiteral("Zylinder"),
+                              QStringLiteral("Seite aufrollen"), QStringLiteral("Relief"), QStringLiteral("Ein-/Ausbuchten")}));
         QCOMPARE(names(submenu(QStringLiteral("Künstlerische Striche"))),
                  QStringList({QStringLiteral("Posterisieren"), QStringLiteral("Kohle"), QStringLiteral("Impressionismus"),
-                              QStringLiteral("Wasserfarben"), QStringLiteral("Papierschnitzel"), QStringLiteral("Wellenpapier")}));
-        QCOMPARE(names(submenu(QStringLiteral("Unschärfe"))), QStringList({QStringLiteral("Glätten"), QStringLiteral("Weichzeichnen")}));
+                              QStringLiteral("Wasserfarben"), QStringLiteral("Papierschnitzel"), QStringLiteral("Wellenpapier"),
+                              QStringLiteral("Skizzenblock"), QStringLiteral("Ölfarbe")}));
+        QCOMPARE(names(submenu(QStringLiteral("Unschärfe"))),
+                 QStringList({QStringLiteral("Glätten"), QStringLiteral("Weichzeichnen"), QStringLiteral("Gaußsche Unschärfe"),
+                              QStringLiteral("Bewegungsunschärfe"), QStringLiteral("Kreisförmige Unschärfe"), QStringLiteral("Zoom-Unschärfe")}));
         QCOMPARE(names(submenu(QStringLiteral("Kreativ"))),
-                 QStringList({QStringLiteral("Gewebe"), QStringLiteral("Glasblock"), QStringLiteral("Rauchglas")}));
+                 QStringList({QStringLiteral("Gewebe"), QStringLiteral("Glasblock"), QStringLiteral("Rahmen"), QStringLiteral("Rauchglas"),
+                              QStringLiteral("Kristallisieren"), QStringLiteral("Mosaik"), QStringLiteral("Vignette")}));
+        QCOMPARE(names(submenu(QStringLiteral("Verzerren"))),
+                 QStringList({QStringLiteral("Verpixeln"), QStringLiteral("Welle"), QStringLiteral("Strudel"), QStringLiteral("Wind"),
+                              QStringLiteral("Kacheln"), QStringLiteral("Streuen")}));
     }
 
     void bitmapGeometryAndModes()
@@ -5871,7 +6538,7 @@ private slots:
     }
 
     // Echte Zeichnungen (nur lokal, VEK_CDR_DIR): jede Datei öffnet sich mit Objekten; mit
-    // VEK_SCREENSHOT_DIR wird die erste Seite als Bild abgelegt
+    // VEK_SCREENSHOT_DIR wird die erste Seite als Bild abgelegt (Auflösung VEK_CDR_DPI, sonst 50 dpi)
     void cdrImportLocalFiles()
     {
         const QString dir = qEnvironmentVariable("VEK_CDR_DIR");
@@ -5880,6 +6547,7 @@ private slots:
         const QString shots = qEnvironmentVariable("VEK_SCREENSHOT_DIR");
         const QFileInfoList files = QDir(dir).entryInfoList({QStringLiteral("*.cdr"), QStringLiteral("*.cmx")}, QDir::Files, QDir::Name);
         QVERIFY(!files.isEmpty());
+        QStringList failed;
         for (const QFileInfo& info : files) {
             QFile file(info.absoluteFilePath());
             QVERIFY(file.open(QIODevice::ReadOnly));
@@ -5887,22 +6555,27 @@ private slots:
             timer.start();
             QString error;
             std::vector<svg::Import> pages = cdr::read(file.readAll(), &error);
-            QVERIFY2(!pages.empty(), qPrintable(info.fileName() + QStringLiteral(": ") + error));
             int objects = 0;
             for (const svg::Import& page : pages)
                 objects += page.group ? page.group->childCount() : 0;
+            if (pages.empty() || objects == 0) {
+                // weiterlesen, damit ein Lauf über viele Dateien alle Ausfälle auf einmal zeigt
+                qWarning().noquote() << "FEHLER" << info.fileName() << error;
+                failed << info.fileName();
+                continue;
+            }
             qInfo().noquote() << info.fileName() << pages.size() << "Seite(n)," << objects << "Objekte," << pages.front().fonts.size()
                               << "Schriften," << timer.elapsed() << "ms," << pages.front().size.width() << "x" << pages.front().size.height() << "mm";
-            QVERIFY2(objects > 0, qPrintable(info.fileName()));
             if (shots.isEmpty())
                 continue;
             m_editor->setDocument(std::make_unique<Document>(), QString());
             m_editor->setPageSize(pages.front().size, true);
             m_editor->importGroup(std::move(pages.front().group), false, QStringLiteral("CDR"));
             output::ExportOptions o;
-            o.dpi = 50;
+            o.dpi = qEnvironmentVariableIsSet("VEK_CDR_DPI") ? qEnvironmentVariableIntValue("VEK_CDR_DPI") : 50;
             output::renderImage(*m_canvas, o).save(shots + QStringLiteral("/cdr-") + info.completeBaseName() + QStringLiteral(".png"));
         }
+        QVERIFY2(failed.isEmpty(), qPrintable(failed.join(QStringLiteral(", "))));
     }
 
     // Bildschirmfotos für README und Webseite (docs/screenshots): nur mit VEK_SHOWCASE_DIR.
@@ -6309,9 +6982,25 @@ private slots:
         // Seite als Bild
         r = run(QStringLiteral("seite_ansehen"), {{QStringLiteral("breite_px"), 600}});
         QVERIFY2(!r.error, qPrintable(r.text));
-        QCOMPARE(r.images.size(), 1);
+        // Ganze Seite und dazu vergrössert die eigenen Objekte der KI (Gruppe aus Rechteck und SVG)
+        QCOMPARE(r.images.size(), 2);
         const QImage view = QImage::fromData(r.images.first());
         QVERIFY(std::max(view.width(), view.height()) <= 600 && std::max(view.width(), view.height()) >= 590);
+        QVERIFY2(r.text.contains(QStringLiteral("vergrössert")), qPrintable(r.text));
+        QVERIFY(tools.ownObjects().contains(ed.selection().first()));
+        r = run(QStringLiteral("dokument_ansehen"), {});
+        QVERIFY2(r.text.startsWith(QStringLiteral("Von dir in diesem Gespräch angelegt: %1.").arg(ed.selection().first())),
+                 qPrintable(r.text.left(200)));
+        // Ausschnitt: nur dieser Bereich, ein Bild
+        r = run(QStringLiteral("seite_ansehen"), {{QStringLiteral("breite_px"), 400}, {QStringLiteral("ausschnitt"), QJsonArray{10, 20, 40, 20}}});
+        QVERIFY2(!r.error, qPrintable(r.text));
+        QCOMPARE(r.images.size(), 1);
+        const QImage cutView = QImage::fromData(r.images.first());
+        QCOMPARE(cutView.width(), 400);
+        QCOMPARE(cutView.height(), 200);
+        QCOMPARE(QColor(cutView.pixel(100, 100)), QColor(Qt::red)); // Rechteck ab (10, 20)
+        tools.forgetOwnObjects();
+        QVERIFY(!run(QStringLiteral("dokument_ansehen"), {}).text.startsWith(QStringLiteral("Von dir")));
 
         // Nachzeichnen eines Bitmaps
         QImage bitmap(80, 80, QImage::Format_RGB32);
@@ -6374,7 +7063,7 @@ private slots:
                                  {QStringLiteral("params"), QJsonObject{{QStringLiteral("name"), QStringLiteral("seite_ansehen")},
                                                                         {QStringLiteral("arguments"), QJsonObject{{QStringLiteral("breite_px"), 300}}}}}});
         const QJsonArray content = called.value(QStringLiteral("result")).toObject().value(QStringLiteral("content")).toArray();
-        QCOMPARE(content.size(), 2);
+        QVERIFY(content.size() >= 2); // Text, Seite und gegebenenfalls die vergrösserten eigenen Objekte
         QCOMPARE(content[1].toObject().value(QStringLiteral("type")).toString(), QStringLiteral("image"));
         QVERIFY(!called.value(QStringLiteral("result")).toObject().value(QStringLiteral("isError")).toBool());
 
@@ -6537,9 +7226,11 @@ private slots:
         QVERIFY(messages[4].toObject().value(QStringLiteral("content")).toString().startsWith(QStringLiteral("FEHLER: ")));
         QCOMPARE(messages[5].toObject().value(QStringLiteral("role")).toString(), QStringLiteral("user")); // Bild
         QCOMPARE(messages.size(), 6);
-        // DeepSeek sieht keine Bilder
-        std::unique_ptr<Provider> deep(Provider::create({QStringLiteral("d"), QStringLiteral("deepseek"), {}, {}, QStringLiteral("k"), {}}));
+        // DeepSeek: deepseek-v4-pro sieht keine Bilder, deepseek-flash schon
+        std::unique_ptr<Provider> deep(Provider::create({QStringLiteral("d"), QStringLiteral("deepseek"), {}, {}, QStringLiteral("k"), QStringLiteral("deepseek-v4-pro")}));
         QCOMPARE(deep->requestBody(QStringLiteral("S"), history, tools).value(QStringLiteral("messages")).toArray().size(), 5);
+        std::unique_ptr<Provider> flash(Provider::create({QStringLiteral("d"), QStringLiteral("deepseek"), {}, {}, QStringLiteral("k"), QStringLiteral("deepseek-flash")}));
+        QCOMPARE(flash->requestBody(QStringLiteral("S"), history, tools).value(QStringLiteral("messages")).toArray().size(), 6);
         Reply gotGpt;
         connect(gpt.get(), &Provider::done, this, [&](const Reply& r) { gotGpt = r; });
         gpt->feed("data: {\"choices\":[{\"delta\":{\"content\":\"Ok\"}}]}\n\n"
@@ -6636,6 +7327,27 @@ private slots:
             QVERIFY(options.findChild<QPushButton*>(QStringLiteral("ai-login"))->isEnabled());
             accountsList->setCurrentRow(1);
             QVERIFY(!options.findChild<QPushButton*>(QStringLiteral("ai-login"))->isEnabled());
+            // Dialog «KI-Zugang»: Schlüssel immer verdeckt; beim Wechsel der Art wächst das Fenster mit dem Hinweis
+            bool checked = false;
+            QTimer::singleShot(0, this, [&] {
+                auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+                QVERIFY(dialog);
+                auto* key = dialog->findChild<QLineEdit*>(QStringLiteral("key"));
+                QCOMPARE(key->echoMode(), QLineEdit::Password);
+                auto* kindBox = dialog->findChild<QComboBox*>(QStringLiteral("kind"));
+                auto* hint = dialog->findChild<QLabel*>(QStringLiteral("hint"));
+                auto* label = dialog->findChild<QLineEdit*>(QStringLiteral("label"));
+                for (const char* k : {"deepseek", "claude_code", "openai", "claude_code"}) {
+                    kindBox->setCurrentIndex(kindBox->findData(QLatin1String(k)));
+                    QVERIFY2(hint->height() >= hint->heightForWidth(hint->width()), k);
+                    QVERIFY2(hint->geometry().bottom() < label->geometry().top(), k);
+                }
+                QVERIFY(hint->text().contains(QStringLiteral("Claude Code")));
+                checked = true;
+                dialog->reject();
+            });
+            options.findChild<QPushButton*>(QStringLiteral("ai-edit"))->click();
+            QVERIFY(checked);
             options.findChild<QPushButton*>(QStringLiteral("ai-default"))->click();
             options.findChild<QPushButton*>(QStringLiteral("ai-remove"))->click();
             QCOMPARE(accountsList->count(), 1);
@@ -7097,6 +7809,3107 @@ private slots:
         if (!qEnvironmentVariable("VEK_SCREENSHOT_DIR").isEmpty())
             window.grab().save(qEnvironmentVariable("VEK_SCREENSHOT_DIR") + QStringLiteral("/40-objektleiste.png"));
     }
+
+    // --- Kopie beim Ziehen, Duplizieren an Ort und Stelle ---------------------------------------
+
+    // Rechtsklick während des linken Ziehens: Original bleibt, Kopie in der neuen Lage
+    void pickRightClickDuringDragLeavesCopy()
+    {
+        const NodeId original = drawRect(QRectF(20, 40, 30, 20));
+        const int before = int(m_editor->pickableObjects().size());
+        const QPoint from = screen(QPointF(35, 50));
+        const QPoint to = screen(QPointF(75, 50));
+        press(from);
+        for (int i = 1; i <= 4; ++i)
+            move(from + (to - from) * i / 8);
+        QTest::mousePress(m_canvas.get(), Qt::RightButton, {}, from + (to - from) / 2, 10);
+        QTest::mouseRelease(m_canvas.get(), Qt::RightButton, {}, from + (to - from) / 2, 10);
+        for (int i = 5; i <= 8; ++i)
+            move(from + (to - from) * i / 8);
+        screenshot(QStringLiteral("90-kopie-beim-ziehen"));
+        release(to);
+        QCOMPARE(int(m_editor->pickableObjects().size()), before + 1);
+        QVERIFY2(near(m_editor->document().findAs<DrawObject>(original)->boundingRect(), QRectF(20, 40, 30, 20)),
+                 qPrintable(describe(m_editor->document().findAs<DrawObject>(original)->boundingRect())));
+        QVERIFY(!m_editor->selection().contains(original));
+        QVERIFY2(near(bounds(), QRectF(60, 40, 30, 20)), qPrintable(describe(bounds())));
+        QCOMPARE(m_editor->document().undoText(), QStringLiteral("Kopieren"));
+        // Ein Undo-Schritt für die ganze Geste
+        m_editor->document().undo();
+        QCOMPARE(int(m_editor->pickableObjects().size()), before);
+        QVERIFY(near(m_editor->document().findAs<DrawObject>(original)->boundingRect(), QRectF(20, 40, 30, 20)));
+
+        // Auch beim Skalieren an einem Griff: Kopie in 150 %, Original unverändert
+        m_editor->setSelection({original});
+        const QPoint corner = handle(Qt::BottomRightCorner);
+        const QPoint target = corner + screen(QPointF(15, 10)) - screen(QPointF(0, 0));
+        press(corner);
+        move(corner + (target - corner) / 2);
+        QTest::mousePress(m_canvas.get(), Qt::RightButton, {}, corner + (target - corner) / 2, 10);
+        QTest::mouseRelease(m_canvas.get(), Qt::RightButton, {}, corner + (target - corner) / 2, 10);
+        move(target);
+        release(target);
+        QCOMPARE(int(m_editor->pickableObjects().size()), before + 1);
+        QVERIFY(near(m_editor->document().findAs<DrawObject>(original)->boundingRect(), QRectF(20, 40, 30, 20)));
+        QVERIFY2(near(bounds(), QRectF(20, 40, 45, 30)), qPrintable(describe(bounds())));
+    }
+
+    // Leertaste während des Ziehens stempelt eine Kopie und zieht weiter
+    void pickSpaceStampsCopyWhileDragging()
+    {
+        const NodeId original = drawRect(QRectF(20, 40, 30, 20));
+        const int before = int(m_editor->pickableObjects().size());
+        const QPoint from = screen(QPointF(35, 50));
+        const QPoint mid = screen(QPointF(55, 50));
+        const QPoint to = screen(QPointF(75, 50));
+        press(from);
+        for (int i = 1; i <= 4; ++i)
+            move(from + (mid - from) * i / 4);
+        QTest::keyClick(m_canvas.get(), Qt::Key_Space);
+        QCOMPARE(m_canvas->toolId(), ToolId::Pick); // Leertaste wechselt beim Ziehen nicht das Werkzeug
+        for (int i = 1; i <= 4; ++i)
+            move(mid + (to - mid) * i / 4);
+        screenshot(QStringLiteral("91-stempel-beim-ziehen"));
+        release(to);
+        QCOMPARE(int(m_editor->pickableObjects().size()), before + 1);
+        // Original am Ziel, Stempel an der Zwischenstelle
+        QVERIFY2(near(m_editor->document().findAs<DrawObject>(original)->boundingRect(), QRectF(60, 40, 30, 20)),
+                 qPrintable(describe(m_editor->document().findAs<DrawObject>(original)->boundingRect())));
+        QCOMPARE(m_editor->selection(), QList<NodeId>{original});
+        bool stamped = false;
+        for (const DrawObject* o : m_editor->pickableObjects())
+            stamped = stamped || (o->id() != original && near(o->boundingRect(), QRectF(40, 40, 30, 20)));
+        QVERIFY(stamped);
+        QCOMPARE(m_editor->document().undoText(), QStringLiteral("Verschieben"));
+        m_editor->document().undo();
+        QCOMPARE(int(m_editor->pickableObjects().size()), before);
+        QVERIFY(near(m_editor->document().findAs<DrawObject>(original)->boundingRect(), QRectF(20, 40, 30, 20)));
+        // Ohne Ziehen schaltet die Leertaste weiterhin das Werkzeug
+        m_canvas->togglePickTool(); // Befehl der Leertaste
+        QVERIFY(m_canvas->toolId() != ToolId::Pick);
+    }
+
+    // Ziffernblock +: Kopie ohne Versatz, die Kopie ist danach gewählt
+    void numpadPlusDuplicatesInPlace()
+    {
+        const NodeId original = drawRect(QRectF(20, 40, 30, 20));
+        const int before = int(m_editor->pickableObjects().size());
+        m_editor->duplicateInPlace(); // Befehl "An Ort und Stelle duplizieren" (Ziffernblock +)
+        QCOMPARE(int(m_editor->pickableObjects().size()), before + 1);
+        QCOMPARE(m_editor->selection().size(), 1);
+        QVERIFY(m_editor->selection().first() != original);
+        QVERIFY(near(bounds(), m_editor->document().findAs<DrawObject>(original)->boundingRect(), 1e-9));
+        QCOMPARE(m_editor->document().undoText(), QStringLiteral("An Ort und Stelle duplizieren"));
+        // Plus der Haupttastatur dupliziert nicht
+        QTest::keyClick(m_canvas.get(), Qt::Key_Plus);
+        QCOMPARE(int(m_editor->pickableObjects().size()), before + 1);
+    }
+
+    // --- Knotenfenster der interaktiven Füllung --------------------------------------------------
+
+    void fillNodePopupEditsStops()
+    {
+        const NodeId id = drawRect(QRectF(20, 40, 100, 50));
+        m_canvas->setTool(ToolId::InteractiveFill);
+        drag(screen(QPointF(30, 65)), screen(QPointF(110, 65)));
+        auto fill = [this, id] { return m_editor->document().findAs<DrawObject>(id)->style().fill; };
+        QCOMPARE(fill().stops.size(), 2);
+        auto& tool = *static_cast<InteractiveFillTool*>(m_canvas->currentTool());
+
+        // Klick auf den Endpunkt: Fenster daneben, Endpunkt gewählt, nichts verschoben
+        const Fill beforeClick = fill();
+        const QString undoBefore = m_editor->document().undoText();
+        click(screen(QPointF(110, 65)));
+        QVERIFY(tool.popup() && tool.popup()->isVisible());
+        QCOMPARE(tool.selectedStop(), 1);
+        QCOMPARE(fill(), beforeClick);
+        QCOMPARE(m_editor->document().undoText(), undoBefore);
+        QVERIFY(!tool.popup()->positionField()->isVisible()); // Endpunkt: keine Lage
+        QVERIFY(QRect(QPoint(), m_canvas->size()).contains(tool.popup()->geometry()));
+        screenshot(QStringLiteral("92-knotenfenster"));
+
+        // Farbknopf: Farbwähler öffnet sich, Rot wählen
+        QTimer::singleShot(50, [] {
+            auto* dialog = qobject_cast<ColorDialog*>(QApplication::activeModalWidget());
+            if (!dialog)
+                return;
+            dialog->setColor(Color(255, 0, 0));
+            dialog->accept();
+        });
+        QTest::mouseClick(tool.popup()->colorButton(), Qt::LeftButton);
+        QCOMPARE(fill().stops.last().color, Color(255, 0, 0));
+        QCOMPARE(m_editor->document().undoText(), QStringLiteral("Verlaufsfarbe"));
+        // Transparenz des Knotens
+        tool.popup()->slider()->setValue(50);
+        QVERIFY2(std::abs(int(fill().stops.last().color.a) - 128) <= 1, qPrintable(QString::number(fill().stops.last().color.a)));
+        QCOMPARE(fill().stops.last().color.r, std::uint8_t(255));
+
+        // Doppelklick auf die Linie: Zwischenknoten mit der Farbe an dieser Stelle
+        const QPoint onLine = screen(QPointF(50, 65));
+        QTest::mouseClick(m_canvas.get(), Qt::LeftButton, {}, onLine, 1000);
+        QTest::mouseDClick(m_canvas.get(), Qt::LeftButton, {}, onLine, 10);
+        QCOMPARE(fill().stops.size(), 3);
+        QVERIFY2(std::abs(fill().stops[1].position - 0.25) < 0.02, qPrintable(QString::number(fill().stops[1].position)));
+        QCOMPARE(tool.selectedStop(), 1);
+        QVERIFY(tool.popup()->isVisible() && tool.popup()->positionField()->isVisible());
+        QCOMPARE(m_editor->document().undoText(), QStringLiteral("Verlaufsknoten einfügen"));
+        screenshot(QStringLiteral("93-zwischenknoten"));
+        // Lage im Fenster eintippen
+        ExpressionSpinBox* position = tool.popup()->positionField();
+        position->selectAll();
+        QTest::keyClicks(position, QStringLiteral("60"));
+        QTest::keyClick(position, Qt::Key_Return);
+        QVERIFY2(std::abs(fill().stops[1].position - 0.6) < 1e-6, qPrintable(QString::number(fill().stops[1].position)));
+        // Palettenfarbe färbt den gewählten Zwischenknoten
+        QVERIFY(m_canvas->offerPaletteColor(Color(0, 0, 255), true));
+        QCOMPARE(fill().stops[1].color, Color(0, 0, 255));
+        // Zwischenknoten ziehen
+        drag(screen(QPointF(78, 65)), screen(QPointF(90, 65)));
+        QVERIFY2(std::abs(fill().stops[1].position - 0.75) < 0.02, qPrintable(QString::number(fill().stops[1].position)));
+        // Rechtsklick entfernt ihn
+        QTest::mouseClick(m_canvas.get(), Qt::RightButton, {}, screen(QPointF(90, 65)), 1000);
+        QCOMPARE(fill().stops.size(), 2);
+        QCOMPARE(m_editor->document().undoText(), QStringLiteral("Verlaufsknoten löschen"));
+        m_editor->document().undo();
+        QCOMPARE(fill().stops.size(), 3);
+        m_editor->document().undo(); // Lage
+        m_editor->document().undo(); // Palettenfarbe
+        m_editor->document().undo(); // Lage im Fenster
+        m_editor->document().undo(); // eingefügt
+        QCOMPARE(fill().stops.size(), 2);
+
+        // Farbe aus der Palette auf den Anfangspunkt bzw. auf die Linie ziehen
+        auto dropColor = [this](const QColor& c, const QPoint& at) {
+            QMimeData mime;
+            mime.setColorData(c);
+            QDragEnterEvent enter(at, Qt::CopyAction, &mime, Qt::LeftButton, {});
+            QApplication::sendEvent(m_canvas.get(), &enter);
+            QDropEvent drop(QPointF(at), Qt::CopyAction, &mime, Qt::LeftButton, {});
+            QApplication::sendEvent(m_canvas.get(), &drop);
+            return enter.isAccepted() && drop.isAccepted();
+        };
+        QVERIFY(dropColor(QColor(0, 255, 0), screen(QPointF(30, 65))));
+        QCOMPARE(fill().stops.first().color, Color(0, 255, 0));
+        QVERIFY(dropColor(QColor(255, 255, 0), screen(QPointF(90, 65))));
+        QCOMPARE(fill().stops.size(), 3);
+        QCOMPARE(fill().stops[1].color, Color(255, 255, 0));
+        QVERIFY(std::abs(fill().stops[1].position - 0.75) < 0.02);
+
+        // Pipette im Fenster: Farbe von der Zeichenfläche (hier das grüne Ende)
+        click(screen(QPointF(110, 65)));
+        QVERIFY(tool.popup()->isVisible());
+        QTest::mouseClick(tool.popup()->eyedropperButton(), Qt::LeftButton);
+        click(screen(QPointF(21, 41)));
+        const Color picked = fill().stops.last().color;
+        QVERIFY2(picked.g > 200 && picked.r < 60 && picked.b < 60, qPrintable(picked.toHex()));
+
+        // Ohne Werkzeug: Palettenfarbe auf ein Objekt gezogen füllt es
+        m_canvas->setTool(ToolId::Pick);
+        QVERIFY(!tool.popup()->isVisible());
+        QVERIFY(dropColor(QColor(10, 20, 30), screen(QPointF(60, 80))));
+        QCOMPARE(fill().type, Fill::Type::Solid);
+        QCOMPARE(fill().color, Color(10, 20, 30));
+    }
+
+    // Interaktive Transparenz: Klick auf einen Endpunkt zeigt den Regler für seinen Wert
+    void transparencyNodePopup()
+    {
+        const NodeId id = drawRect(QRectF(20, 40, 100, 50));
+        m_canvas->setTool(ToolId::Transparency);
+        drag(screen(QPointF(30, 65)), screen(QPointF(110, 65)));
+        auto ramp = [this, id] { return m_editor->document().findAs<DrawObject>(id)->transparency(); };
+        QVERIFY(ramp().isGradient());
+        auto& tool = *static_cast<EffectTool*>(m_canvas->currentTool());
+        const Ramp before = ramp();
+        click(screen(QPointF(110, 65)));
+        QVERIFY(tool.popup() && tool.popup()->isVisible());
+        QCOMPARE(ramp(), before); // Klick verschiebt nichts
+        QCOMPARE(tool.popup()->slider()->value(), int(std::lround(before.to)));
+        tool.popup()->slider()->setValue(40);
+        QCOMPARE(ramp().to, 40.0);
+        QCOMPARE(m_editor->document().undoText(), QStringLiteral("Knotentransparenz"));
+        click(screen(QPointF(30, 65)));
+        QCOMPARE(tool.popup()->slider()->value(), int(std::lround(ramp().from)));
+        tool.popup()->slider()->setValue(25);
+        QCOMPARE(ramp().from, 25.0);
+        QCOMPARE(ramp().to, 40.0);
+    }
+
+    // --- Kombination aufheben bei Grafiktext ------------------------------------------------------
+
+    void breakApartArtisticText()
+    {
+        QCoreApplication::setOrganizationName(QStringLiteral("VektoreditorTest"));
+        MainWindow window;
+        window.resize(1400, 900);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        Canvas* canvas = window.canvas();
+        Editor& ed = canvas->editor();
+        auto text = std::make_unique<TextObject>(TextObject::Kind::Artistic);
+        QList<TextParagraph> paragraphs;
+        TextParagraph first;
+        first.runs << TextRun{QStringLiteral("THE BEST"), CharFormat(QStringLiteral("Arial"), 36, true)};
+        TextParagraph second;
+        second.runs << TextRun{QStringLiteral("BEAUTY "), CharFormat(QStringLiteral("Arial"), 24)}
+                    << TextRun{QStringLiteral("CENTERS"), CharFormat(QStringLiteral("Times New Roman"), 30, false, true, false, Color(200, 0, 0))};
+        second.align = TextParagraph::Align::Center;
+        paragraphs << first << second;
+        text->setParagraphs(paragraphs);
+        Style style;
+        style.fill = Fill::solid(Color(0, 0, 255));
+        text->setStyle(style);
+        text->setTransform(QTransform().translate(40, 60).rotate(10).scale(1.2, 1.0));
+        const QPainterPath originalPath = text->path();
+        const NodeId id = ed.addObject(std::move(text), QStringLiteral("T"));
+        canvas->setFocus();
+        QApplication::processEvents();
+
+        auto union_ = [&ed] {
+            QRectF r;
+            for (NodeId n : ed.selection())
+                r |= ed.document().findAs<DrawObject>(n)->path().boundingRect();
+            return r;
+        };
+        auto texts = [&ed] {
+            QStringList list;
+            for (NodeId n : ed.selection())
+                list << ed.document().findAs<TextObject>(n)->plainText();
+            return list;
+        };
+        // Glyphen sitzen genau dort, wo sie waren: Pfade decken sich (bis auf Rundung)
+        auto samePlace = [&ed](const QPainterPath& reference) {
+            QPainterPath all;
+            for (NodeId n : ed.selection())
+                all.addPath(ed.document().findAs<DrawObject>(n)->path());
+            const QRectF a = all.boundingRect();
+            const QRectF b = reference.boundingRect();
+            return std::abs(a.left() - b.left()) < 0.05 && std::abs(a.top() - b.top()) < 0.05
+                   && std::abs(a.right() - b.right()) < 0.05 && std::abs(a.bottom() - b.bottom()) < 0.05;
+        };
+
+        // Zwei Zeilen: je ein Textobjekt
+        QTest::keyClick(canvas, Qt::Key_K, Qt::ControlModifier);
+        QCOMPARE(ed.document().undoText(), QStringLiteral("Kombination aufheben"));
+        QCOMPARE(texts(), (QStringList{QStringLiteral("THE BEST"), QStringLiteral("BEAUTY CENTERS")}));
+        QVERIFY(!ed.document().find(id));
+        QVERIFY2(samePlace(originalPath), qPrintable(describe(union_()) + QLatin1Char(' ') + describe(originalPath.boundingRect())));
+        const auto* line2 = ed.document().findAs<TextObject>(ed.selection().last());
+        QVERIFY(line2 && line2->kind() == TextObject::Kind::Artistic);
+        QCOMPARE(line2->paragraphs().first().runs.size(), 2); // Formate bleiben
+        QCOMPARE(line2->paragraphs().first().runs.last().format.color, std::optional<Color>(Color(200, 0, 0)));
+        QCOMPARE(line2->style().fill.color, Color(0, 0, 255));
+        // Lage jeder Zeile: die Glyphen der zweiten Zeile decken den unteren Teil des Originals
+        QVERIFY(std::abs(line2->path().boundingRect().bottom() - originalPath.boundingRect().bottom()) < 0.05);
+
+        // Eine Zeile: je ein Objekt pro Wort
+        const QPainterPath linePath = line2->path();
+        ed.setSelection({line2->id()});
+        QTest::keyClick(canvas, Qt::Key_K, Qt::ControlModifier);
+        QCOMPARE(texts(), (QStringList{QStringLiteral("BEAUTY"), QStringLiteral("CENTERS")}));
+        QVERIFY2(samePlace(linePath), qPrintable(describe(union_()) + QLatin1Char(' ') + describe(linePath.boundingRect())));
+
+        // Ein Wort: je ein Objekt pro Zeichen
+        const NodeId word = ed.selection().first();
+        const QPainterPath wordPath = ed.document().findAs<DrawObject>(word)->path();
+        ed.setSelection({word});
+        QTest::keyClick(canvas, Qt::Key_K, Qt::ControlModifier);
+        QCOMPARE(texts(), (QStringList{QStringLiteral("B"), QStringLiteral("E"), QStringLiteral("A"), QStringLiteral("U"),
+                                       QStringLiteral("T"), QStringLiteral("Y")}));
+        QVERIFY2(samePlace(wordPath), qPrintable(describe(union_()) + QLatin1Char(' ') + describe(wordPath.boundingRect())));
+        // Ein Zeichen lässt sich nicht weiter teilen
+        ed.setSelection({ed.selection().first()});
+        QVERIFY(!ed.canBreakApartSelection());
+        // Rückgängig stellt das Wort wieder her
+        ed.document().undo();
+        QVERIFY(ed.document().find(word));
+    }
+
+    // --- Einheiten in der Eigenschaftsleiste -------------------------------------------------------
+
+    void propertyBarUnits()
+    {
+        QCoreApplication::setOrganizationName(QStringLiteral("VektoreditorTest"));
+        MainWindow window;
+        window.resize(1600, 900);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        Canvas* canvas = window.canvas();
+        Editor& ed = canvas->editor();
+        auto visibleSpin = [&window](const QString& tip) -> ExpressionSpinBox* {
+            for (auto* s : window.findChildren<ExpressionSpinBox*>())
+                if (s->isVisible() && s->toolTip().startsWith(tip))
+                    return s;
+            return nullptr;
+        };
+        // Ohne Auswahl: Einheitenliste mit allen Einheiten
+        ed.clearSelection();
+        QApplication::processEvents();
+        QComboBox* units = nullptr;
+        for (QComboBox* c : window.findChildren<QComboBox*>())
+            if (c->objectName() == QLatin1String("documentUnits") && c->isVisible())
+                units = c;
+        QVERIFY(units);
+        QCOMPARE(units->count(), int(Options::unitNames().size()));
+        QCOMPARE(units->currentIndex(), 0);
+        ExpressionSpinBox* pageWidth = visibleSpin(QStringLiteral("Seitenbreite"));
+        QVERIFY(pageWidth && pageWidth->text().endsWith(QStringLiteral(" mm")));
+        // Punkt wählen: Dokumenteinstellung, Lineale und Felder folgen
+        units->setCurrentIndex(4);
+        emit units->activated(4);
+        QApplication::processEvents();
+        QCOMPARE(Options::instance().rulerUnit(true), 4);
+        QCOMPARE(Options::instance().rulerUnit(false), 4);
+        QVERIFY(std::abs(Options::instance().rulerValue(25.4, true) - 72.0) < 1e-9);
+        QVERIFY2(pageWidth->text().endsWith(QStringLiteral(" pt")), qPrintable(pageWidth->text()));
+        QVERIFY(std::abs(pageWidth->valueFromText(pageWidth->text()) - ed.currentPage().size().width()) < 0.01);
+        if (!qEnvironmentVariable("VEK_SCREENSHOT_DIR").isEmpty())
+            window.grab().save(qEnvironmentVariable("VEK_SCREENSHOT_DIR") + QStringLiteral("/94-einheiten-punkt.png"));
+
+        // Rechteck 100 x 50 mm: Breite in pt, Eingabe in pt und mit anderer Einheit
+        auto r = std::make_unique<RectangleObject>(QSizeF(100, 50));
+        r->setTransform(QTransform::fromTranslate(20, 30));
+        Style s;
+        s.stroke = Color(0, 0, 0);
+        s.strokeWidth = 0.5;
+        r->setStyle(s);
+        const NodeId id = ed.addObject(std::move(r), QStringLiteral("R"));
+        QApplication::processEvents();
+        ExpressionSpinBox* width = visibleSpin(QStringLiteral("Breite"));
+        QVERIFY(width);
+        QCOMPARE(width->text(), QLocale().toString(100.0 / 25.4 * 72.0, 'f', 3) + QStringLiteral(" pt"));
+        auto type = [](QAbstractSpinBox* spin, const QString& text) {
+            spin->setFocus();
+            spin->selectAll();
+            QTest::keyClicks(spin, text);
+            QTest::keyClick(spin, Qt::Key_Return);
+            QApplication::processEvents();
+        };
+        type(width, QStringLiteral("144"));
+        QVERIFY2(std::abs(ed.document().findAs<DrawObject>(id)->boundingRect().width() - 50.8) < 1e-3,
+                 qPrintable(QString::number(ed.document().findAs<DrawObject>(id)->boundingRect().width())));
+        type(width, QStringLiteral("20 mm"));
+        QVERIFY(std::abs(ed.document().findAs<DrawObject>(id)->boundingRect().width() - 20.0) < 1e-3);
+        type(width, QStringLiteral("2*0,5 in"));
+        QVERIFY(std::abs(ed.document().findAs<DrawObject>(id)->boundingRect().width() - 25.4) < 1e-3);
+        QVERIFY(std::abs(evaluateLength(QStringLiteral("3 cm"), 4).value() - 30.0) < 1e-9);
+        QVERIFY(std::abs(evaluateLength(QStringLiteral("72"), 4).value() - 25.4) < 1e-9);
+        QVERIFY(std::abs(evaluateLength(QStringLiteral("2\""), 0).value() - 50.8) < 1e-9);
+        QVERIFY(!evaluateLength(QStringLiteral("5 xy"), 0));
+        ExpressionSpinBox* x = visibleSpin(QStringLiteral("Lage x"));
+        QVERIFY(x && x->text().endsWith(QStringLiteral(" pt")));
+
+        // Konturbreite: in pt angezeigt, pt-Stufen in der Liste, Eingabe in pt
+        QComboBox* outline = nullptr;
+        for (QComboBox* c : window.findChildren<QComboBox*>())
+            if (c->isVisible() && c->toolTip() == QStringLiteral("Konturbreite"))
+                outline = c;
+        QVERIFY(outline);
+        QVERIFY2(outline->currentText().endsWith(QStringLiteral(" pt")), qPrintable(outline->currentText()));
+        QVERIFY(outline->findText(QStringLiteral("8 pt")) >= 0);
+        QVERIFY(outline->findText(QLocale().toString(0.75) + QStringLiteral(" pt")) >= 0);
+        QVERIFY(outline->findText(QStringLiteral("Haarlinie")) >= 0);
+        const int eight = outline->findText(QStringLiteral("8 pt"));
+        outline->setCurrentIndex(eight);
+        emit outline->activated(eight);
+        QVERIFY(std::abs(ed.document().findAs<DrawObject>(id)->style().strokeWidth - 8 * 25.4 / 72) < 1e-9);
+        outline->lineEdit()->selectAll();
+        QTest::keyClicks(outline->lineEdit(), QStringLiteral("2"));
+        QTest::keyClick(outline->lineEdit(), Qt::Key_Return);
+        QVERIFY2(std::abs(ed.document().findAs<DrawObject>(id)->style().strokeWidth - 2 * 25.4 / 72) < 1e-9,
+                 qPrintable(QString::number(ed.document().findAs<DrawObject>(id)->style().strokeWidth)));
+        QApplication::processEvents();
+        QCOMPARE(outline->currentText(), QStringLiteral("2 pt"));
+        if (!qEnvironmentVariable("VEK_SCREENSHOT_DIR").isEmpty())
+            window.grab().save(qEnvironmentVariable("VEK_SCREENSHOT_DIR") + QStringLiteral("/95-objekt-in-punkt.png"));
+
+        // Zurück auf mm: Felder zeigen wieder mm
+        ed.clearSelection();
+        QApplication::processEvents();
+        units->setCurrentIndex(0);
+        emit units->activated(0);
+        QApplication::processEvents();
+        QVERIFY(pageWidth->text().endsWith(QStringLiteral(" mm")));
+        ed.setSelection({id});
+        QApplication::processEvents();
+        QVERIFY(visibleSpin(QStringLiteral("Breite"))->text().endsWith(QStringLiteral(" mm")));
+        // Menü: An Ort und Stelle duplizieren mit Ziffernblock +
+        bool found = false;
+        for (QAction* a : window.findChildren<QAction*>())
+            found = found || (a->text() == QStringLiteral("An &Ort und Stelle duplizieren")
+                              && a->shortcut() == QKeySequence(Qt::KeypadModifier | Qt::Key_Plus));
+        QVERIFY(found);
+    }
+    // --- Formwerkzeug an Grundformen, Knoten transformieren, Andockfenster "Ecken" -------------
+
+    void shapeToolRoundsRectangleCorners()
+    {
+        const NodeId id = drawRect(QRectF(20, 40, 100, 50));
+        auto rect = [&] { return m_editor->document().findAs<RectangleObject>(id); };
+        m_canvas->setTool(ToolId::Shape);
+        ShapeTool& shape = m_canvas->shapeTool();
+        QVERIFY(!shape.curve());
+        QVERIFY(shape.basicShape());
+        QCOMPARE(shape.basicShapeNodes().size(), 4);
+        // Ecke oben links entlang der Kante ziehen: alle vier Ecken gleich (Schloss zu)
+        drag(screen(QPointF(20, 40)), screen(QPointF(32, 41)), {}, QStringLiteral("80-form-rechteck-ecken-vorschau"));
+        QCOMPARE(m_editor->document().undoText(), QStringLiteral("Eckenrundung bearbeiten"));
+        QVERIFY(node_cast<RectangleObject>(m_editor->document().findAs<DrawObject>(id)));
+        for (int c = 0; c < 4; ++c)
+            QVERIFY2(std::abs(rect()->cornerRadius(RectangleObject::Corner(c)) - 12.0) < kTol,
+                     qPrintable(QString::number(rect()->cornerRadius(RectangleObject::Corner(c)))));
+        // Eigenschaftsleiste liest denselben Wert
+        QVERIFY(std::abs(rect()->propertyValue(QStringLiteral("radiusTopRight")).toDouble() - 12.0) < kTol);
+        // Knoten sitzt jetzt am Beginn der Rundung
+        QVERIFY(QLineF(shape.basicShapeNodes()[1], QPointF(120 - rect()->cornerRadius(RectangleObject::TopRight), 40)).length() < kTol);
+        // Ein Schritt rückgängig
+        m_editor->document().undo();
+        QCOMPARE(rect()->cornerRadius(RectangleObject::TopLeft), 0.0);
+        m_editor->document().redo();
+
+        // Schloss offen: nur die gezogene Ecke
+        m_editor->setObjectProperty(QStringLiteral("cornersLinked"), false, QStringLiteral("Ecken"));
+        const QPointF br = shape.basicShapeNodes()[2];
+        drag(screen(br), screen(QPointF(120 - 22, 90)));
+        QVERIFY2(std::abs(rect()->cornerRadius(RectangleObject::BottomRight) - 22.0) < kTol,
+                 qPrintable(QString::number(rect()->cornerRadius(RectangleObject::BottomRight))));
+        QVERIFY(std::abs(rect()->cornerRadius(RectangleObject::TopLeft) - 12.0) < kTol);
+        screenshot(QStringLiteral("81-form-rechteck-ecken"));
+
+        // Gedrehtes Rechteck: Ziehen entlang der gedrehten Kante, Rechteck bleibt Rechteck
+        m_editor->setObjectProperty(QStringLiteral("cornersLinked"), true, QStringLiteral("Ecken"));
+        m_editor->setObjectProperty(QStringLiteral("radiusTopLeft"), 0.0, QStringLiteral("Ecken"));
+        m_canvas->setTool(ToolId::Pick);
+        m_editor->setSelection({id});
+        m_editor->rotateSelectionTo(30);
+        m_canvas->setTool(ToolId::Shape);
+        const QTransform t = rect()->transform();
+        const QPointF corner = t.map(QPointF(0, 0));
+        const QPointF along = t.map(QPointF(15, 0));
+        drag(screen(corner), screen(along));
+        QVERIFY(rect());
+        QVERIFY2(std::abs(rect()->cornerRadius(RectangleObject::BottomLeft) - 15.0) < 1.0,
+                 qPrintable(QString::number(rect()->cornerRadius(RectangleObject::BottomLeft))));
+        // Eckentyp wird beachtet: abgeschrägt ergibt Geraden statt Bögen
+        m_editor->setObjectProperty(QStringLiteral("cornerType"), 2, QStringLiteral("Eckentyp"));
+        QVERIFY(rect()->localPath().elementCount() > 4);
+    }
+
+    void shapeToolMakesPieAndArcFromEllipse()
+    {
+        m_canvas->setTool(ToolId::Ellipse);
+        drag(screen(QPointF(40, 40)), screen(QPointF(140, 140)));
+        const NodeId id = m_editor->selection().value(0);
+        auto ellipse = [&] { return m_editor->document().findAs<EllipseObject>(id); };
+        QVERIFY(ellipse());
+        m_canvas->setTool(ToolId::Shape);
+        ShapeTool& shape = m_canvas->shapeTool();
+        QCOMPARE(shape.basicShapeNodes().size(), 1);
+        const QPointF node = shape.basicShapeNodes()[0];
+        QVERIFY(QLineF(node, QPointF(140, 90)).length() < kTol);
+        // Knoten innen gegen den Uhrzeigersinn nach oben ziehen: Kreissegment
+        drag(screen(node), screen(QPointF(90, 60)), {}, QStringLiteral("82-form-ellipse-vorschau"));
+        QCOMPARE(m_editor->document().undoText(), QStringLiteral("Ellipse bearbeiten"));
+        QCOMPARE(ellipse()->kind(), EllipseObject::Kind::Pie);
+        QVERIFY2(std::abs(ellipse()->startAngle() - 90.0) < 2.0, qPrintable(QString::number(ellipse()->startAngle())));
+        QVERIFY2(std::abs(ellipse()->endAngle()) < 2.0, qPrintable(QString::number(ellipse()->endAngle())));
+        // Die Lücke liegt im überstrichenen Viertel oben rechts
+        QVERIFY(!ellipse()->path().contains(QPointF(110, 70)));
+        QVERIFY(ellipse()->path().contains(QPointF(70, 110)));
+        QCOMPARE(shape.basicShapeNodes().size(), 2);
+        screenshot(QStringLiteral("83-form-ellipse-segment"));
+
+        // Anfangsknoten nach aussen ziehen: Bogen, Winkel in der Eigenschaftsleiste
+        drag(screen(shape.basicShapeNodes()[0]), screen(QPointF(90 - 45, 90 - 45 - 10)));
+        QCOMPARE(ellipse()->kind(), EllipseObject::Kind::Arc);
+        const double expected = std::atan2(45.0 + 10.0, -45.0) * 180.0 / std::numbers::pi;
+        QVERIFY2(std::abs(ellipse()->propertyValue(QStringLiteral("startAngle")).toDouble() - expected) < 2.0,
+                 qPrintable(QString::number(ellipse()->startAngle())));
+        m_editor->document().undo();
+        QCOMPARE(ellipse()->kind(), EllipseObject::Kind::Pie);
+    }
+
+    void shapeToolEditsPolygonSymmetrically()
+    {
+        m_canvas->setTool(ToolId::Star);
+        drag(screen(QPointF(40, 40)), screen(QPointF(140, 140)));
+        const NodeId id = m_editor->selection().value(0);
+        auto poly = [&] { return m_editor->document().findAs<PolygonObject>(id); };
+        QVERIFY(poly() && poly()->kind() == PolygonObject::Kind::Star);
+        const int n = poly()->points();
+        m_canvas->setTool(ToolId::Shape);
+        ShapeTool& shape = m_canvas->shapeTool();
+        QCOMPARE(shape.basicShapeNodes().size(), 2 * n);
+        const QList<QPointF> before = shape.basicShapeNodes();
+        const QPointF center = poly()->boundingRect().center();
+        auto radiusOf = [&](const QPointF& p) { return QLineF(p, poly()->transform().map(QPointF(poly()->size().width() / 2, poly()->size().height() / 2))).length(); };
+        const double r0 = radiusOf(before[0]);
+        Q_UNUSED(center);
+        // Spitze nach aussen ziehen: alle Spitzen wandern mit, die Einbuchtungen bleiben
+        drag(screen(before[0]), screen(before[0] + QPointF(0, -10)), {}, QStringLiteral("84-form-stern-vorschau"));
+        QCOMPARE(m_editor->document().undoText(), QStringLiteral("Polygon bearbeiten"));
+        QVERIFY(poly());
+        const QList<QPointF> after = shape.basicShapeNodes();
+        for (int j = 0; j < 2 * n; j += 2)
+            QVERIFY2(std::abs(radiusOf(after[j]) - (r0 + 10.0)) < kTol, qPrintable(QStringLiteral("%1: %2").arg(j).arg(radiusOf(after[j]))));
+        for (int j = 1; j < 2 * n; j += 2)
+            QVERIFY(QLineF(after[j], before[j]).length() < 1e-6);
+        screenshot(QStringLiteral("85-form-stern"));
+
+        // Polygon: Seitenmitte nach innen ziehen ergibt ein geschwungenes Polygon
+        m_editor->clearSelection();
+        m_canvas->setTool(ToolId::Polygon);
+        drag(screen(QPointF(40, 160)), screen(QPointF(140, 260)));
+        const NodeId pid = m_editor->selection().value(0);
+        m_canvas->setTool(ToolId::Shape);
+        const QList<QPointF> nodes = shape.basicShapeNodes();
+        const QPointF mid = nodes[1];
+        const auto* drawn = m_editor->document().findAs<PolygonObject>(pid);
+        const QPointF c = drawn->transform().map(QPointF(drawn->size().width() / 2, drawn->size().height() / 2));
+        drag(screen(mid), screen(mid + (c - mid) * 0.4));
+        const auto* p = m_editor->document().findAs<PolygonObject>(pid);
+        QVERIFY(p->nodeShape().innerMoved());
+        QCOMPARE(p->nodeShape().outerScale, 1.0);
+        bool curved = false;
+        for (int i = 0; i < p->localPath().elementCount(); ++i)
+            curved = curved || p->localPath().elementAt(i).type == QPainterPath::CurveToElement;
+        QVERIFY(curved);
+        // Alle Seitenmitten folgen
+        const QList<QPointF> moved = shape.basicShapeNodes();
+        for (int j = 1; j < moved.size(); j += 2)
+            QVERIFY(QLineF(moved[j], c).length() < QLineF(nodes[j], c).length() - 5.0);
+        screenshot(QStringLiteral("86-form-polygon-geschwungen"));
+    }
+
+    void shapeToolTransformsSelectedNodes()
+    {
+        drawRect(QRectF(40, 60, 60, 40));
+        m_editor->convertSelectionToCurves();
+        const NodeId id = m_editor->selection().value(0);
+        auto curve = [&] { return m_editor->document().findAs<CurveObject>(id); };
+        QVERIFY(curve());
+        m_canvas->setTool(ToolId::Shape);
+        ShapeTool& shape = m_canvas->shapeTool();
+        // Zwei Knoten wählen (Rahmen um die rechte Seite)
+        drag(screen(QPointF(95, 50)), screen(QPointF(110, 110)));
+        QCOMPARE(shape.selectedNodes().size(), 2);
+        QVERIFY(shape.canTransformNodes());
+        auto pointsOf = [&](const QList<NodeRef>& refs) {
+            QList<QPointF> out;
+            for (NodeRef r : refs)
+                out << curve()->transform().map(curve()->node(r).point);
+            return out;
+        };
+        const QList<NodeRef> sel = shape.selectedNodes();
+        const QList<QPointF> before = pointsOf(sel);
+        QVERIFY(near(shape.selectedNodesBounds(), QRectF(100, 60, 0, 40)));
+
+        // Drehen: Eckgriff um 90° um die Mitte führen
+        shape.setNodeTransform(ShapeTool::NodeTransform::Rotate);
+        const QPointF c = m_canvas->toScreen(shape.selectedNodesBounds().center());
+        const QPointF h = shape.handlePosition(0);
+        const QPointF target = c + QPointF(-(h - c).y(), (h - c).x()); // +90° (im Bildschirm im Uhrzeigersinn)
+        drag(h.toPoint(), target.toPoint(), {}, QStringLiteral("87-form-knoten-drehen-vorschau"));
+        QCOMPARE(m_editor->document().undoText(), QStringLiteral("Knoten drehen"));
+        const QList<QPointF> rotated = pointsOf(sel);
+        const QPointF m(100, 80);
+        for (int i = 0; i < 2; ++i) {
+            const QPointF d = before[i] - m;
+            const QPointF expected = m + QPointF(-d.y(), d.x());
+            QVERIFY2(QLineF(rotated[i], expected).length() < 1.0,
+                     qPrintable(QStringLiteral("%1,%2").arg(rotated[i].x()).arg(rotated[i].y())));
+        }
+        // Die übrigen Knoten bleiben stehen
+        QVERIFY(QLineF(curve()->transform().map(curve()->node(NodeRef{0, 0}).point), QPointF(40, 60)).length() < kTol);
+        screenshot(QStringLiteral("88-form-knoten-gedreht"));
+
+        // Skalieren: rechte Seite von der linken aus auf das Doppelte strecken
+        shape.setNodeTransform(ShapeTool::NodeTransform::Scale);
+        const QRectF b = shape.selectedNodesBounds(); // jetzt waagrecht: 80..120 bei y = 80
+        QVERIFY2(near(b, QRectF(80, 80, 40, 0), 1.0), qPrintable(describe(b)));
+        const QPointF right = shape.handlePosition(5);
+        const QPointF left = shape.handlePosition(7);
+        drag(right.toPoint(), (right + (right - left)).toPoint());
+        QCOMPARE(m_editor->document().undoText(), QStringLiteral("Knoten skalieren"));
+        QVERIFY2(std::abs(shape.selectedNodesBounds().width() - 80.0 - 18.0 / m_canvas->viewTransform().m11()) < 2.0,
+                 qPrintable(describe(shape.selectedNodesBounds())));
+
+        // Spiegeln
+        const QList<QPointF> pre = pointsOf(sel);
+        shape.reflectNodes(Qt::Horizontal);
+        QCOMPARE(m_editor->document().undoText(), QStringLiteral("Knoten spiegeln"));
+        const QList<QPointF> mirrored = pointsOf(sel);
+        QVERIFY(QLineF(mirrored[0], QPointF(2 * shape.selectedNodesBounds().center().x() - pre[0].x(), pre[0].y())).length() < 1e-6);
+        m_editor->document().undo();
+        QCOMPARE(pointsOf(sel), pre);
+    }
+
+    void groupStyleChangesKeepOtherValues()
+    {
+        // Kontur einer Gruppe entfernen darf die Füllungen der Kinder nicht löschen (und umgekehrt)
+        const NodeId a = drawRect(QRectF(20, 20, 20, 20));
+        m_editor->setSelectionFill(Fill::solid(Color(255, 0, 0)));
+        const NodeId b = drawRect(QRectF(50, 20, 20, 20));
+        m_editor->setSelectionFill(Fill::solid(Color(0, 0, 255)));
+        m_editor->setSelection({a, b});
+        m_editor->groupSelection();
+        m_editor->setSelectionStroke(std::nullopt);
+        auto style = [&](NodeId id) { return m_editor->document().findAs<DrawObject>(id)->style(); };
+        QCOMPARE(style(a).fill, Fill::solid(Color(255, 0, 0)));
+        QCOMPARE(style(b).fill, Fill::solid(Color(0, 0, 255)));
+        QVERIFY(!style(a).stroke && !style(b).stroke);
+        m_editor->setSelectionStroke(Color(0, 128, 0));
+        m_editor->setSelectionFill(Fill::solid(Color(255, 255, 0)));
+        QCOMPARE(style(a).stroke, std::optional<Color>(Color(0, 128, 0)));
+        QCOMPARE(style(b).fill, Fill::solid(Color(255, 255, 0)));
+    }
+
+    void shapeToolRotatesSingleNodeAroundCurve()
+    {
+        // Wie beim Vorbild: ein einzelner Knoten dreht sich um die Mitte aller Knoten der Kurve
+        drawRect(QRectF(40, 40, 40, 40));
+        m_editor->convertSelectionToCurves();
+        const NodeId id = m_editor->selection().value(0);
+        auto curve = [&] { return m_editor->document().findAs<CurveObject>(id); };
+        m_canvas->setTool(ToolId::Shape);
+        ShapeTool& shape = m_canvas->shapeTool();
+        click(screen(QPointF(80, 80)));
+        QCOMPARE(shape.selectedNodes().size(), 1);
+        QVERIFY(shape.canTransformNodes());
+        QVERIFY(near(shape.selectedNodesBounds(), QRectF(40, 40, 40, 40)));
+        const NodeRef r = shape.selectedNodes().first();
+        shape.setNodeTransform(ShapeTool::NodeTransform::Rotate);
+        // Griff unten rechts auf den gegenüberliegenden Griff ziehen = 180°
+        drag(shape.handlePosition(2).toPoint(), shape.handlePosition(0).toPoint());
+        QCOMPARE(m_editor->document().undoText(), QStringLiteral("Knoten drehen"));
+        const QPointF moved = curve()->transform().map(curve()->node(r).point);
+        QVERIFY2(QLineF(moved, QPointF(40, 40)).length() < 0.5, qPrintable(QStringLiteral("%1,%2").arg(moved.x()).arg(moved.y())));
+    }
+
+    void cornersDockerFilletsTriangle()
+    {
+        m_canvas->setTool(ToolId::Polygon);
+        drag(screen(QPointF(40, 40)), screen(QPointF(140, 140)));
+        m_editor->setObjectProperty(QStringLiteral("points"), 3.0, QStringLiteral("Punkte"));
+        const NodeId id = m_editor->selection().value(0);
+        const auto* tri = m_editor->document().findAs<PolygonObject>(id);
+        QList<QPointF> v;
+        const QList<QPointF> ring = tri->shapeNodes();
+        for (int j = 0; j < ring.size(); j += 2)
+            v << tri->transform().map(ring[j]);
+        QCOMPARE(v.size(), 3);
+
+        CornersDocker docker(*m_editor, *m_canvas);
+        QVERIFY(docker.applyButton()->isEnabled());
+        docker.setOperation(pathops::CornerOp::Fillet);
+        docker.setRadius(8.0);
+        QTest::mouseClick(docker.applyButton(), Qt::LeftButton);
+        QCOMPARE(m_editor->document().undoText(), QStringLiteral("Ecken"));
+        const auto* c = m_editor->document().findAs<CurveObject>(m_editor->selection().value(0));
+        QVERIFY(c);
+        QCOMPARE(c->nodeCount(), 9);
+        // Jede Ecke ist ein Kreisbogen mit 8 mm Radius, tangential an beide Kanten
+        const QPainterPath path = c->path();
+        for (int i = 0; i < 3; ++i) {
+            const QPointF a = v[(i + 2) % 3] - v[i], b = v[(i + 1) % 3] - v[i];
+            const QPointF ua = a / QLineF(QPointF(), a).length(), ub = b / QLineF(QPointF(), b).length();
+            const double theta = std::acos(std::clamp(QPointF::dotProduct(ua, ub), -1.0, 1.0));
+            const QPointF bis = (ua + ub) / QLineF(QPointF(), ua + ub).length();
+            const QPointF center = v[i] + bis * (8.0 / std::sin(theta / 2.0));
+            const double d = 8.0 / std::tan(theta / 2.0);
+            double worst = 0.0;
+            for (int k = 0; k <= 3000; ++k) {
+                const QPointF p = path.pointAtPercent(k / 3000.0);
+                if (QLineF(p, v[i]).length() < d * 0.95)
+                    worst = std::max(worst, std::abs(QLineF(p, center).length() - 8.0));
+            }
+            QVERIFY2(worst < 0.05, qPrintable(QStringLiteral("Ecke %1: %2").arg(i).arg(worst)));
+        }
+        if (!qEnvironmentVariable("VEK_SCREENSHOT_DIR").isEmpty())
+            docker.grab().save(qEnvironmentVariable("VEK_SCREENSHOT_DIR") + QStringLiteral("/89-ecken-docker.png"));
+        screenshot(QStringLiteral("90-ecken-dreieck"));
+        // Ein Schritt rückgängig: wieder das Polygon
+        m_editor->document().undo();
+        QVERIFY(m_editor->document().findAs<PolygonObject>(id));
+
+        // Nur gewählte Knoten (Formwerkzeug): Quadrat als Kurve, eine Ecke abschrägen
+        m_editor->clearSelection();
+        drawRect(QRectF(40, 160, 50, 50));
+        m_editor->convertSelectionToCurves();
+        const NodeId sq = m_editor->selection().value(0);
+        m_canvas->setTool(ToolId::Shape);
+        click(screen(QPointF(90, 210)));
+        QCOMPARE(m_canvas->shapeTool().selectedNodes().size(), 1);
+        docker.setOperation(pathops::CornerOp::Chamfer);
+        docker.setRadius(10.0);
+        QVERIFY(docker.apply());
+        const auto* s = m_editor->document().findAs<CurveObject>(sq);
+        QCOMPARE(s->nodeCount(), 5);
+        QVERIFY(!s->path().contains(QPointF(88, 208)));
+        QVERIFY(s->path().contains(QPointF(42, 162)));
+    }
+
+
+
+    // --- Mischmodi, Innenschatten, gedrehte Extrusion -----------------------------------------
+    void blendModesRender()
+    {
+        m_canvas->resize(800, 600);
+        auto add = [this](const QRectF& r, const Color& c) {
+            auto o = std::make_unique<RectangleObject>(r.size());
+            o->setTransform(QTransform::fromTranslate(r.left(), r.top()));
+            Style s;
+            s.fill = Fill::solid(c);
+            s.stroke.reset();
+            o->setStyle(s);
+            return m_editor->addObject(std::move(o), QStringLiteral("R"));
+        };
+        const NodeId bottom = add(QRectF(20, 20, 40, 40), Color(255, 255, 0));
+        const NodeId top = add(QRectF(40, 40, 40, 40), Color(0, 255, 255));
+        Q_UNUSED(bottom);
+        auto pixel = [this](const QPointF& doc) {
+            QImage img(3, 3, QImage::Format_ARGB32_Premultiplied);
+            img.fill(Qt::white);
+            QPainter p(&img);
+            m_canvas->renderPage(p, 0, 8.0, QPointF(1.5, 1.5) - doc * 8.0, true);
+            p.end();
+            return img.pixelColor(1, 1);
+        };
+        auto close = [](const QColor& a, const QColor& b, int tol = 3) {
+            return std::abs(a.red() - b.red()) <= tol && std::abs(a.green() - b.green()) <= tol && std::abs(a.blue() - b.blue()) <= tol;
+        };
+        // Svg (Vektorgerät, kein Raster): Untergrund wird neu gezeichnet, Ergebnis als Bild
+        auto svgPixel = [this](const QPointF& doc) {
+            QBuffer buffer;
+            buffer.open(QIODevice::WriteOnly);
+            QSvgGenerator gen;
+            gen.setOutputDevice(&buffer);
+            gen.setSize(QSize(420, 594));
+            gen.setViewBox(QRectF(0, 0, 420, 594));
+            {
+                QPainter p(&gen);
+                m_canvas->renderPage(p, 0, 2.0, QPointF(0, 0), true);
+            }
+            QSvgRenderer svg(buffer.data());
+            QImage img(420, 594, QImage::Format_ARGB32_Premultiplied);
+            img.fill(Qt::white);
+            QPainter p(&img);
+            svg.render(&p);
+            p.end();
+            return img.pixelColor((doc * 2.0).toPoint());
+        };
+        PropertyBar bar(*m_editor, *m_canvas);
+        bar.show();
+        m_editor->setSelection({top});
+        m_canvas->setTool(ToolId::Transparency);
+        QApplication::processEvents();
+        QComboBox* mode = nullptr;
+        for (QComboBox* c : bar.findChildren<QComboBox*>())
+            if (c->toolTip() == QStringLiteral("Mischmodus") && c->isVisibleTo(&bar))
+                mode = c;
+        QVERIFY(mode);
+        QVERIFY(mode->count() >= 27);
+        QCOMPARE(mode->currentData().toInt(), int(BlendMode::Normal));
+        auto choose = [mode](BlendMode m) {
+            const int i = mode->findData(int(m));
+            mode->setCurrentIndex(i);
+            emit mode->activated(i);
+        };
+        // Normal: Cyan deckt
+        QVERIFY(close(pixel(QPointF(50, 50)), QColor(0, 255, 255)));
+        // Multiplizieren (QPainter-Modus): Gelb x Cyan = Grün, über Weiss bleibt Cyan
+        choose(BlendMode::Multiply);
+        QCOMPARE(m_editor->document().findAs<DrawObject>(top)->blendMode(), BlendMode::Multiply);
+        QCOMPARE(m_editor->document().undoText(), QStringLiteral("Mischmodus"));
+        QVERIFY2(close(pixel(QPointF(50, 50)), QColor(0, 255, 0)), qPrintable(pixel(QPointF(50, 50)).name()));
+        QVERIFY(close(pixel(QPointF(70, 70)), QColor(0, 255, 255)));
+        QVERIFY(close(pixel(QPointF(30, 30)), QColor(255, 255, 0)));
+        screenshot(QStringLiteral("mischmodus-multiplizieren"));
+        QVERIFY2(close(svgPixel(QPointF(50, 50)), QColor(0, 255, 0), 6), qPrintable(svgPixel(QPointF(50, 50)).name()));
+        // SVG-Export: als Vektor mit mix-blend-mode
+        QTemporaryDir dir;
+        auto exported = [this, &dir] {
+            const QString path = dir.filePath(QStringLiteral("blend.svg"));
+            if (!output::exportSvg(*m_canvas, path, 0))
+                return QByteArray();
+            QFile f(path);
+            f.open(QIODevice::ReadOnly);
+            return f.readAll();
+        };
+        QByteArray svgText = exported();
+        QVERIFY2(svgText.contains("style=\"mix-blend-mode:multiply\""), svgText.constData());
+        QVERIFY(!svgText.contains("0.531") && !svgText.contains("<image"));
+        // Subtrahieren (eigene Rechnung, Untergrund aus dem Gerät): Gelb - Cyan = Rot, Weiss - Cyan = Rot
+        choose(BlendMode::Subtract);
+        QVERIFY2(close(pixel(QPointF(50, 50)), QColor(255, 0, 0)), qPrintable(pixel(QPointF(50, 50)).name()));
+        QVERIFY(close(pixel(QPointF(70, 70)), QColor(255, 0, 0)));
+        // ... am Bildschirm (Widget) und im SVG gleich
+        const QColor shown = m_canvas->grab().toImage().pixelColor(screen(QPointF(50, 50)));
+        QVERIFY2(close(shown, QColor(255, 0, 0)), qPrintable(shown.name()));
+        QVERIFY2(close(svgPixel(QPointF(50, 50)), QColor(255, 0, 0), 6), qPrintable(svgPixel(QPointF(50, 50)).name()));
+        QVERIFY(close(svgPixel(QPointF(30, 30)), QColor(255, 255, 0), 6));
+        // ... ohne CSS-Entsprechung gerastert
+        svgText = exported();
+        QVERIFY(!svgText.contains("mix-blend-mode") && svgText.contains("<image"));
+        // PDF: Untergrund neu gezeichnet und mit dem Objekt gerastert (Qt schreibt keine /BM)
+        output::ExportOptions pdf;
+        const QString pdfPath = dir.filePath(QStringLiteral("blend.pdf"));
+        QVERIFY(output::exportPdf(*m_canvas, pdfPath, pdf));
+        QVERIFY(QFileInfo(pdfPath).size() > 1000);
+        screenshot(QStringLiteral("mischmodus-subtrahieren"));
+        // Farbton: Farbton von Cyan, Sättigung/Helligkeit des gelben Untergrunds
+        choose(BlendMode::Hue);
+        const QColor hue = pixel(QPointF(50, 50));
+        QVERIFY2(close(hue, QColor(161, 255, 255)), qPrintable(hue.name())); // W3C: Farbton 180°, Helligkeit des Gelbs
+        // Mit Transparenz: Multiplizieren zur Hälfte
+        choose(BlendMode::Multiply);
+        m_editor->setSelectionEffect(Effect::Transparency, [](Ramp& r) { r = Ramp::uniform(50); }, QStringLiteral("Transparenz"));
+        QVERIFY2(close(pixel(QPointF(50, 50)), QColor(128, 255, 0)), qPrintable(pixel(QPointF(50, 50)).name()));
+        // In der Gruppe: der Untergrund ausserhalb der Gruppe zählt (SVG neu gezeichnet)
+        m_editor->setSelection({top});
+        m_editor->groupSelection();
+        QVERIFY2(close(svgPixel(QPointF(50, 50)), QColor(128, 255, 0), 8), qPrintable(svgPixel(QPointF(50, 50)).name()));
+        // Rückgängig
+        while (m_editor->document().undoText() != QStringLiteral("Mischmodus"))
+            m_editor->document().undo();
+        m_editor->document().undo();
+        QCOMPARE(m_editor->document().findAs<DrawObject>(top)->blendMode(), BlendMode::Hue);
+        m_canvas->setTool(ToolId::Pick);
+    }
+
+    void innerShadowAndShadowBlend()
+    {
+        m_canvas->resize(800, 600);
+        auto o = std::make_unique<RectangleObject>(QSizeF(30, 30));
+        o->setTransform(QTransform::fromTranslate(40, 40));
+        Style s;
+        s.fill = Fill::solid(Color(255, 255, 0));
+        s.stroke.reset();
+        o->setStyle(s);
+        const NodeId id = m_editor->addObject(std::move(o), QStringLiteral("R"));
+        auto obj = [this, id] { return m_editor->document().findAs<DrawObject>(id); };
+        auto pixel = [this](const QPointF& doc) {
+            QImage img(3, 3, QImage::Format_ARGB32_Premultiplied);
+            img.fill(Qt::white);
+            QPainter p(&img);
+            m_canvas->renderPage(p, 0, 8.0, QPointF(1.5, 1.5) - doc * 8.0, true);
+            p.end();
+            return img.pixelColor(1, 1);
+        };
+        PropertyBar bar(*m_editor, *m_canvas);
+        bar.show();
+        m_editor->setSelection({id});
+        m_canvas->setTool(ToolId::DropShadow);
+        QApplication::processEvents();
+        auto combo = [&bar](const QString& tip) -> QComboBox* {
+            for (QComboBox* c : bar.findChildren<QComboBox*>())
+                if (c->toolTip() == tip && c->isVisibleTo(&bar))
+                    return c;
+            return nullptr;
+        };
+        QComboBox* presets = combo(QStringLiteral("Voreinstellungen"));
+        QVERIFY(presets);
+        // Vorlage "Innenkante": rundum nach innen, Multiplizieren
+        const int edge = presets->findText(QStringLiteral("Innenkante"));
+        QVERIFY(edge > 0);
+        emit presets->activated(edge);
+        QApplication::processEvents();
+        QVERIFY(obj()->shadow().active && obj()->shadow().inner);
+        QCOMPARE(obj()->shadow().blend, BlendMode::Multiply);
+        QCOMPARE(m_editor->document().undoText(), QStringLiteral("Innenschatten"));
+        // Innen an der Kante dunkler, in der Mitte und aussen unverändert
+        const QColor inside = pixel(QPointF(40.4, 55)), middle = pixel(QPointF(55, 55)), outside = pixel(QPointF(39.4, 55));
+        QVERIFY2(inside.green() < 215 && inside.blue() < 10, qPrintable(inside.name()));
+        QVERIFY2(middle.green() >= 250 && middle.red() >= 250, qPrintable(middle.name()));
+        QCOMPARE(outside, QColor(Qt::white));
+        screenshot(QStringLiteral("innenschatten-kante"));
+        // Art in der Leiste: Innen
+        QComboBox* kind = combo(QStringLiteral("Schattenart"));
+        QVERIFY(kind);
+        QCOMPARE(kind->currentIndex(), 1);
+        // "Innen oben links": Schatten an der oberen/linken Innenkante, rechts unten hell
+        emit presets->activated(presets->findText(QStringLiteral("Innen oben links")));
+        QVERIFY(obj()->shadow().offset.x() > 0 && obj()->shadow().offset.y() > 0);
+        const QColor topLeft = pixel(QPointF(41, 55)), bottomRight = pixel(QPointF(69, 55));
+        QVERIFY2(topLeft.green() + 30 < bottomRight.green(), qPrintable(topLeft.name() + QLatin1Char(' ') + bottomRight.name()));
+        // Speichern/Laden
+        auto back = serial::fromJson(serial::toJson(*obj()), serial::Ids::Keep);
+        QCOMPARE(node_cast<DrawObject>(back.get())->shadow(), obj()->shadow());
+        // Hinterlegter Schatten mit Mischmodus "Negativ multiplizieren": weisser Schatten auf
+        // Schwarz hellt auf, Normal mit Schwarz dunkelt ab
+        emit kind->activated(0);
+        QVERIFY(!obj()->shadow().inner);
+        DropShadow d = obj()->shadow();
+        d.offset = QPointF(5, 5);
+        d.feather = 0;
+        d.opacity = 100;
+        d.color = Color(0, 0, 255);
+        m_editor->setSelectionShadow(d, QStringLiteral("Schatten"));
+        QApplication::processEvents();
+        QComboBox* mode = combo(QStringLiteral("Mischmodus des Schattens"));
+        QVERIFY(mode);
+        QCOMPARE(mode->currentData().toInt(), int(BlendMode::Multiply));
+        // Multiplizieren über Weiss: Blau
+        QVERIFY2(pixel(QPointF(73, 73)) == QColor(0, 0, 255), qPrintable(pixel(QPointF(73, 73)).name()));
+        emit mode->activated(mode->findData(int(BlendMode::Screen)));
+        QCOMPARE(obj()->shadow().blend, BlendMode::Screen);
+        // Negativ multiplizieren über Weiss bleibt Weiss
+        QVERIFY2(pixel(QPointF(73, 73)) == QColor(Qt::white), qPrintable(pixel(QPointF(73, 73)).name()));
+        m_canvas->setTool(ToolId::Pick);
+    }
+
+    void extrusionRotation()
+    {
+        m_canvas->resize(800, 600);
+        auto o = std::make_unique<RectangleObject>(QSizeF(30, 20));
+        o->setTransform(QTransform::fromTranslate(60, 60));
+        Style s;
+        s.fill = Fill::solid(Color(0, 0, 255));
+        s.stroke.reset();
+        o->setStyle(s);
+        const NodeId id = m_editor->addObject(std::move(o), QStringLiteral("R"));
+        auto obj = [this, id] { return m_editor->document().findAs<DrawObject>(id); };
+        Extrusion e;
+        e.active = true;
+        e.vanish = QPointF(40, -40);
+        e.depth = 30;
+        m_editor->setObjectExtrusion(id, e, QStringLiteral("Extrusion"));
+        const QList<Canvas::ExtrusionFace> flat = Canvas::extrusionModel(*obj(), obj()->extrusion());
+        auto pixel = [this](const QPointF& doc) {
+            QImage img(3, 3, QImage::Format_ARGB32_Premultiplied);
+            img.fill(Qt::white);
+            QPainter p(&img);
+            m_canvas->renderPage(p, 0, 8.0, QPointF(1.5, 1.5) - doc * 8.0, true);
+            p.end();
+            return img.pixelColor(1, 1);
+        };
+        QCOMPARE(pixel(QPointF(85, 78)), QColor(0, 0, 255));
+        PropertyBar bar(*m_editor, *m_canvas);
+        bar.show();
+        m_editor->setSelection({id});
+        m_canvas->setTool(ToolId::Extrude);
+        QApplication::processEvents();
+        QDoubleSpinBox* ry = nullptr;
+        for (QDoubleSpinBox* sp : bar.findChildren<QDoubleSpinBox*>())
+            if (sp->toolTip().startsWith(QStringLiteral("Drehung um die senkrechte Achse")) && sp->isVisibleTo(&bar))
+                ry = sp;
+        QVERIFY(ry);
+        ry->setValue(60);
+        emit ry->editingFinished();
+        QCOMPARE(obj()->extrusion().rotY, 60.0);
+        QCOMPARE(m_editor->document().undoText(), QStringLiteral("Extrusion drehen"));
+        screenshot(QStringLiteral("extrusion-gedreht"));
+        // Geometrie: andere Flächen, die rechte Seite der Vorderfläche weicht nach hinten
+        const QList<Canvas::ExtrusionFace> turned = Canvas::extrusionModel(*obj(), obj()->extrusion());
+        QVERIFY(!turned.isEmpty());
+        QVERIFY(turned.first().polygon != flat.first().polygon);
+        const QTransform face = obj()->extrusion().faceTransform(obj()->boundingRect().center());
+        QVERIFY(QLineF(face.map(QPointF(90, 70)), QPointF(90, 70)).length() > 5);
+        QVERIFY(QLineF(face.map(QPointF(75, 70)), QPointF(75, 70)).length() < 1e-6); // die Mitte bleibt
+        // Gezeichnet: rechts unten kein Blau der Vorderfläche mehr, die Mitte bleibt blau
+        QVERIFY2(pixel(QPointF(85, 78)) != QColor(0, 0, 255), qPrintable(pixel(QPointF(85, 78)).name()));
+        QCOMPARE(pixel(QPointF(72, 70)), QColor(0, 0, 255));
+        // Kugel: nach oben ziehen kippt um x
+        ExtrusionTrackball* ball = nullptr;
+        for (ExtrusionTrackball* b : bar.findChildren<ExtrusionTrackball*>())
+            if (b->isVisibleTo(&bar))
+                ball = b;
+        QVERIFY(ball);
+        QCOMPARE(ball->rotY(), 60.0);
+        const QPoint c = ball->rect().center();
+        QTest::mousePress(ball, Qt::LeftButton, {}, c);
+        QTest::mouseMove(ball, c - QPoint(0, 5));
+        QTest::mouseRelease(ball, Qt::LeftButton, {}, c - QPoint(0, 10));
+        QCOMPARE(obj()->extrusion().rotX, 10 * ExtrusionTrackball::kDegreesPerPixel);
+        QCOMPARE(obj()->extrusion().rotY, 60.0);
+        screenshot(QStringLiteral("extrusion-kugel"));
+        // Speichern/Laden
+        auto back = serial::fromJson(serial::toJson(*obj()), serial::Ids::Keep);
+        QCOMPARE(node_cast<DrawObject>(back.get())->extrusion(), obj()->extrusion());
+        // Trennen: die Vorderfläche wird mitgedreht (perspektivisch als Kurve)
+        m_editor->setSelection({id});
+        QPolygonF corners;
+        for (const QPointF& q : {QPointF(60, 60), QPointF(90, 60), QPointF(90, 80), QPointF(60, 80)})
+            corners << obj()->extrusion().project(obj()->boundingRect().center(), q, 0.0);
+        const QRectF expected = corners.boundingRect();
+        QVERIFY(m_editor->separateEffects());
+        const auto* group = m_editor->document().findAs<GroupObject>(m_editor->selection().value(0));
+        QVERIFY(group);
+        bool foundFace = false;
+        for (int i = 0; i < group->childCount(); ++i) {
+            const auto* d = node_cast<DrawObject>(group->child(i));
+            if (d && d->style().fill == Fill::solid(Color(0, 0, 255))) {
+                foundFace = true;
+                QVERIFY2(near(d->boundingRect(), expected, 0.3), qPrintable(describe(d->boundingRect()) + describe(expected)));
+                QVERIFY(!d->extrusion().active);
+            }
+        }
+        QVERIFY(foundFace);
+        // Rückgängig bis vor die Drehung
+        m_editor->document().undo();
+        m_editor->document().undo();
+        m_editor->document().undo();
+        QVERIFY(!obj()->extrusion().isRotated());
+        m_canvas->setTool(ToolId::Pick);
+    }
+
+    // Leisten und Beispiele für Mischmodus, Innenschatten, gedrehte Extrusion, nur mit VEK_SCREENSHOT_DIR
+    void renderFeaturesScreenshot()
+    {
+        const QString dir = qEnvironmentVariable("VEK_SCREENSHOT_DIR");
+        if (dir.isEmpty())
+            QSKIP("nur mit VEK_SCREENSHOT_DIR");
+        QCoreApplication::setOrganizationName(QStringLiteral("VektoreditorTest"));
+        MainWindow window;
+        window.resize(1600, 900);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        Canvas* canvas = window.canvas();
+        Editor& ed = canvas->editor();
+        auto add = [&ed](std::unique_ptr<DrawObject> o, const QPointF& at, const Color& fill) {
+            o->setTransform(QTransform::fromTranslate(at.x(), at.y()) * o->transform());
+            Style s;
+            s.fill = Fill::solid(fill);
+            s.stroke.reset();
+            o->setStyle(s);
+            return ed.addObject(std::move(o), QStringLiteral("O"));
+        };
+        // Mischmodi: drei Kreise über einem Verlauf
+        auto band = std::make_unique<RectangleObject>(QSizeF(180, 50));
+        const NodeId bandId = add(std::move(band), QPointF(15, 15), Color(255, 200, 0));
+        ed.setSelection({bandId});
+        Fill grad = Fill::solid(Color(0, 0, 0));
+        grad.type = Fill::Type::Linear;
+        grad.stops = {GradientStop{0.0, Color(255, 230, 0)}, GradientStop{1.0, Color(30, 90, 200)}};
+        ed.setSelectionFill(grad);
+        const BlendMode modes[] = {BlendMode::Multiply, BlendMode::Screen, BlendMode::Overlay, BlendMode::Difference, BlendMode::Hue};
+        NodeId firstCircle = 0;
+        for (int i = 0; i < 5; ++i) {
+            const NodeId c = add(std::make_unique<EllipseObject>(QSizeF(30, 30)), QPointF(22 + i * 35, 25), Color(220, 30, 60));
+            if (i == 0)
+                firstCircle = c;
+            ed.setSelection({c});
+            ed.setSelectionBlendMode(modes[i]);
+        }
+        // Innenschatten auf Text
+        auto text = std::make_unique<TextObject>(TextObject::Kind::Artistic);
+        text->setPlainText(QStringLiteral("DSN"), CharFormat(QStringLiteral("Arial Black"), 120));
+        const NodeId t = add(std::move(text), QPointF(20, 110), Color(240, 120, 40));
+        DropShadow inner;
+        inner.active = true;
+        inner.inner = true;
+        inner.offset = QPointF(0, 0);
+        inner.feather = 2.5;
+        inner.opacity = 70;
+        ed.setObjectShadow(t, inner, QStringLiteral("Innenschatten"));
+        // Gedrehte Extrusion
+        const NodeId box = add(std::make_unique<RectangleObject>(QSizeF(50, 35)), QPointF(120, 200), Color(40, 120, 220));
+        Extrusion e;
+        e.active = true;
+        e.vanish = QPointF(60, -60);
+        e.depth = 25;
+        e.color = Color(120, 160, 220);
+        e.rotX = 25;
+        e.rotY = -35;
+        ed.setObjectExtrusion(box, e, QStringLiteral("Extrusion"));
+        auto shot = [&](ToolId tool, NodeId sel, const QString& name) {
+            canvas->setTool(tool);
+            ed.setSelection({sel});
+            QApplication::processEvents();
+            window.grab(QRect(0, 0, 1600, 130)).save(dir + QLatin1Char('/') + name + QStringLiteral(".png"));
+        };
+        shot(ToolId::DropShadow, t, QStringLiteral("render-leiste-schatten"));
+        shot(ToolId::Extrude, box, QStringLiteral("render-leiste-extrusion"));
+        shot(ToolId::Transparency, firstCircle, QStringLiteral("render-leiste-transparenz"));
+        ed.clearSelection();
+        canvas->setTool(ToolId::Pick);
+        QApplication::processEvents();
+        output::ExportOptions o;
+        o.dpi = 150;
+        output::renderImage(*canvas, o).save(dir + QStringLiteral("/render-beispiele.png"));
+        // Dasselbe als SVG (mix-blend-mode) und zurück gerastert
+        QFile svg(dir + QStringLiteral("/render-beispiele.svg"));
+        QVERIFY(svg.open(QIODevice::WriteOnly));
+        svg.write(output::areaSvg(*canvas, o));
+    }
+
+    // --- Smart-Füllung mit offenen Linien, Schnittmenge mit offenen Quellen, glatter Zickzack ---
+private:
+    NodeId addOpenLine(const QList<QPointF>& points, bool curve = false)
+    {
+        SubPath sp;
+        for (int i = 0; i < points.size(); ++i) {
+            CurveNode n{points[i]};
+            if (curve && i > 0) {
+                // weiche Kurve: Steuerpunkte senkrecht versetzt
+                const QPointF d = points[i] - points[i - 1];
+                n.curveIn = true;
+                n.c1 = points[i - 1] + d / 3.0 + QPointF(-d.y(), d.x()) * 0.3;
+                n.c2 = points[i - 1] + d * (2.0 / 3.0) - QPointF(-d.y(), d.x()) * 0.3;
+            }
+            sp.nodes << n;
+        }
+        auto c = std::make_unique<CurveObject>(QList<SubPath>{sp});
+        Style s;
+        s.fill = Fill();
+        c->setStyle(s);
+        return m_editor->addObject(std::move(c), QStringLiteral("Linie"));
+    }
+    static double filledArea(const DrawObject* o)
+    {
+        double sum = 0;
+        for (const QPolygonF& poly : vek::pathops::flattenFine(o->path(), 0.05)) {
+            double a = 0;
+            for (int i = 0; i < poly.size(); ++i)
+                a += poly[i].x() * poly[(i + 1) % poly.size()].y() - poly[(i + 1) % poly.size()].x() * poly[i].y();
+            sum += a / 2;
+        }
+        return std::abs(sum);
+    }
+
+private slots:
+    void smartFillWithOpenLines()
+    {
+        m_canvas->resize(800, 600);
+        QCoreApplication::setOrganizationName(QStringLiteral("VektoreditorTest"));
+        Options::instance().resetWorkspace();
+        // Windrad: Kreis um (40, 40) mit r = 20, zwei offene Linien kreuz und quer darüber
+        auto e = std::make_unique<EllipseObject>(QSizeF(40, 40));
+        e->setTransform(QTransform::fromTranslate(20, 20));
+        const NodeId circle = m_editor->addObject(std::move(e), QStringLiteral("E"));
+        addOpenLine({QPointF(15, 40), QPointF(65, 40)});
+        const NodeId vertical = addOpenLine({QPointF(40, 15), QPointF(40, 65)});
+        // Senkrechte Linie in einer Gruppe: Gruppen zählen mit
+        m_editor->setSelection({vertical});
+        m_editor->groupSelection();
+        const int before = int(m_editor->pickableObjects().size());
+        m_canvas->setTool(ToolId::SmartFill);
+        move(screen(QPointF(50, 30)));
+        auto* tool = static_cast<SmartFillTool*>(m_canvas->currentTool());
+        QVERIFY(!tool->regionAt(QPointF(50, 30)).isEmpty());
+        click(screen(QPointF(50, 30)));
+        QCOMPARE(int(m_editor->pickableObjects().size()), before + 1);
+        const auto* slice = node_cast<CurveObject>(m_editor->document().findAs<DrawObject>(m_editor->selection().value(0)));
+        QVERIFY(slice);
+        QVERIFY2(std::abs(filledArea(slice) - M_PI * 400 / 4) < 1.0, qPrintable(QString::number(filledArea(slice))));
+        QVERIFY2(near(slice->boundingRect(), QRectF(40, 20, 20, 20), 0.05), qPrintable(describe(slice->boundingRect())));
+        QCOMPARE(slice->style().fill, Fill::solid(Color(255, 210, 77)));
+        // Zuoberst, das Original bleibt
+        QCOMPARE(m_editor->pickableObjects().last()->id(), slice->id());
+        QVERIFY(m_editor->document().findAs<DrawObject>(circle));
+        // Klick ausserhalb jeder Masche (zwischen den Stummeln draussen): nichts
+        click(screen(QPointF(18, 30)));
+        QCOMPARE(int(m_editor->pickableObjects().size()), before + 1);
+
+        // Rechteck, von einer offenen Kurve in zwei Felder geteilt; Kontur "Angeben"
+        Options::instance().set(QStringLiteral("ws/tools/smartFill/outlineMode"), 1);
+        Options::instance().set(QStringLiteral("ws/tools/smartFill/outlineWidth"), 0.5);
+        Options::instance().set(QStringLiteral("ws/tools/smartFill/outlineColor"), QStringLiteral("#0000FF"));
+        Options::instance().set(QStringLiteral("ws/tools/smartFill/fill"), QStringLiteral("#FF0000"));
+        m_canvas->setTool(ToolId::Pick);
+        auto r = std::make_unique<RectangleObject>(QSizeF(100, 60));
+        r->setTransform(QTransform::fromTranslate(100, 20));
+        m_editor->addObject(std::move(r), QStringLiteral("R"));
+        // Kurve beginnt knapp (0,1 mm) neben dem Rand: Lücke wird geschlossen
+        addOpenLine({QPointF(100.1, 50), QPointF(150, 40), QPointF(200, 50)}, true);
+        m_canvas->setTool(ToolId::SmartFill);
+        click(screen(QPointF(180, 25)));
+        const auto* panel = node_cast<CurveObject>(m_editor->document().findAs<DrawObject>(m_editor->selection().value(0)));
+        QVERIFY(panel && panel->id() != slice->id());
+        const double a = filledArea(panel);
+        QVERIFY2(a > 1000 && a < 5000, qPrintable(QString::number(a)));
+        QVERIFY(panel->boundingRect().bottom() < 70);
+        QVERIFY(std::any_of(panel->subPaths().first().nodes.begin(), panel->subPaths().first().nodes.end(),
+                            [](const CurveNode& n) { return n.curveIn; }));
+        QCOMPARE(panel->style().fill, Fill::solid(Color(255, 0, 0)));
+        QCOMPARE(panel->style().stroke, std::optional<Color>(Color(0, 0, 255)));
+        QCOMPARE(panel->style().strokeWidth, 0.5);
+        // Das untere Feld ergänzt das obere zum Rechteck
+        click(screen(QPointF(180, 75)));
+        const auto* lower = m_editor->document().findAs<DrawObject>(m_editor->selection().value(0));
+        QVERIFY(lower && lower->id() != panel->id());
+        QVERIFY2(std::abs(filledArea(lower) + a - 6000) < 2.0, qPrintable(QString::number(filledArea(lower) + a)));
+        screenshot(QStringLiteral("smartfill-open-lines"));
+        // Ohne Füllung und ohne Kontur
+        Options::instance().set(QStringLiteral("ws/tools/smartFill/fillMode"), 2);
+        Options::instance().set(QStringLiteral("ws/tools/smartFill/outlineMode"), 2);
+        const Style none = SmartFillTool::fillStyle(Style());
+        QVERIFY(none.fill.type == Fill::Type::None && !none.stroke);
+        Options::instance().resetWorkspace();
+        m_canvas->setTool(ToolId::Pick);
+    }
+
+    void smartFillPropertyBar()
+    {
+        QCoreApplication::setOrganizationName(QStringLiteral("VektoreditorTest"));
+        Options::instance().resetWorkspace();
+        PropertyBar bar(*m_editor, *m_canvas);
+        m_canvas->setTool(ToolId::SmartFill);
+        auto* fillMode = bar.findChild<QComboBox*>(QStringLiteral("fillMode"));
+        auto* outlineMode = bar.findChild<QComboBox*>(QStringLiteral("outlineMode"));
+        QVERIFY(fillMode && outlineMode);
+        QCOMPARE(fillMode->currentIndex(), 1);
+        QCOMPARE(outlineMode->count(), 3);
+        // Kontur auf "Keine" stellen
+        outlineMode->setCurrentIndex(2);
+        emit outlineMode->activated(2);
+        QCOMPARE(Options::instance().integer(QStringLiteral("ws/tools/smartFill/outlineMode")), 2);
+        QVERIFY(!SmartFillTool::fillStyle(Style()).stroke);
+        m_canvas->setTool(ToolId::Pick);
+        Options::instance().resetWorkspace();
+    }
+
+    void intersectWithOpenSourceLines()
+    {
+        // Linienschar (Quelle, zuerst gewählt) mit einem Rechteck (Ziel) schneiden: es bleiben die
+        // Linienstücke im Rechteck, als offene Linien
+        auto r = std::make_unique<RectangleObject>(QSizeF(40, 40));
+        r->setTransform(QTransform::fromTranslate(30, 30));
+        const NodeId rect = m_editor->addObject(std::move(r), QStringLiteral("R"));
+        QList<NodeId> lines;
+        for (int k = 0; k < 3; ++k)
+            lines << addOpenLine({QPointF(10, 40 + k * 10), QPointF(90, 40 + k * 10)});
+        m_editor->setSelection(lines);
+        m_editor->groupSelection();
+        const NodeId group = m_editor->selection().value(0);
+        const int before = int(m_editor->pickableObjects().size());
+        m_editor->setSelection({group, rect});
+        QVERIFY(m_editor->shapeSelection(Editor::ShapeOp::Intersect));
+        QCOMPARE(int(m_editor->pickableObjects().size()), before + 1);
+        const auto* cut = node_cast<CurveObject>(m_editor->document().findAs<DrawObject>(m_editor->selection().value(0)));
+        QVERIFY(cut);
+        QCOMPARE(int(cut->subPaths().size()), 3);
+        for (const SubPath& sp : cut->subPaths())
+            QVERIFY(!sp.closed);
+        QVERIFY2(near(cut->boundingRect(), QRectF(30, 40, 40, 20), 0.05), qPrintable(describe(cut->boundingRect())));
+        m_editor->document().undo();
+        // Umgekehrte Reihenfolge (Linien als Ziel) wie bisher
+        m_editor->setSelection({rect, group});
+        QVERIFY(m_editor->shapeSelection(Editor::ShapeOp::Intersect));
+        const auto* cut2 = m_editor->document().findAs<DrawObject>(m_editor->selection().value(0));
+        QVERIFY(cut2 && near(cut2->boundingRect(), QRectF(30, 40, 40, 20), 0.05));
+    }
+
+    void distortZipperSmoothRandomLocal()
+    {
+        m_canvas->resize(800, 600);
+        QCoreApplication::setOrganizationName(QStringLiteral("VektoreditorTest"));
+        Options::instance().resetWorkspace();
+        const QList<SubPath> base{SubPath{{CurveNode{QPointF(0, 50)}, CurveNode{QPointF(100, 50)}}, false}};
+        // Spitz: nur Geraden
+        const auto sharp = DistortTool::distort(base, DistortTool::Mode::Zipper, 5, 10, QPointF(50, 50));
+        QVERIFY(std::none_of(sharp.first().nodes.begin(), sharp.first().nodes.end(), [](const CurveNode& n) { return n.curveIn; }));
+        // Glatt: dieselben Spitzen, aber Bézierwellen mit Tangenten parallel zur Linie
+        DistortTool::ZipperOptions smooth;
+        smooth.smooth = true;
+        const auto wave = DistortTool::distort(base, DistortTool::Mode::Zipper, 5, 10, QPointF(50, 50), smooth);
+        QCOMPARE(wave.first().nodes.size(), sharp.first().nodes.size());
+        for (int i = 1; i < wave.first().nodes.size(); ++i) {
+            const CurveNode& n = wave.first().nodes[i];
+            QVERIFY(n.curveIn && n.kind == NodeKind::Smooth);
+            QVERIFY(std::abs(n.c2.y() - n.point.y()) < 1e-9); // waagrechte Tangente auf der Spitze
+            QCOMPARE(n.point, sharp.first().nodes[i].point);
+        }
+        // Zufällig: Amplituden verschieden, aber wiederholbar
+        DistortTool::ZipperOptions random;
+        random.random = true;
+        const auto r1 = DistortTool::distort(base, DistortTool::Mode::Zipper, 5, 10, QPointF(50, 50), random);
+        const auto r2 = DistortTool::distort(base, DistortTool::Mode::Zipper, 5, 10, QPointF(50, 50), random);
+        QCOMPARE(r1.first().nodes, r2.first().nodes);
+        QSet<int> amplitudes;
+        for (const CurveNode& n : r1.first().nodes) {
+            QVERIFY(std::abs(n.point.y() - 50) <= 5 + 1e-9);
+            amplitudes << int(std::round(std::abs(n.point.y() - 50) * 100));
+        }
+        QVERIFY(amplitudes.size() > 3);
+        // Lokal: an der Mitte voll, zu den Enden hin abnehmend
+        DistortTool::ZipperOptions local;
+        local.local = true;
+        const auto l = DistortTool::distort(base, DistortTool::Mode::Zipper, 5, 10, QPointF(50, 50), local);
+        const QList<CurveNode>& ln = l.first().nodes;
+        QVERIFY(std::abs(ln.first().point.y() - 50) < 0.01 && std::abs(ln.last().point.y() - 50) < 0.01);
+        QVERIFY(std::abs(ln[5].point.y() - 50) > 4.9);
+        // Kreis (4 Bézier-Segmente): Frequenz 2 ergibt 8 Zacken, nicht eine je abgeflachtem Stück
+        QPainterPath circlePath;
+        circlePath.addEllipse(QPointF(50, 50), 20, 20);
+        const QList<SubPath> circle = CurveObject::fromPath(circlePath)->subPaths();
+        const int segs = int(circle.first().nodes.size());
+        const auto zig = DistortTool::distort(circle, DistortTool::Mode::Zipper, 3, 2, QPointF(50, 50));
+        QCOMPARE(zig.first().nodes.size(), segs * 2);
+        for (const CurveNode& n : zig.first().nodes) {
+            const double r = QLineF(QPointF(50, 50), n.point).length();
+            QVERIFY(std::abs(r - 20.0) > 2.9 && std::abs(r - 20.0) < 3.1); // Spitzen abwechselnd innen/aussen
+        }
+
+        // Mit der Maus: Linie wählen, Zickzack + Glatt in der Eigenschaftsleiste, vom Objekt wegziehen
+        const NodeId line = addOpenLine({QPointF(20, 60), QPointF(120, 60)});
+        Options::instance().set(QStringLiteral("ws/tools/distort/mode"), 1);
+        PropertyBar bar(*m_editor, *m_canvas);
+        m_canvas->setTool(ToolId::Distort);
+        auto* smoothButton = bar.findChild<QToolButton*>(QStringLiteral("distort-smooth"));
+        QVERIFY(smoothButton && bar.findChild<QToolButton*>(QStringLiteral("distort-random"))
+                && bar.findChild<QToolButton*>(QStringLiteral("distort-local")));
+        smoothButton->click();
+        QVERIFY(Options::instance().flag(QStringLiteral("ws/tools/distort/smooth")));
+        drag(screen(QPointF(70, 60)), screen(QPointF(70, 85)));
+        const auto* distorted = node_cast<CurveObject>(m_editor->document().findAs<DrawObject>(line));
+        QVERIFY(distorted);
+        const QList<CurveNode>& dn = distorted->subPaths().first().nodes;
+        QVERIFY(dn.size() > 5);
+        QVERIFY(std::all_of(dn.begin() + 1, dn.end(), [](const CurveNode& n) { return n.curveIn; }));
+        QVERIFY2(distorted->boundingRect().height() > 5, qPrintable(describe(distorted->boundingRect())));
+        screenshot(QStringLiteral("distort-zipper-smooth"));
+        m_canvas->setTool(ToolId::Pick);
+        Options::instance().resetWorkspace();
+    }
+
+    // Seitenbefehle: mehrere einfügen, duplizieren (mit/ohne Inhalt), verschieben, Ausrichtung,
+    // umbenennen; je ein Rückgängig-Schritt
+    void pageCommandsUndoable()
+    {
+        Editor& ed = *m_editor;
+        Document& doc = ed.document();
+        auto rect = std::make_unique<RectangleObject>(QSizeF(30, 20));
+        rect->setTransform(QTransform::fromTranslate(10, 10));
+        const NodeId original = ed.addObject(std::move(rect), QStringLiteral("R"));
+        const NodeId first = doc.page(0).id();
+
+        ed.insertPages(1, 3);
+        QCOMPARE(doc.pageCount(), 4);
+        QCOMPARE(ed.currentPageIndex(), 1);
+        QCOMPARE(doc.undoText(), QStringLiteral("Seiten einfügen"));
+        doc.undo();
+        QCOMPARE(doc.pageCount(), 1);
+        doc.redo();
+
+        // Duplizieren mit Inhalt: neue Seite danach, Objekt kopiert (neue Id)
+        QCOMPARE(ed.duplicatePage(0, true, true), 1);
+        QCOMPARE(doc.pageCount(), 5);
+        QCOMPARE(ed.currentPageIndex(), 1);
+        const Page& copy = doc.page(1);
+        QCOMPARE(copy.childCount(), doc.page(0).childCount());
+        QCOMPARE(copy.child(0)->childCount(), 1);
+        QVERIFY(copy.child(0)->child(0)->id() != original);
+        QVERIFY(near(node_cast<DrawObject>(copy.child(0)->child(0))->boundingRect(), QRectF(10, 10, 30, 20)));
+        // Nur Ebenen, davor
+        QCOMPARE(ed.duplicatePage(0, false, false), 0);
+        QCOMPARE(doc.page(0).child(0)->childCount(), 0);
+        QCOMPARE(doc.page(1).id(), first);
+        doc.undo();
+        doc.undo();
+        QCOMPARE(doc.pageCount(), 4);
+
+        // Verschieben: aktuelle Seite folgt ihrer Seite
+        ed.setCurrentPageIndex(0);
+        ed.movePage(0, 3);
+        QCOMPARE(doc.page(3).id(), first);
+        QCOMPARE(ed.currentPageIndex(), 3);
+        QCOMPARE(doc.undoText(), QStringLiteral("Seite verschieben"));
+        doc.undo();
+        QCOMPARE(doc.page(0).id(), first);
+
+        // Ausrichtung nur dieser Seite
+        ed.setPageOrientation(2, true);
+        QCOMPARE(doc.page(2).size(), QSizeF(297, 210));
+        QCOMPARE(doc.page(1).size(), QSizeF(210, 297));
+        QVERIFY(ed.isPageLandscape(2));
+        doc.undo();
+        QCOMPARE(doc.page(2).size(), QSizeF(210, 297));
+
+        ed.renamePage(1, QStringLiteral("Über uns"));
+        QCOMPARE(doc.page(1).name(), QStringLiteral("Über uns"));
+        QCOMPARE(doc.undoText(), QStringLiteral("Seite umbenennen"));
+        doc.undo();
+        QVERIFY(doc.page(1).name().isEmpty());
+
+        // Seitengrösse ziehen: Objekte bleiben an ihrer Stelle (Seite wächst nach links/oben)
+        ed.setCurrentPageIndex(0);
+        ed.resizePage(0, QRectF(-20, -10, 250, 320));
+        QCOMPARE(doc.page(0).size(), QSizeF(250, 320));
+        QVERIFY(near(doc.findAs<DrawObject>(original)->boundingRect(), QRectF(30, 20, 30, 20)));
+        doc.undo();
+        QCOMPARE(doc.page(0).size(), QSizeF(210, 297));
+        QVERIFY(near(doc.findAs<DrawObject>(original)->boundingRect(), QRectF(10, 10, 30, 20)));
+    }
+
+    // Seite über das Kontextmenü des Seitenregisters umbenennen; Register per Ziehen umordnen
+    void pageTabsRenameAndReorder()
+    {
+        QCoreApplication::setOrganizationName(QStringLiteral("VektoreditorTest"));
+        MainWindow window;
+        window.resize(1300, 900);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        Editor& ed = window.canvas()->editor();
+        Document& doc = ed.document();
+        ed.insertPages(1, 2);
+        ed.setCurrentPageIndex(0);
+        QTabBar* tabs = nullptr;
+        for (QTabBar* bar : window.findChildren<QTabBar*>()) {
+            if (bar->shape() == QTabBar::RoundedSouth)
+                tabs = bar;
+        }
+        QVERIFY(tabs);
+        QCOMPARE(tabs->count(), 3);
+
+        // Rechtsklick auf Register 2, "Seite umbenennen …", Namen eingeben (Feld mit "Seite 2" vorbelegt)
+        QStringList texts;
+        QString prefill;
+        QTimer poll;
+        poll.setInterval(20);
+        int stage = 0;
+        QObject::connect(&poll, &QTimer::timeout, [&] {
+            if (stage == 0) {
+                auto* menu = qobject_cast<QMenu*>(QApplication::activePopupWidget());
+                if (!menu || !menu->isVisible())
+                    return;
+                for (QAction* a : menu->actions()) {
+                    texts << a->text();
+                    if (a->text() == QStringLiteral("Seite &umbenennen …"))
+                        menu->setActiveAction(a);
+                }
+                // Erst nach diesem Aufruf auslösen: der Befehl öffnet einen Dialog, und dieser
+                // Zeitgeber muss ihn bedienen können
+                QTimer::singleShot(0, menu, [menu] { QTest::keyClick(menu, Qt::Key_Return); });
+                stage = 1;
+            } else if (auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget())) {
+                auto* edit = dialog->findChild<QLineEdit*>();
+                if (!edit)
+                    return;
+                prefill = edit->text();
+                edit->setText(QStringLiteral("Über uns"));
+                QTest::keyClick(edit, Qt::Key_Return);
+                poll.stop();
+            }
+        });
+        poll.start();
+        // Kontextmenü-Ereignis wie bei einem Rechtsklick (Linux löst es beim Drücken aus, Windows beim
+        // Loslassen; direkt geschickt ist der Test auf beiden Systemen gleich)
+        const QPoint tab2 = tabs->tabRect(1).center();
+        QContextMenuEvent menuEvent(QContextMenuEvent::Mouse, tab2, tabs->mapToGlobal(tab2));
+        QApplication::sendEvent(tabs, &menuEvent);
+        QTRY_VERIFY2(doc.page(1).name() == QStringLiteral("Über uns"), qPrintable(QStringLiteral("stage %1: ").arg(stage) + texts.join(QLatin1Char('|'))));
+        QVERIFY2(texts.contains(QStringLiteral("Seite d&uplizieren …")), qPrintable(texts.join(QLatin1Char('|'))));
+        QCOMPARE(prefill, QStringLiteral("Seite 2"));
+        QVERIFY(texts.contains(QStringLiteral("Seitenausrichtung &wechseln")));
+        QCOMPARE(tabs->tabText(1), QStringLiteral("Über uns"));
+
+        // Register 1 hinter Register 3 ziehen
+        const NodeId first = doc.page(0).id();
+        const NodeId second = doc.page(1).id();
+        const int undoBefore = doc.undoCount();
+        const QPoint from = tabs->tabRect(0).center();
+        const QPoint to = tabs->tabRect(2).center() + QPoint(tabs->tabRect(2).width() / 3, 0);
+        QTest::mousePress(tabs, Qt::LeftButton, {}, from);
+        for (int i = 1; i <= 12; ++i)
+            QTest::mouseMove(tabs, from + (to - from) * i / 12);
+        QTest::mouseRelease(tabs, Qt::LeftButton, {}, to);
+        QTRY_COMPARE(doc.page(2).id(), first);
+        QCOMPARE(doc.page(0).id(), second);
+        QCOMPARE(doc.undoCount(), undoBefore + 1);
+        QTRY_COMPARE(tabs->tabText(0), QStringLiteral("Über uns"));
+        QCOMPARE(tabs->tabText(2), QStringLiteral("Seite 3"));
+        QCOMPARE(ed.currentPageIndex(), 2); // die gezogene, aktuelle Seite bleibt aktuell
+        doc.undo();
+        QCOMPARE(doc.page(0).id(), first);
+        QTRY_COMPARE(tabs->tabText(1), QStringLiteral("Über uns"));
+    }
+
+    // Andockfenster "Seiten": Miniaturen, Suche, Rasteransicht, Ziehen zum Umordnen, Knöpfe
+    void pagesDocker()
+    {
+        QCoreApplication::setOrganizationName(QStringLiteral("VektoreditorTest"));
+        MainWindow window;
+        window.resize(1400, 900);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        Editor& ed = window.canvas()->editor();
+        Document& doc = ed.document();
+        ed.insertPages(1, 3);
+        ed.renamePage(0, QStringLiteral("Titel"));
+        ed.renamePage(3, QStringLiteral("Rückseite"));
+        ed.setCurrentPageIndex(0);
+        auto rect = std::make_unique<RectangleObject>(QSizeF(100, 100));
+        Style red;
+        red.fill = Fill::solid(Color(255, 0, 0));
+        rect->setStyle(red);
+        rect->setTransform(QTransform::fromTranslate(50, 50));
+        ed.addObject(std::move(rect), QStringLiteral("R"));
+
+        auto* dock = window.findChild<QDockWidget*>(QStringLiteral("pages"));
+        QVERIFY(dock);
+        QVERIFY(dock->toggleViewAction()->text().contains(QStringLiteral("Seiten")));
+        dock->toggleViewAction()->trigger(); // Fenster > Andockfenster > Seiten
+        dock->raise();
+        QTRY_VERIFY(dock->isVisible());
+        PagesDocker* docker = window.pagesDocker();
+        QVERIFY(docker);
+        PageThumbnailList* list = docker->list();
+        docker->updateThumbnails();
+        QCOMPARE(list->count(), 4);
+        QCOMPARE(docker->thumbnailCount(), doc.pageCount());
+        QCOMPARE(list->item(0)->text(), QStringLiteral("1: Titel"));
+        QCOMPARE(list->item(1)->text(), QStringLiteral("Seite 2"));
+        // Miniatur zeigt den Inhalt: rote Fläche auf Seite 1
+        const QImage thumb = list->item(0)->icon().pixmap(docker->sizeSlider()->value()).toImage();
+        bool hasRed = false;
+        for (int y = 0; y < thumb.height() && !hasRed; ++y)
+            for (int x = 0; x < thumb.width() && !hasRed; ++x)
+                hasRed = qRed(thumb.pixel(x, y)) > 200 && qGreen(thumb.pixel(x, y)) < 60 && qAlpha(thumb.pixel(x, y)) > 200;
+        QVERIFY(hasRed);
+        // Neue Seite über den Knopf: eine Miniatur mehr
+        auto* add = docker->findChild<QToolButton*>(QStringLiteral("addPage"));
+        QVERIFY(add);
+        QTest::mouseClick(add, Qt::LeftButton);
+        QCOMPARE(doc.pageCount(), 5);
+        QCOMPARE(ed.currentPageIndex(), 1);
+        docker->updateThumbnails();
+        QCOMPARE(docker->thumbnailCount(), 5);
+        doc.undo();
+        docker->updateThumbnails();
+        QCOMPARE(list->count(), 4);
+
+        // Suchfeld: nur passende Seiten
+        QTest::keyClicks(docker->searchField(), QStringLiteral("ckseite"));
+        int visible = 0;
+        for (int i = 0; i < list->count(); ++i)
+            visible += list->item(i)->isHidden() ? 0 : 1;
+        QCOMPARE(visible, 1);
+        docker->searchField()->clear();
+
+        // Klick wählt die Seite, Doppelklick ebenso
+        QTest::mouseClick(list->viewport(), Qt::LeftButton, {}, list->visualItemRect(list->item(2)).center());
+        QCOMPARE(ed.currentPageIndex(), 2);
+        QTest::mouseDClick(list->viewport(), Qt::LeftButton, {}, list->visualItemRect(list->item(1)).center());
+        QCOMPARE(ed.currentPageIndex(), 1);
+
+        // Seite 1 per Ziehen hinter Seite 3 (Listenansicht)
+        const NodeId titel = doc.page(0).id();
+        auto drag = [&](int fromRow, int toRow, bool afterTarget) {
+            const QRect a = list->visualItemRect(list->item(fromRow));
+            const QRect b = list->visualItemRect(list->item(toRow));
+            const QPoint start = a.center();
+            const QPoint end = docker->gridView() ? QPoint(afterTarget ? b.right() - 3 : b.left() + 3, b.center().y())
+                                                  : QPoint(b.center().x(), afterTarget ? b.bottom() - 3 : b.top() + 3);
+            QTest::mousePress(list->viewport(), Qt::LeftButton, {}, start);
+            for (int i = 1; i <= 8; ++i)
+                QTest::mouseMove(list->viewport(), start + (end - start) * i / 8);
+            QTest::mouseRelease(list->viewport(), Qt::LeftButton, {}, end);
+        };
+        drag(0, 2, true);
+        QCOMPARE(doc.page(2).id(), titel);
+        QCOMPARE(list->item(2)->text(), QStringLiteral("3: Titel"));
+        docker->updateThumbnails();
+        QCOMPARE(docker->thumbnailCount(), 4);
+        doc.undo();
+        QCOMPARE(doc.page(0).id(), titel);
+
+        // Rasteransicht über den Knopf, Miniaturgrösse über den Regler; Ziehen geht auch dort
+        auto* grid = docker->findChild<QToolButton*>(QStringLiteral("gridView"));
+        QTest::mouseClick(grid, Qt::LeftButton);
+        QVERIFY(docker->gridView());
+        docker->sizeSlider()->setValue(48);
+        QCOMPARE(list->iconSize(), QSize(48, 48));
+        QApplication::processEvents();
+        drag(3, 0, false);
+        QCOMPARE(doc.page(0).name(), QStringLiteral("Rückseite"));
+        if (!qEnvironmentVariable("VEK_SCREENSHOT_DIR").isEmpty()) {
+            docker->updateThumbnails();
+            dock->grab().save(qEnvironmentVariable("VEK_SCREENSHOT_DIR") + QStringLiteral("/70-seiten-andockfenster.png"));
+        }
+        docker->setGridView(false);
+    }
+
+    // Mehrseitenansicht: alle Seiten im Zeichenfenster, Objekt von Seite 1 auf Seite 2 ziehen
+    void multiPageViewDragBetweenPages()
+    {
+        QCoreApplication::setOrganizationName(QStringLiteral("VektoreditorTest"));
+        MainWindow window;
+        window.resize(1500, 900);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        Canvas* canvas = window.canvas();
+        Editor& ed = canvas->editor();
+        Document& doc = ed.document();
+        ed.insertPages(1, 2);
+        ed.setCurrentPageIndex(0);
+        auto rect = std::make_unique<RectangleObject>(QSizeF(40, 30));
+        Style s;
+        s.fill = Fill::solid(Color(0, 0, 255));
+        rect->setStyle(s);
+        rect->setTransform(QTransform::fromTranslate(20, 20));
+        const NodeId id = ed.addObject(std::move(rect), QStringLiteral("R"));
+        ed.clearSelection();
+        canvas->setTool(ToolId::Pick);
+
+        // Ansicht > Mehrseitenansicht
+        auto* toggle = window.findChild<QAction*>(QStringLiteral("multiPageView"));
+        QVERIFY(toggle);
+        toggle->trigger();
+        QVERIFY(canvas->multiPageView());
+        QApplication::processEvents();
+        QCOMPARE(canvas->pageLayout().size(), 3);
+        // Alle drei Seiten sichtbar, nebeneinander, je unter dem Zeiger erkannt
+        for (int i = 0; i < 3; ++i) {
+            const QRectF r = canvas->viewTransform().mapRect(canvas->pageRect(i));
+            QVERIFY2(QRectF(canvas->rect()).contains(r), qPrintable(describe(r)));
+            QCOMPARE(canvas->pageAt(r.center()), i);
+            QVERIFY(!canvas->pageLabelRect(i).isEmpty());
+        }
+        QVERIFY(canvas->pageRect(1).left() > canvas->pageRect(0).right());
+        QCOMPARE(canvas->pageRect(1).top(), canvas->pageRect(0).top());
+        // Seite 2 tatsächlich gezeichnet: Mitte weiss, Zwischenraum Arbeitsfläche
+        const QImage shot = canvas->grab().toImage();
+        const QPoint p2 = canvas->viewTransform().mapRect(canvas->pageRect(1)).center().toPoint();
+        QCOMPARE(QColor(shot.pixel(p2 * shot.devicePixelRatio())), QColor(Qt::white));
+        if (!qEnvironmentVariable("VEK_SCREENSHOT_DIR").isEmpty())
+            window.grab().save(qEnvironmentVariable("VEK_SCREENSHOT_DIR") + QStringLiteral("/71-mehrseitenansicht.png"));
+
+        // Rechteck an dieselbe Stelle auf Seite 2 ziehen
+        const QPointF start = canvas->toScreen(QPointF(40, 35));
+        const QPointF end = start + (canvas->toScreen(canvas->pageRect(1).topLeft()) - canvas->toScreen(QPointF(0, 0)));
+        const int undoBefore = doc.undoCount();
+        QTest::mousePress(canvas, Qt::LeftButton, {}, start.toPoint(), 1000);
+        for (int i = 1; i <= 10; ++i)
+            QTest::mouseMove(canvas, (start + (end - start) * i / 10.0).toPoint());
+        QTest::mouseRelease(canvas, Qt::LeftButton, {}, end.toPoint(), 10);
+        QCOMPARE(doc.pageOf(id), &doc.page(1));
+        QCOMPARE(ed.currentPageIndex(), 1);
+        QCOMPARE(ed.selection(), QList<NodeId>{id});
+        QCOMPARE(doc.undoCount(), undoBefore + 1); // Ziehen und Seitenwechsel: ein Schritt
+        const double tol = canvas->pixelsToDoc(2.0);
+        const QRectF moved = doc.findAs<DrawObject>(id)->boundingRect();
+        QVERIFY2(near(moved, QRectF(20, 20, 40, 30), tol), qPrintable(describe(moved)));
+        // bleibt am Bildschirm, wo es losgelassen wurde
+        QVERIFY((canvas->toScreen(moved.center()) - end).manhattanLength() < 4);
+        doc.undo();
+        QCOMPARE(doc.pageOf(id), &doc.page(0));
+        QVERIFY(near(doc.findAs<DrawObject>(id)->boundingRect(), QRectF(20, 20, 40, 30)));
+
+        // Klick auf Seite 3 macht sie aktuell, ohne dass sich die Ansicht verschiebt
+        const QRectF page3 = canvas->viewTransform().mapRect(canvas->pageRect(2));
+        QTest::mouseClick(canvas, Qt::LeftButton, {}, page3.center().toPoint());
+        QCOMPARE(ed.currentPageIndex(), 2);
+        QVERIFY(near(canvas->viewTransform().mapRect(canvas->pageRect(2)), page3, 0.5));
+        // Ein neues Rechteck auf Seite 3 landet auf Seite 3
+        canvas->setTool(ToolId::Rectangle);
+        const QPoint a = (page3.topLeft() + QPointF(20, 20)).toPoint();
+        QTest::mousePress(canvas, Qt::LeftButton, {}, a, 1000);
+        QTest::mouseMove(canvas, a + QPoint(30, 30));
+        QTest::mouseRelease(canvas, Qt::LeftButton, {}, a + QPoint(40, 40), 10);
+        QCOMPARE(ed.selection().size(), 1);
+        QCOMPARE(doc.pageOf(ed.selection().first()), &doc.page(2));
+
+        // Doppelseiten: Bögen ohne Abstand
+        Options::instance().set(QStringLiteral("doc/layout/facing"), true);
+        QVERIFY(std::abs(canvas->pageRect(2).left() - canvas->pageRect(1).right()) < 1e-6);
+        QVERIFY(canvas->pageRect(0).right() <= canvas->pageRect(1).left() + 1e-6);
+        Options::instance().set(QStringLiteral("doc/layout/facing"), false);
+
+        // Spaltenzahl 1: untereinander; Alle Seiten einpassen
+        Options::instance().set(QStringLiteral("doc/layout/multiColumns"), 1);
+        QCOMPARE(canvas->pageRect(1).left(), canvas->pageRect(0).left());
+        QVERIFY(canvas->pageRect(1).top() > canvas->pageRect(0).bottom());
+        canvas->fitAllPages();
+        for (int i = 0; i < 3; ++i)
+            QVERIFY(QRectF(canvas->rect()).contains(canvas->viewTransform().mapRect(canvas->pageRect(i))));
+
+        // Zurück zur Einzelseitenansicht
+        toggle->trigger();
+        QVERIFY(!canvas->multiPageView());
+        QCOMPARE(canvas->pageAt(canvas->toScreen(QPointF(10, 10))), ed.currentPageIndex());
+    }
+
+    // Mehrseitenansicht: Seitenname anklicken markiert die Seite, Kontextmenü, Grösse ziehen
+    void multiPageViewLabelsAndResize()
+    {
+        QCoreApplication::setOrganizationName(QStringLiteral("VektoreditorTest"));
+        MainWindow window;
+        window.resize(1500, 900);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        Canvas* canvas = window.canvas();
+        Editor& ed = canvas->editor();
+        Document& doc = ed.document();
+        ed.insertPages(1, 1);
+        ed.renamePage(1, QStringLiteral("Flyer"));
+        ed.setCurrentPageIndex(0);
+        canvas->setMultiPageView(true);
+        QApplication::processEvents();
+        QCOMPARE(canvas->pageTitle(1), QStringLiteral("2: Flyer"));
+
+        QTest::mouseClick(canvas, Qt::LeftButton, {}, canvas->pageLabelRect(1).center().toPoint());
+        QCOMPARE(ed.currentPageIndex(), 1);
+        QVERIFY(canvas->pageSelected());
+        auto rect = std::make_unique<RectangleObject>(QSizeF(20, 20));
+        rect->setTransform(QTransform::fromTranslate(50, 50));
+        const NodeId id = ed.addObject(std::move(rect), QStringLiteral("R"));
+        ed.clearSelection();
+        QVERIFY(canvas->pageSelected());
+
+        // Rechte Kante 20 mm nach rechts, nur diese Seite (Schalter «Aktuelle Seite»)
+        ed.setPageSizeForAllPages(false);
+        const QRectF page = canvas->viewTransform().mapRect(QRectF(QPointF(0, 0), ed.currentPage().size()));
+        const QPointF right(page.right(), page.center().y());
+        QCOMPARE(canvas->pageHandleAt(right), 3);
+        const double mm = canvas->zoom();
+        QTest::mousePress(canvas, Qt::LeftButton, {}, right.toPoint(), 1000);
+        QTest::mouseMove(canvas, (right + QPointF(10 * mm, 0)).toPoint());
+        QTest::mouseRelease(canvas, Qt::LeftButton, {}, (right + QPointF(20 * mm, 0)).toPoint(), 10);
+        const double tol = canvas->pixelsToDoc(1.5);
+        QVERIFY2(std::abs(ed.currentPage().size().width() - 230) < tol, qPrintable(QString::number(ed.currentPage().size().width())));
+        QCOMPARE(ed.currentPage().size().height(), 297.0);
+        QCOMPARE(doc.page(0).size(), QSizeF(210, 297));
+        QCOMPARE(doc.undoText(), QStringLiteral("Seitengrösse"));
+        doc.undo();
+        QCOMPARE(ed.currentPage().size(), QSizeF(210, 297));
+
+        // Umschalt + Ecke unten rechts: Seite wächst ringsum, Objekt bleibt am Bildschirm stehen
+        if (!canvas->pageSelected())
+            QTest::mouseClick(canvas, Qt::LeftButton, {}, canvas->pageLabelRect(1).center().toPoint());
+        QVERIFY(canvas->pageSelected());
+        const QPointF objectBefore = canvas->toScreen(doc.findAs<DrawObject>(id)->boundingRect().topLeft());
+        const QRectF page2 = canvas->viewTransform().mapRect(QRectF(QPointF(0, 0), ed.currentPage().size()));
+        QCOMPARE(canvas->pageHandleAt(page2.bottomRight()), 4);
+        QTest::mousePress(canvas, Qt::LeftButton, Qt::ShiftModifier, page2.bottomRight().toPoint(), 1000);
+        QTest::mouseMove(canvas, (page2.bottomRight() + QPointF(10 * mm, 10 * mm)).toPoint());
+        QTest::mouseRelease(canvas, Qt::LeftButton, Qt::ShiftModifier, (page2.bottomRight() + QPointF(10 * mm, 10 * mm)).toPoint(), 10);
+        const QSizeF grown = ed.currentPage().size();
+        QVERIFY2(std::abs(grown.width() - 230) < tol && std::abs(grown.height() - 317) < tol, qPrintable(describe(QRectF(QPointF(), grown))));
+        const QRectF b = doc.findAs<DrawObject>(id)->boundingRect();
+        QVERIFY2(near(b, QRectF(60, 60, 20, 20), tol), qPrintable(describe(b)));
+        QVERIFY((canvas->toScreen(b.topLeft()) - objectBefore).manhattanLength() < 4);
+        doc.undo();
+
+        // Schalter «Alle Seiten»: Ziehen ändert alle Seiten und die Masterseite gleich
+        ed.setPageSizeForAllPages(true);
+        ed.resizePage(1, QRectF(0, 0, 230, 297));
+        QCOMPARE(doc.page(0).size(), QSizeF(230, 297));
+        QCOMPARE(doc.page(1).size(), QSizeF(230, 297));
+        QCOMPARE(doc.masterPage().size(), QSizeF(230, 297));
+        doc.undo();
+        QCOMPARE(doc.page(0).size(), QSizeF(210, 297));
+
+        // Rechtsklick auf den Seitennamen: Kontextmenü mit den Seitenbefehlen, hier Duplizieren
+        QStringList texts;
+        QTimer poll;
+        poll.setInterval(20);
+        int stage = 0;
+        QObject::connect(&poll, &QTimer::timeout, [&] {
+            if (stage == 0) {
+                auto* menu = qobject_cast<QMenu*>(QApplication::activePopupWidget());
+                if (!menu || !menu->isVisible())
+                    return;
+                for (QAction* a : menu->actions()) {
+                    texts << a->text();
+                    if (a->text() == QStringLiteral("Seite d&uplizieren …"))
+                        menu->setActiveAction(a);
+                }
+                // Erst nach diesem Aufruf auslösen: der Befehl öffnet einen Dialog, und dieser
+                // Zeitgeber muss ihn bedienen können
+                QTimer::singleShot(0, menu, [menu] { QTest::keyClick(menu, Qt::Key_Return); });
+                stage = 1;
+            } else if (auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget())) {
+                auto* layersOnly = dialog->findChild<QRadioButton*>(QStringLiteral("layersOnly"));
+                if (!layersOnly)
+                    return;
+                layersOnly->setChecked(true);
+                dialog->accept();
+                poll.stop();
+            }
+        });
+        poll.start();
+        QTest::mouseClick(canvas, Qt::RightButton, {}, canvas->pageLabelRect(0).center().toPoint());
+        QTRY_COMPARE(doc.pageCount(), 3);
+        QVERIFY2(texts.contains(QStringLiteral("Seite &umbenennen …")), qPrintable(texts.join(QLatin1Char('|'))));
+        QCOMPARE(ed.currentPageIndex(), 1); // Kopie nach Seite 1
+        QCOMPARE(doc.page(1).child(0)->childCount(), 0);
+        QCOMPARE(canvas->pageLayout().size(), 3);
+    }
+
+    // Neues Dokument mit Mehrseitenansicht (Dialog "Neues Dokument erstellen")
+    void newDocumentMultiPageView()
+    {
+        QCoreApplication::setOrganizationName(QStringLiteral("VektoreditorTest"));
+        Options::instance().set(QStringLiteral("ws/general/newDocDialog"), true);
+        MainWindow window;
+        window.resize(1300, 900);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        QTimer poll;
+        poll.setInterval(20);
+        QObject::connect(&poll, &QTimer::timeout, [&] {
+            auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+            if (!dialog)
+                return;
+            auto* view = dialog->findChild<QComboBox*>(QStringLiteral("pageView"));
+            auto* pages = dialog->findChild<QSpinBox*>();
+            if (!view || !pages)
+                return;
+            view->setCurrentIndex(1);
+            pages->setValue(4);
+            dialog->accept();
+            poll.stop();
+        });
+        poll.start();
+        QAction* newDoc = nullptr;
+        for (QAction* a : window.findChildren<QAction*>()) {
+            if (a->text() == QStringLiteral("&Neu"))
+                newDoc = a;
+        }
+        QVERIFY(newDoc);
+        newDoc->trigger();
+        Canvas* canvas = window.canvas();
+        QCOMPARE(canvas->editor().document().pageCount(), 4);
+        QVERIFY(canvas->multiPageView());
+        QVERIFY(!canvas->editor().document().canUndo());
+        QVERIFY(!canvas->editor().document().isModified());
+        QCOMPARE(canvas->pageLayout().size(), 4);
+        // Mehrseitenansicht wird mit dem Dokument gespeichert
+        auto loaded = io::loadFromBytes(io::saveToBytes(canvas->editor().document()));
+        QVERIFY(loaded);
+        QVERIFY(loaded->masterPage().options().value(QStringLiteral("doc/layout/multiPage")).toBool());
+        Options::instance().resetWorkspace();
+    }
+
+    // Überblendung an Pfad über das Menü, ganzer Pfad mit Rückgängig; neue Bitmap-Effektgruppen
+    // wirken auf Bitmaps (Dialog) und auf Vektoren (Effektstapel)
+    void blendAlongPathAndEffectGroups()
+    {
+        QCoreApplication::setOrganizationName(QStringLiteral("VektoreditorTest"));
+        Options::instance().set(QStringLiteral("global/bitmapfx/lastValues"), false);
+        MainWindow window;
+        window.resize(1200, 800);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        Editor& ed = window.canvas()->editor();
+        auto circle = [&](const QPointF& at) {
+            auto e = std::make_unique<EllipseObject>(QSizeF(10, 10));
+            e->setTransform(QTransform::fromTranslate(at.x() - 5, at.y() - 5));
+            Style s;
+            s.fill = Fill::gradient(Fill::Type::Radial, Color(255, 255, 255), Color(0, 120, 160));
+            s.stroke.reset();
+            e->setStyle(s);
+            return ed.addObject(std::move(e), QStringLiteral("Kreis"));
+        };
+        const NodeId a = circle(QPointF(30, 40)), b = circle(QPointF(130, 40));
+        const NodeId blend = ed.blendObjects(a, b, 40);
+        QPainterPath arc(QPointF(30, 120));
+        arc.cubicTo(QPointF(30, 200), QPointF(130, 200), QPointF(130, 120));
+        const NodeId path = ed.addObject(CurveObject::fromPath(arc), QStringLiteral("Pfad"));
+
+        auto plain = [](QString text) { return text.remove(QLatin1Char('&')).remove(QStringLiteral(" …")); };
+        auto findAction = [&](const QStringList& names) -> QAction* {
+            QList<QAction*> actions = window.menuBar()->actions();
+            QAction* found = nullptr;
+            for (const QString& name : names) {
+                found = nullptr;
+                for (QAction* act : actions)
+                    if (!act->isSeparator() && plain(act->text()) == name)
+                        found = act;
+                if (!found)
+                    return nullptr;
+                if (found->menu())
+                    actions = found->menu()->actions();
+            }
+            return found;
+        };
+        auto obj = [&] { return ed.document().findAs<BlendObject>(blend); };
+        ed.setSelection({blend, path});
+        QAction* along = findAction({QStringLiteral("Effekte"), QStringLiteral("Überblendung an Pfad")});
+        QVERIFY(along);
+        const int undo = ed.document().undoCount();
+        along->trigger();
+        QVERIFY(obj()->pathObject());
+        QCOMPARE(obj()->pathObject()->id(), path);
+        QCOMPARE(ed.document().undoCount(), undo + 1);
+        // Stufen liegen jetzt am Bogen, nicht mehr auf der Geraden y = 40
+        QVERIFY(obj()->intermediates()[20]->boundingRect().center().y() > 150);
+        // Über den ganzen Pfad: Start und Ende an den Pfadenden, ein Schritt zurück stellt sie wieder hin
+        ed.setSelection({blend});
+        ed.setObjectProperty(QStringLiteral("fullPath"), true, QStringLiteral("Ganzer Pfad"));
+        QVERIFY(QLineF(obj()->start()->boundingRect().center(), QPointF(30, 120)).length() < 1e-6);
+        ed.document().undo();
+        QVERIFY(QLineF(obj()->start()->boundingRect().center(), QPointF(30, 40)).length() < 1e-6);
+        QVERIFY(!obj()->fullPath());
+        // Vom Pfad lösen: der Pfad liegt wieder für sich im Dokument
+        QVERIFY(ed.detachBlendPath(blend));
+        QVERIFY(!obj()->pathObject());
+        QVERIFY(ed.document().findAs<DrawObject>(path));
+        ed.document().undo();
+        QVERIFY(obj()->pathObject());
+        // Trennen behält Pfad und Stufen (Pfad, Start, 40 Stufen, Ende)
+        ed.setSelection({blend});
+        QVERIFY(ed.separateEffects());
+        const auto* group = node_cast<GroupObject>(ed.document().find(ed.selection().first()));
+        QVERIFY(group);
+        QCOMPARE(group->childCount(), 43);
+        ed.document().undo();
+
+        // Neue Gruppen im Menü Bitmaps, Relief an einer Vektorform landet im Effektstapel
+        for (const QStringList& entry : {QStringList{QStringLiteral("Verzerren"), QStringLiteral("Strudel")},
+                                         QStringList{QStringLiteral("3D-Effekte"), QStringLiteral("Relief")},
+                                         QStringList{QStringLiteral("3D-Effekte"), QStringLiteral("Ein-/Ausbuchten")},
+                                         QStringList{QStringLiteral("Farbtransformation"), QStringLiteral("Solarisation")},
+                                         QStringList{QStringLiteral("Kontur"), QStringLiteral("Kanten suchen")},
+                                         QStringList{QStringLiteral("Rauschen"), QStringLiteral("Rauschen hinzufügen")},
+                                         QStringList{QStringLiteral("Schärfe"), QStringLiteral("Unscharf maskieren")},
+                                         QStringList{QStringLiteral("Unschärfe"), QStringLiteral("Gaußsche Unschärfe")}})
+            QVERIFY2(findAction(QStringList{QStringLiteral("Bitmaps")} + entry), qPrintable(entry.join(QLatin1Char('>'))));
+        ed.setSelection({a});
+        bool seen = false;
+        QTimer poll;
+        poll.setInterval(20);
+        QObject::connect(&poll, &QTimer::timeout, [&] {
+            auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+            if (!dialog || !dialog->isVisible())
+                return;
+            poll.stop();
+            seen = true;
+            dialog->accept();
+        });
+        poll.start();
+        findAction({QStringLiteral("Bitmaps"), QStringLiteral("3D-Effekte"), QStringLiteral("Relief")})->trigger();
+        QVERIFY(seen);
+        const auto* start = ed.document().findAs<DrawObject>(a);
+        QCOMPARE(start->bitmapEffects().size(), 1);
+        QCOMPARE(start->bitmapEffects().first().id, QStringLiteral("3d.emboss"));
+    }
+
+    // Bitmap-Effekte: Seite aufrollen, Zylinder (Bitmaps > 3D-Effekte) und weitere Korrekturen
+    // (Effekte > Anpassen) öffnen ihre Dialoge, verändern die Bitmap und lassen sich rückgängig machen
+    void bitmapCurlCylinderAndCorrections()
+    {
+        QCoreApplication::setOrganizationName(QStringLiteral("VektoreditorTest"));
+        Options::instance().set(QStringLiteral("global/bitmapfx/lastValues"), false);
+        MainWindow window;
+        window.resize(1200, 800);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        Editor& ed = window.canvas()->editor();
+        QImage pixels(60, 40, QImage::Format_RGB32);
+        for (int y = 0; y < pixels.height(); ++y)
+            for (int x = 0; x < pixels.width(); ++x)
+                pixels.setPixelColor(x, y, x < 30 ? QColor(200, 60 + y, 40) : QColor(40 + x, 150, 210 - y));
+        auto object = std::make_unique<ImageObject>(imagepool::addImage(pixels), QSizeF(60, 40));
+        object->setTransform(QTransform::fromTranslate(20, 20));
+        const NodeId id = ed.addObject(std::move(object), QStringLiteral("Bild"));
+        ed.setSelection({id});
+        QVERIFY(ed.selectedImage());
+
+        auto plain = [](QString text) { return text.remove(QLatin1Char('&')).remove(QStringLiteral(" …")); };
+        auto findAction = [&](const QStringList& path) -> QAction* {
+            QList<QAction*> actions = window.menuBar()->actions();
+            QAction* found = nullptr;
+            for (const QString& name : path) {
+                found = nullptr;
+                for (QAction* a : actions)
+                    if (!a->isSeparator() && plain(a->text()) == name)
+                        found = a;
+                if (!found)
+                    return nullptr;
+                if (found->menu())
+                    actions = found->menu()->actions();
+            }
+            return found;
+        };
+        // Eintrag auslösen, den modalen Dialog bedienen; liefert true, wenn der Dialog erschien
+        auto run = [&](const QStringList& path, const std::function<void(QDialog*)>& drive) {
+            QAction* action = findAction(path);
+            if (!action)
+                return false;
+            bool seen = false;
+            QTimer poll;
+            poll.setInterval(20);
+            QObject::connect(&poll, &QTimer::timeout, [&] {
+                auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+                if (!dialog || !dialog->isVisible())
+                    return;
+                poll.stop();
+                seen = true;
+                drive(dialog);
+                dialog->accept();
+            });
+            poll.start();
+            action->trigger();
+            return seen;
+        };
+        auto current = [&] { return ed.selectedImage()->image(); };
+        auto check = [&](const QStringList& path, const std::function<void(QDialog*)>& drive) {
+            const QImage before = current();
+            const int undo = ed.document().undoCount();
+            QVERIFY2(run(path, drive), qPrintable(path.join(QLatin1Char('>'))));
+            QVERIFY2(current() != before, qPrintable(path.join(QLatin1Char('>'))));
+            QCOMPARE(ed.document().undoCount(), undo + 1);
+            ed.document().undo();
+            QCOMPARE(current(), before);
+            ed.setSelection({id});
+        };
+        const QString effects = QStringLiteral("Effekte"), adjustMenu = QStringLiteral("Anpassen");
+
+        // Korrekturen stehen unter Effekte > Anpassen, nicht im Menü Bitmaps
+        for (const char* name : {"Lokaler Ausgleich", "Proben-/Zielabgleich", "Selektive Farbe", "Farben ersetzen", "Kanalmixer"}) {
+            QVERIFY2(findAction({effects, adjustMenu, QString::fromUtf8(name)}), name);
+            QVERIFY2(!findAction({QStringLiteral("Bitmaps"), QString::fromUtf8(name)}), name);
+        }
+
+        check({effects, adjustMenu, QStringLiteral("Lokaler Ausgleich")}, [](QDialog* d) {
+            auto* fx = qobject_cast<EffectDialog*>(d);
+            QVERIFY(fx);
+            fx->setValues({10, 10});
+        });
+
+        // Proben-/Zielabgleich: Pipette der Mitteltöne, dann in die Vorschau klicken (rote Hälfte)
+        check({effects, adjustMenu, QStringLiteral("Proben-/Zielabgleich")}, [](QDialog* d) {
+            auto* st = qobject_cast<SampleTargetDialog*>(d);
+            QVERIFY(st);
+            QTest::mouseClick(st->pickButton(1), Qt::LeftButton);
+            QVERIFY(st->isPicking());
+            QLabel* preview = st->previewLabel();
+            QTest::mouseClick(preview, Qt::LeftButton, {}, preview->rect().center() - QPoint(15, 0));
+            QVERIFY(!st->isPicking());
+            const Color sample = st->samples()[1];
+            QCOMPARE(int(sample.r), 200);
+            QCOMPARE(int(sample.b), 40);
+            const Color target = st->targets()[1];
+            QCOMPARE(target.r, target.b); // neutrales Grau
+        });
+
+        check({effects, adjustMenu, QStringLiteral("Selektive Farbe")}, [](QDialog* d) {
+            auto* sc = qobject_cast<SelectiveColorDialog*>(d);
+            QVERIFY(sc);
+            sc->setRange(int(adjust::ColorRange::Reds));
+            const auto sliders = sc->findChildren<QSlider*>();
+            QVERIFY(sliders.size() >= 4);
+            sliders[0]->setValue(80); // Cyan in den Rottönen
+            QCOMPARE(sc->settings().cmyk[0][0], 80);
+            sc->setRange(int(adjust::ColorRange::Blues));
+            QCOMPARE(sliders[0]->value(), 0);
+        });
+
+        // Farben ersetzen: alte Farbe mit der Pipette aus der blauen Hälfte
+        check({effects, adjustMenu, QStringLiteral("Farben ersetzen")}, [](QDialog* d) {
+            auto* rc = qobject_cast<ReplaceColorsDialog*>(d);
+            QVERIFY(rc);
+            QTest::mouseClick(rc->pickButton(), Qt::LeftButton);
+            QLabel* preview = rc->previewLabel();
+            QTest::mouseClick(preview, Qt::LeftButton, {}, preview->rect().center() + QPoint(15, 0));
+            QCOMPARE(int(rc->settings().oldColor.g), 150);
+            adjust::ReplaceColors s = rc->settings();
+            s.newColor = Color(250, 200, 0);
+            rc->setSettings(s);
+        });
+
+        check({effects, adjustMenu, QStringLiteral("Kanalmixer")}, [](QDialog* d) {
+            auto* cm = qobject_cast<ChannelMixerDialog*>(d);
+            QVERIFY(cm);
+            cm->setOutputChannel(0);
+            const auto sliders = cm->findChildren<QSlider*>();
+            sliders[0]->setValue(0);
+            sliders[2]->setValue(100); // Rot aus Blau
+            QCOMPARE(cm->settings().rows[0][2], 100);
+            QCOMPARE(cm->settings().rows[1][1], 100);
+        });
+
+        check({QStringLiteral("Bitmaps"), QStringLiteral("3D-Effekte"), QStringLiteral("Zylinder")}, [](QDialog* d) {
+            auto* cy = qobject_cast<CylinderDialog*>(d);
+            QVERIFY(cy);
+            cy->setValues(90, false);
+        });
+
+        check({QStringLiteral("Bitmaps"), QStringLiteral("3D-Effekte"), QStringLiteral("Seite aufrollen")}, [](QDialog* d) {
+            auto* pc = qobject_cast<PageCurlDialog*>(d);
+            QVERIFY(pc);
+            QTest::mouseClick(pc->cornerButton(filters::PageCurl::TopLeft), Qt::LeftButton);
+            QCOMPARE(pc->settings().corner, filters::PageCurl::TopLeft);
+            // Vorschau: Ecke oben links zeigt den (weissen) Hintergrund
+            const QImage shown = pc->previewImage();
+            QCOMPARE(shown.pixelColor(0, 0).rgb(), QColor(Qt::white).rgb());
+            if (const QString dir = qEnvironmentVariable("VEK_SCREENSHOT_DIR"); !dir.isEmpty())
+                pc->grab().save(dir + QStringLiteral("/fx-pagecurl-dialog.png"));
+        });
+        // Endergebnis einmal angewendet lassen: Ecke oben links ist Hintergrund, unten rechts unverändert
+        QVERIFY(run({QStringLiteral("Bitmaps"), QStringLiteral("3D-Effekte"), QStringLiteral("Seite aufrollen")}, [](QDialog* d) {
+            qobject_cast<PageCurlDialog*>(d)->cornerButton(filters::PageCurl::TopLeft)->click();
+        }));
+        const QImage result = current();
+        QCOMPARE(result.pixelColor(0, 0).rgb(), QColor(Qt::white).rgb());
+        QCOMPARE(result.pixelColor(59, 39).rgb(), pixels.pixelColor(59, 39).rgb());
+        Options::instance().set(QStringLiteral("global/bitmapfx/lastValues"), true);
+    }
+
+    // --- Effektstapel: nicht-destruktive Bitmap-Effekte, Rahmen, SuperClip ---------------------
+
+    void liveBitmapEffectOnRectangle()
+    {
+        QCoreApplication::setOrganizationName(QStringLiteral("VektoreditorTest"));
+        MainWindow window;
+        window.resize(1300, 900);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        Canvas* canvas = window.canvas();
+        Editor& ed = canvas->editor();
+        Document& doc = ed.document();
+        // Rechteck mit der Maus zeichnen, rot füllen, dicke schwarze Kontur
+        canvas->setTool(ToolId::Rectangle);
+        const auto at = [canvas](double x, double y) { return canvas->toScreen(QPointF(x, y)).toPoint(); };
+        QTest::mousePress(canvas, Qt::LeftButton, {}, at(40, 40), 1000);
+        for (int i = 1; i <= 4; ++i)
+            QTest::mouseMove(canvas, at(40 + 15 * i, 40 + 10 * i));
+        QTest::mouseRelease(canvas, Qt::LeftButton, {}, at(100, 80), 10);
+        QCOMPARE(ed.selection().size(), 1);
+        const NodeId rect = ed.selection().first();
+        QVERIFY(doc.findAs<RectangleObject>(rect));
+        ed.setSelectionFill(Fill::solid(Color(230, 20, 20)));
+        ed.setSelectionStroke(Color(0, 0, 0));
+        ed.setSelectionStrokeWidth(1.5);
+        canvas->setTool(ToolId::Pick);
+        ed.setSelection({});
+        QTest::mouseClick(canvas, Qt::LeftButton, {}, at(70, 60), 1000);
+        QCOMPARE(ed.selection(), QList<NodeId>{rect});
+
+        // Bitmaps > Unschärfe > Weichzeichnen: Dialog bestätigen
+        QMenu* bitmaps = nullptr;
+        for (QAction* a : window.menuBar()->actions())
+            if (a->text() == MainWindow::tr("&Bitmaps"))
+                bitmaps = a->menu();
+        QVERIFY(bitmaps);
+        auto submenu = [](QMenu* menu, const QString& title) -> QMenu* {
+            for (QAction* a : menu->actions())
+                if (a->menu() && a->text().remove(QLatin1Char('&')) == title)
+                    return a->menu();
+            return nullptr;
+        };
+        auto entry = [](QMenu* menu, const QString& name) -> QAction* {
+            for (QAction* a : menu->actions())
+                if (a->text().remove(QLatin1Char('&')).remove(QStringLiteral(" …")) == name)
+                    return a;
+            return nullptr;
+        };
+        QMenu* blur = submenu(bitmaps, QStringLiteral("Unschärfe"));
+        QVERIFY(blur);
+        emit bitmaps->aboutToShow();
+        QAction* soften = entry(blur, QStringLiteral("Weichzeichnen"));
+        QVERIFY(soften);
+        QVERIFY(soften->isEnabled()); // auch ohne Bitmap
+        bool sawDialog = false;
+        QTimer poll;
+        poll.setInterval(20);
+        QObject::connect(&poll, &QTimer::timeout, [&] {
+            auto* dialog = qobject_cast<EffectDialog*>(QApplication::activeModalWidget());
+            if (!dialog)
+                return;
+            sawDialog = true;
+            dialog->setValues({100});
+            dialog->accept();
+            poll.stop();
+        });
+        poll.start();
+        soften->trigger();
+        QVERIFY(sawDialog);
+        // Objekt bleibt ein Rechteck, mit einem Effekt im Stapel; ein Rückgängig-Schritt
+        const auto* obj = doc.findAs<RectangleObject>(rect);
+        QVERIFY(obj);
+        QCOMPARE(obj->bitmapEffects().size(), 1);
+        QCOMPARE(obj->bitmapEffects().first().id, QStringLiteral("blur.soften"));
+        QCOMPARE(obj->bitmapEffects().first().values, QList<int>{100});
+        QCOMPARE(doc.undoText(), QStringLiteral("Weichzeichnen"));
+
+        // Andockfenster "Effekte" zeigt den Stapel
+        BitmapEffectsDocker* docker = window.bitmapEffectsDocker();
+        QVERIFY(docker);
+        QTRY_COMPARE(docker->list()->count(), 1);
+        QCOMPARE(docker->list()->item(0)->text(), QStringLiteral("Weichzeichnen"));
+        QCOMPARE(docker->list()->item(0)->checkState(), Qt::Checked);
+
+        // Gerenderte Pixel: mit Effekt anders als ohne (Kante Rot/Schwarz wird weich)
+        auto render = [&] {
+            QImage img(QSize(360, 260), QImage::Format_ARGB32_Premultiplied);
+            img.fill(Qt::white);
+            QPainter p(&img);
+            canvas->renderPage(p, 0, 4.0, QPointF(-120, -120), false);
+            return img;
+        };
+        const QImage withEffect = render();
+        if (!qEnvironmentVariable("VEK_SCREENSHOT_DIR").isEmpty()) {
+            QApplication::processEvents();
+            window.grab().save(qEnvironmentVariable("VEK_SCREENSHOT_DIR") + QStringLiteral("/fx-01-weichzeichnen.png"));
+        }
+        // Auge aus (Häkchen im Andockfenster)
+        docker->list()->item(0)->setCheckState(Qt::Unchecked);
+        QVERIFY(!doc.findAs<DrawObject>(rect)->bitmapEffects().first().enabled);
+        QVERIFY(!doc.findAs<DrawObject>(rect)->hasBitmapEffects());
+        const QImage without = render();
+        QVERIFY(withEffect != without);
+        int changed = 0;
+        for (int y = 0; y < without.height(); ++y)
+            for (int x = 0; x < without.width(); ++x)
+                changed += withEffect.pixel(x, y) != without.pixel(x, y);
+        QVERIFY2(changed > 50, qPrintable(QString::number(changed)));
+        // Mitte bleibt rot, ausserhalb weiss
+        QCOMPARE(QColor(withEffect.pixel(130, 100)).red(), 230);
+        QCOMPARE(withEffect.pixel(5, 5), qRgb(255, 255, 255));
+        // Rückgängig: Auge wieder an, gleiche Pixel wie vorher
+        doc.undo();
+        QVERIFY(doc.findAs<DrawObject>(rect)->bitmapEffects().first().enabled);
+        QTRY_COMPARE(docker->list()->item(0)->checkState(), Qt::Checked);
+        QVERIFY(render() == withEffect);
+        // Rückgängig des Effekts selbst
+        doc.undo();
+        QVERIFY(doc.findAs<DrawObject>(rect)->bitmapEffects().isEmpty());
+        QTRY_COMPARE(docker->list()->count(), 0);
+        QVERIFY(render() == without);
+        doc.redo();
+        QCOMPARE(doc.findAs<DrawObject>(rect)->bitmapEffects().size(), 1);
+        QTRY_COMPARE(docker->list()->count(), 1);
+
+        // Zweiter Effekt, Reihenfolge, Bearbeiten mit gespeicherten Werten, Löschen
+        BitmapEffect posterize = fx::defaults(*fx::find(QStringLiteral("art.posterize")));
+        QVERIFY(ed.addBitmapEffect(posterize, QStringLiteral("Posterisieren")));
+        QTRY_COMPARE(docker->list()->count(), 2);
+        docker->moveEffect(1, -1);
+        QCOMPARE(doc.findAs<DrawObject>(rect)->bitmapEffects().first().id, QStringLiteral("art.posterize"));
+        QList<int> shownValues;
+        QTimer poll2;
+        poll2.setInterval(20);
+        QObject::connect(&poll2, &QTimer::timeout, [&] {
+            auto* dialog = qobject_cast<EffectDialog*>(QApplication::activeModalWidget());
+            if (!dialog)
+                return;
+            shownValues = dialog->values();
+            dialog->setValues({40});
+            dialog->accept();
+            poll2.stop();
+        });
+        poll2.start();
+        QVERIFY(docker->editEffect(1)); // Weichzeichnen
+        QCOMPARE(shownValues, QList<int>{100});
+        QCOMPARE(doc.findAs<DrawObject>(rect)->bitmapEffects()[1].values, QList<int>{40});
+        docker->removeEffect(0);
+        QCOMPARE(doc.findAs<DrawObject>(rect)->bitmapEffects().size(), 1);
+
+        // Effekte anwenden: wird zum Bild an derselben Stelle
+        const QRectF before = doc.findAs<DrawObject>(rect)->boundingRect();
+        const NodeId image = docker->applyEffects();
+        QVERIFY(image != InvalidNodeId);
+        const auto* img = doc.findAs<ImageObject>(image);
+        QVERIFY(img);
+        QVERIFY(!doc.find(rect));
+        QVERIFY(img->bitmapEffects().isEmpty());
+        QVERIFY(img->boundingRect().contains(before));
+        QVERIFY(img->boundingRect().width() < before.width() + 8);
+        QCOMPARE(doc.undoText(), QStringLiteral("Effekte anwenden"));
+        doc.undo();
+        QVERIFY(doc.findAs<RectangleObject>(rect));
+    }
+
+    void frameEffectOnPhoto()
+    {
+        QCoreApplication::setOrganizationName(QStringLiteral("VektoreditorTest"));
+        MainWindow window;
+        window.resize(1300, 900);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        Editor& ed = window.canvas()->editor();
+        Document& doc = ed.document();
+        // "Foto": Farbverlauf, voll deckend
+        QImage pixels(300, 200, QImage::Format_RGB32);
+        for (int y = 0; y < pixels.height(); ++y)
+            for (int x = 0; x < pixels.width(); ++x)
+                pixels.setPixel(x, y, qRgb(x * 255 / 300, 120, y * 255 / 200));
+        auto photo = std::make_unique<ImageObject>(imagepool::addImage(pixels), QSizeF(60, 40));
+        photo->setTransform(QTransform::fromTranslate(30, 30));
+        const NodeId id = ed.addObject(std::move(photo), QStringLiteral("Foto"));
+        ed.setSelection({id});
+
+        QMenu* bitmaps = nullptr;
+        for (QAction* a : window.menuBar()->actions())
+            if (a->text() == MainWindow::tr("&Bitmaps"))
+                bitmaps = a->menu();
+        QMenu* creative = nullptr;
+        for (QAction* a : bitmaps->actions())
+            if (a->menu() && a->text().remove(QLatin1Char('&')) == QStringLiteral("Kreativ"))
+                creative = a->menu();
+        QVERIFY(creative);
+        QAction* frame = nullptr;
+        for (QAction* a : creative->actions())
+            if (a->text() == QStringLiteral("Rahmen …"))
+                frame = a;
+        QVERIFY(frame);
+        int templates = 0;
+        QTimer poll;
+        poll.setInterval(20);
+        QObject::connect(&poll, &QTimer::timeout, [&] {
+            auto* dialog = qobject_cast<FrameDialog*>(QApplication::activeModalWidget());
+            if (!dialog)
+                return;
+            templates = dialog->templates()->count();
+            dialog->templates()->setCurrentRow(0); // gerissenes Papier
+            dialog->modeBox()->setCurrentIndex(0);  // Maske
+            if (!qEnvironmentVariable("VEK_SCREENSHOT_DIR").isEmpty())
+                dialog->grab().save(qEnvironmentVariable("VEK_SCREENSHOT_DIR") + QStringLiteral("/fx-02-rahmen-dialog.png"));
+            dialog->accept();
+            poll.stop();
+        });
+        poll.start();
+        frame->trigger();
+        QCOMPARE(templates, 8);
+        // Bitmap: Pixel direkt geändert (destruktiv), Ränder durchsichtig, Mitte unverändert
+        const auto* img = doc.findAs<ImageObject>(id);
+        QVERIFY(img->bitmapEffects().isEmpty());
+        const QImage result = img->image().convertToFormat(QImage::Format_ARGB32);
+        QCOMPARE(result.size(), pixels.size());
+        QVERIFY(qAlpha(result.pixel(0, 0)) < 30);
+        QVERIFY(qAlpha(result.pixel(150, 0)) < 80);
+        QVERIFY(qAlpha(result.pixel(299, 100)) < 80);
+        QCOMPARE(qAlpha(result.pixel(150, 100)), 255);
+        QCOMPARE(result.pixel(150, 100) & 0xffffff, pixels.pixel(150, 100) & 0xffffff);
+        int transparent = 0;
+        for (int x = 0; x < 300; ++x)
+            transparent += qAlpha(result.pixel(x, 10)) < 128;
+        // Ausgefranst: in 10 px Tiefe teils Bild, teils durchsichtig
+        QVERIFY2(transparent > 5 && transparent < 295, qPrintable(QString::number(transparent)));
+        doc.undo();
+        QCOMPARE(qAlpha(doc.findAs<ImageObject>(id)->image().convertToFormat(QImage::Format_ARGB32).pixel(0, 0)), 255);
+    }
+
+    void superClipFramedByLiveEffect()
+    {
+        // Rahmen mit Live-Effekt "Rahmen" (gerissen): der Inhalt wird an der gerasterten Kante
+        // beschnitten, nicht am Rechteck
+        auto addRect = [this](const QRectF& r, const Color& c) {
+            auto o = std::make_unique<RectangleObject>(r.size());
+            o->setTransform(QTransform::fromTranslate(r.left(), r.top()));
+            Style s;
+            s.fill = Fill::solid(c);
+            s.stroke.reset();
+            o->setStyle(s);
+            return m_editor->addObject(std::move(o), QStringLiteral("R"));
+        };
+        const NodeId frame = addRect(QRectF(20, 20, 80, 60), Color(255, 255, 0));
+        const NodeId content = addRect(QRectF(0, 0, 150, 120), Color(0, 0, 255));
+        auto render = [this] {
+            QImage img(QSize(480, 400), QImage::Format_ARGB32_Premultiplied);
+            img.fill(Qt::white);
+            QPainter p(&img);
+            m_canvas->renderPage(p, 0, 4.0, QPointF(0, 0), false);
+            return img;
+        };
+        m_editor->setSelection({content});
+        const NodeId clip = m_editor->placeInsideFrame(frame);
+        QVERIFY(clip != InvalidNodeId);
+        // Ohne Effekt: Vektorpfad, Inhalt bis in die Ecke
+        const QPoint corner(20 * 4 + 1, 20 * 4 + 1), middle(60 * 4, 50 * 4);
+        QImage plain = render();
+        QCOMPARE(plain.pixel(corner), qRgb(0, 0, 255));
+        QCOMPARE(plain.pixel(middle), qRgb(0, 0, 255));
+        // Rahmeneffekt am Rahmen (erstes Kind des SuperClip)
+        m_editor->setSelection({frame});
+        const BitmapEffect frameFx = fx::defaults(*fx::find(QStringLiteral("creative.frame")));
+        QVERIFY(m_editor->addBitmapEffect(frameFx, QStringLiteral("Rahmen")));
+        QVERIFY(m_editor->document().findAs<DrawObject>(frame)->hasBitmapEffects());
+        const QImage framed = render();
+        if (!qEnvironmentVariable("VEK_SCREENSHOT_DIR").isEmpty())
+            framed.save(qEnvironmentVariable("VEK_SCREENSHOT_DIR") + QStringLiteral("/fx-03-superclip-rahmen.png"));
+        QCOMPARE(framed.pixel(middle), qRgb(0, 0, 255));
+        QVERIFY(qRed(framed.pixel(corner)) > 200); // Ecke abgerissen: Seite sichtbar
+        QCOMPARE(framed.pixel(QPoint(10, 10)), qRgb(255, 255, 255));
+        // Entlang der Kante (4 mm innen): teils Inhalt, teils weg – ausgefranst statt gerade
+        int blue = 0, white = 0;
+        for (int x = 25 * 4; x < 95 * 4; ++x) {
+            const QRgb c = framed.pixel(x, 24 * 4);
+            blue += c == qRgb(0, 0, 255);
+            white += qRed(c) > 240 && qBlue(c) > 240;
+        }
+        QVERIFY2(blue > 10 && white > 10, qPrintable(QStringLiteral("%1 %2").arg(blue).arg(white)));
+        // Vektorumriss bleibt das Rechteck
+        QCOMPARE(m_editor->document().findAs<DrawObject>(clip)->boundingRect(), QRectF(20, 20, 80, 60));
+        // Effekt aus: wieder gerade beschnitten
+        m_editor->document().undo();
+        QCOMPARE(render().pixel(corner), qRgb(0, 0, 255));
+    }
+
+    // --- Künstlerische Medien: Sprühdose, Pinsel, Strichbibliothek --------------------------
+private:
+    QColor canvasPixel(const QPointF& doc) { return m_canvas->grab().toImage().pixelColor(screen(doc)); }
+    void shot(QWidget& w, const QString& name)
+    {
+        const QString dir = qEnvironmentVariable("VEK_SCREENSHOT_DIR");
+        if (!dir.isEmpty())
+            w.grab().save(dir + QLatin1Char('/') + name + QStringLiteral(".png"));
+    }
+
+private slots:
+    void mediaSprayerFromPropertyBar()
+    {
+        QTemporaryDir dir;
+        MediaLibrary::instance().setFilePath(dir.filePath(QStringLiteral("medien.json")));
+        PropertyBar bar(*m_editor, *m_canvas);
+        bar.resize(1600, bar.sizeHint().height());
+        bar.show();
+        m_canvas->setTool(ToolId::ArtisticMedia);
+        auto* sprayMode = bar.findChild<QToolButton*>(QStringLiteral("mediaMode%1").arg(int(ArtisticMedia::Kind::Sprayer)));
+        QVERIFY(sprayMode && sprayMode->isEnabled());
+        QTest::mouseClick(sprayMode, Qt::LeftButton);
+        QCoreApplication::processEvents();
+        QCOMPARE(m_canvas->mediaTool().media().kind, ArtisticMedia::Kind::Sprayer);
+        // Sprühliste "Herzen" wählen, Grösse 6 mm, Abstand 7 mm
+        QComboBox* lists = nullptr;
+        for (QComboBox* c : bar.findChildren<QComboBox*>(QStringLiteral("sprayList")))
+            if (c->isVisibleTo(&bar))
+                lists = c;
+        QVERIFY(lists);
+        const int hearts = lists->findText(pathops::sprayListName(3));
+        QVERIFY(hearts >= 0);
+        lists->setCurrentIndex(hearts);
+        emit lists->activated(hearts);
+        QCOMPARE(m_canvas->mediaTool().media().sprayList, 3);
+        ArtisticMedia media = m_canvas->mediaTool().media();
+        media.width = 6.0;
+        media.spacing = 7.0;
+        m_canvas->mediaTool().setMedia(media);
+        m_canvas->notifyToolState();
+        shot(bar, QStringLiteral("fx-media-01-leiste-spruehdose"));
+
+        // Freihandstrich mit der Maus: Herzen entlang der Spur
+        press(screen(QPointF(30, 120)));
+        for (int i = 1; i <= 40; ++i)
+            move(screen(QPointF(30 + 3.0 * i, 120 - 25 * std::sin(i * M_PI / 20))));
+        release(screen(QPointF(150, 120)));
+        const NodeId id = m_editor->selection().value(0);
+        const auto* c = m_editor->document().findAs<CurveObject>(id);
+        QVERIFY(c && c->media().kind == ArtisticMedia::Kind::Sprayer && c->media().sprayList == 3);
+        const ArtItem pieces = c->mediaPieces();
+        QVERIFY2(pieces.size() >= 15, qPrintable(QString::number(pieces.size())));
+        int colored = 0;
+        for (const ArtPiece& p : pieces) {
+            QVERIFY(p.path.boundingRect().width() <= 6.01);
+            const QColor seen = canvasPixel(p.path.boundingRect().center());
+            if (seen.red() > 180 && seen.green() < 170)
+                ++colored; // rot/rosa
+        }
+        QVERIFY2(colored >= pieces.size() / 2, qPrintable(QString::number(colored)));
+        QCOMPARE(MediaLibrary::instance().recent().value(0).media.sprayList, 3);
+        screenshot(QStringLiteral("fx-media-02-spruehdose"));
+
+        // Parameter wirken live auf den gewählten Strich: drei Objekte je Tupfer
+        auto* count = bar.findChild<QDoubleSpinBox*>(QStringLiteral("sprayCount"));
+        QVERIFY(count);
+        count->setValue(3);
+        emit count->editingFinished();
+        QCOMPARE(m_editor->document().findAs<CurveObject>(id)->media().dabCount, 3);
+        QCOMPARE(m_editor->document().findAs<CurveObject>(id)->mediaPieces().size(), 3 * pieces.size());
+
+        // Strg+K trennt in eine Gruppe der Herzen und das Rückgrat
+        QVERIFY(m_editor->canBreakApartSelection());
+        m_editor->breakApartSelection();
+        QCOMPARE(m_editor->selection().size(), 2);
+        const auto* group = m_editor->document().findAs<GroupObject>(m_editor->selection().value(0));
+        const auto* spine = m_editor->document().findAs<CurveObject>(m_editor->selection().value(1));
+        QVERIFY(group && spine);
+        QCOMPARE(group->childCount(), int(3 * pieces.size()));
+        QVERIFY(!spine->media().isActive());
+        m_editor->document().undo();
+        QVERIFY(m_editor->document().findAs<CurveObject>(id));
+        m_canvas->setTool(ToolId::Pick);
+    }
+
+    void mediaBrushFollowsNodeMove()
+    {
+        QTemporaryDir dir;
+        MediaLibrary::instance().setFilePath(dir.filePath(QStringLiteral("medien.json")));
+        PropertyBar bar(*m_editor, *m_canvas);
+        m_canvas->setTool(ToolId::ArtisticMedia);
+        auto* brushMode = bar.findChild<QToolButton*>(QStringLiteral("mediaMode%1").arg(int(ArtisticMedia::Kind::Brush)));
+        QVERIFY(brushMode && brushMode->isEnabled());
+        QTest::mouseClick(brushMode, Qt::LeftButton);
+        QCOMPARE(m_canvas->mediaTool().media().kind, ArtisticMedia::Kind::Brush);
+        QVERIFY(!m_canvas->mediaTool().media().art.isEmpty());
+        // Regenbogen (eingebaut, gestreckt), 8 mm breit
+        ArtisticMedia media = MediaLibrary::instance().brushes().at(0).media;
+        media.width = 8.0;
+        m_canvas->mediaTool().setMedia(media);
+        m_canvas->setTool(ToolId::Pick);
+        const NodeId line = addOpenLine({QPointF(30, 100), QPointF(130, 100)});
+        m_editor->setSelection({line});
+        QVERIFY(m_editor->applyMediaToSelection(media, QStringLiteral("Pinsel")));
+        const NodeId brushId = m_editor->selection().value(0);
+        const auto* c = m_editor->document().findAs<CurveObject>(brushId);
+        QVERIFY(c && c->media().kind == ArtisticMedia::Kind::Brush);
+        QVERIFY2(near(c->boundingRect(), QRectF(30, 96, 100, 8), 0.05), qPrintable(describe(c->boundingRect())));
+        // Farben der Vorlage: oben rot, unten violett
+        QColor top = canvasPixel(QPointF(80, 96.5)), bottom = canvasPixel(QPointF(80, 103.5));
+        QVERIFY2(top.red() > 180 && top.blue() < 120, qPrintable(top.name()));
+        QVERIFY2(bottom.blue() > 120 && bottom.green() < 100, qPrintable(bottom.name()));
+        screenshot(QStringLiteral("fx-media-03-pinsel"));
+
+        // Formwerkzeug: Endknoten nach unten ziehen, der Pinselstrich folgt
+        m_canvas->setTool(ToolId::Shape);
+        drag(screen(QPointF(130, 100)), screen(QPointF(130, 150)));
+        const auto* moved = m_editor->document().findAs<CurveObject>(brushId);
+        QVERIFY(moved);
+        QVERIFY2(moved->boundingRect().bottom() > 150, qPrintable(describe(moved->boundingRect())));
+        const QPointF mid(80, 125); // Mitte der schrägen Linie
+        QColor seen = canvasPixel(mid);
+        QVERIFY2(seen != QColor(Qt::white), qPrintable(seen.name()));
+        screenshot(QStringLiteral("fx-media-04-pinsel-knoten"));
+        m_canvas->setTool(ToolId::Pick);
+
+        // Wiederholen: mehr Teile als beim Strecken
+        const int stretched = int(moved->mediaPieces().size());
+        m_editor->setSelection({moved->id()});
+        ArtisticMedia repeat = MediaLibrary::instance().brushes().at(2).media; // Perlenkette
+        repeat.width = 4.0;
+        QVERIFY(m_editor->applyMediaToSelection(repeat, QStringLiteral("Pinsel")));
+        const auto* beads = m_editor->document().findAs<CurveObject>(m_editor->selection().value(0));
+        QVERIFY(beads->media().brushRepeat);
+        QVERIFY2(beads->mediaPieces().size() > 3 * stretched, qPrintable(QString::number(beads->mediaPieces().size())));
+        screenshot(QStringLiteral("fx-media-05-perlenkette"));
+        // Strg+K: Gruppe der Teile und Rückgrat
+        m_editor->breakApartSelection();
+        QVERIFY(m_editor->document().findAs<GroupObject>(m_editor->selection().value(0)));
+        QVERIFY(m_editor->document().findAs<CurveObject>(m_editor->selection().value(1)));
+    }
+
+    void mediaDockerSavesAndAppliesStroke()
+    {
+        QTemporaryDir dir;
+        MediaLibrary::instance().setFilePath(dir.filePath(QStringLiteral("medien.json")));
+        // Vorlage: grünes Rechteck mit oranger Ellipse darauf
+        const NodeId rect = drawRect(QRectF(20, 30, 40, 10));
+        m_editor->setSelectionFill(Fill::solid(Color(0, 160, 0)));
+        m_editor->setSelectionStroke(std::nullopt);
+        auto e = std::make_unique<EllipseObject>(QSizeF(10, 10));
+        e->setTransform(QTransform::fromTranslate(60, 30));
+        Style s;
+        s.fill = Fill::solid(Color(255, 140, 0));
+        s.stroke.reset();
+        e->setStyle(s);
+        const NodeId ellipse = m_editor->addObject(std::move(e), QStringLiteral("E"));
+        m_editor->setSelection({rect, ellipse});
+
+        MediaDocker docker(*m_editor, *m_canvas);
+        docker.resize(260, 520);
+        docker.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&docker));
+        auto* save = docker.findChild<QPushButton*>(QStringLiteral("mediaSave"));
+        auto* type = docker.findChild<QComboBox*>(QStringLiteral("mediaSaveType"));
+        auto* name = docker.findChild<QLineEdit*>(QStringLiteral("mediaSaveName"));
+        QVERIFY(save && type && name && save->isEnabled());
+        type->setCurrentIndex(0); // Pinselstrich
+        QTest::keyClicks(name, QStringLiteral("Grasland"));
+        QTest::mouseClick(save, Qt::LeftButton);
+        QCOMPARE(MediaLibrary::instance().user().size(), 1);
+        const MediaStroke saved = MediaLibrary::instance().user().first();
+        QCOMPARE(saved.name, QStringLiteral("Grasland"));
+        QCOMPARE(saved.media.kind, ArtisticMedia::Kind::Brush);
+        QCOMPARE(saved.media.art.value(0).size(), 2);
+        QVERIFY(std::abs(saved.media.width - 10.0) < kTol); // Höhe der Vorlage
+        QCOMPARE(docker.category(), MediaDocker::Category::User);
+        QCOMPARE(docker.list()->count(), 1);
+        // Auch als Sprühliste: je Objekt ein Eintrag
+        type->setCurrentIndex(1);
+        QTest::mouseClick(save, Qt::LeftButton);
+        QCoreApplication::processEvents();
+        QCOMPARE(MediaLibrary::instance().user().size(), 2);
+        QCOMPARE(MediaLibrary::instance().user().at(1).media.art.size(), 2);
+        QCOMPARE(docker.list()->count(), 2);
+        shot(docker, QStringLiteral("fx-media-06-docker"));
+
+        // Linie wählen und den eigenen Pinsel mit einem Klick anwenden
+        const NodeId line = addOpenLine({QPointF(20, 120), QPointF(70, 90), QPointF(140, 130)}, true);
+        m_editor->setSelection({line});
+        QListWidgetItem* item = docker.list()->item(0);
+        QVERIFY(item && item->text() == QStringLiteral("Grasland"));
+        QTest::mouseClick(docker.list()->viewport(), Qt::LeftButton, {}, docker.list()->visualItemRect(item).center());
+        QCoreApplication::processEvents();
+        const auto* c = m_editor->document().findAs<CurveObject>(m_editor->selection().value(0));
+        QVERIFY(c && c->media().kind == ArtisticMedia::Kind::Brush && c->media().artName == QStringLiteral("Grasland"));
+        QCOMPARE(m_editor->document().undoText(), QStringLiteral("Künstlerische Medien"));
+        const ArtItem pieces = c->mediaPieces();
+        QCOMPARE(pieces.size(), 2);
+        QCOMPARE(pieces[0].color, Color(0, 160, 0));
+        QCOMPARE(pieces[1].color, Color(255, 140, 0));
+        // Anfang grün, Ende orange auf der Zeichenfläche
+        const QColor start = canvasPixel(QPointF(22, 119)), end = canvasPixel(c->spinePath().pointAtPercent(0.97));
+        QVERIFY2(start.green() > 120 && start.red() < 80, qPrintable(start.name()));
+        QVERIFY2(end.red() > 200 && end.green() > 100 && end.blue() < 80, qPrintable(end.name()));
+        QCOMPARE(MediaLibrary::instance().recent().value(0).name, QStringLiteral("Grasland"));
+        screenshot(QStringLiteral("fx-media-07-eigener-pinsel"));
+
+        // Eigene Sprühliste auf ein Rechteck anwenden: wird zur Kurve mit Sprühstrich
+        m_editor->setSelection({rect});
+        QVERIFY(docker.apply(1));
+        const auto* sprayed = m_editor->document().findAs<CurveObject>(m_editor->selection().value(0));
+        QVERIFY(sprayed && sprayed->media().kind == ArtisticMedia::Kind::Sprayer && sprayed->media().art.size() == 2);
+        screenshot(QStringLiteral("fx-media-08-eigene-spruehliste"));
+        // Trennen
+        m_editor->breakApartSelection();
+        const auto* group = m_editor->document().findAs<GroupObject>(m_editor->selection().value(0));
+        QVERIFY(group && group->childCount() >= 4);
+
+        // Zuletzt verwendet zeigt beide; Löschen entfernt den eigenen Strich
+        docker.setCategory(MediaDocker::Category::Recent);
+        QVERIFY(docker.list()->count() >= 2);
+        docker.setCategory(MediaDocker::Category::User);
+        docker.list()->setCurrentRow(1);
+        auto* del = docker.findChild<QPushButton*>(QStringLiteral("mediaDelete"));
+        QVERIFY(del && del->isEnabled());
+        QTest::mouseClick(del, Qt::LeftButton);
+        QCoreApplication::processEvents();
+        QCOMPARE(MediaLibrary::instance().user().size(), 1);
+        QCOMPARE(docker.list()->count(), 1);
+    }
+
+    // --- Effekte: Blockschatten, Fotomosaik, Punktraster, Hüllenzuordnung, Abschrägung bis Mitte,
+    // Linse Bitmap-Effekt -------------------------------------------------------------------------
+
+    void blockShadowToolDragAndSeparate()
+    {
+        auto pixel = [this](const QPointF& doc) {
+            QImage img(3, 3, QImage::Format_ARGB32_Premultiplied);
+            img.fill(Qt::white);
+            QPainter p(&img);
+            m_canvas->renderPage(p, 0, 8.0, QPointF(1.5, 1.5) - doc * 8.0, true);
+            p.end();
+            return img.pixelColor(1, 1);
+        };
+        const NodeId r = drawRect(QRectF(40, 40, 30, 20));
+        m_editor->setSelectionFill(Fill::solid(Color(255, 220, 0)));
+        auto obj = [this, r] { return m_editor->document().findAs<DrawObject>(r); };
+        // Werkzeug aus dem Flyout der interaktiven Werkzeuge
+        m_canvas->setTool(ToolId::BlockShadow);
+        QCOMPARE(m_canvas->toolId(), ToolId::BlockShadow);
+        const int undoBefore = m_editor->document().undoCount();
+        drag(screen(QPointF(55, 50)), screen(QPointF(70, 60)), {}, QStringLiteral("90-blockschatten-vorschau"));
+        QVERIFY(obj()->blockShadow().active);
+        const QPointF off = obj()->blockShadow().offset;
+        QVERIFY2(std::abs(off.x() - 15) < kTol && std::abs(off.y() - 10) < kTol, qPrintable(QStringLiteral("%1 %2").arg(off.x()).arg(off.y())));
+        QCOMPARE(m_editor->document().undoCount(), undoBefore + 1);
+        QCOMPARE(m_editor->document().undoText(), QStringLiteral("Blockschatten"));
+        screenshot(QStringLiteral("91-blockschatten"));
+        // Schatten = Rechteck entlang des Zugs geschoben: schwarz neben und hinter dem Objekt
+        QCOMPARE(pixel(QPointF(80, 65)), QColor(Qt::black));
+        QCOMPARE(pixel(QPointF(68, 62)), QColor(Qt::black)); // Ecke des Sechsecks
+        QCOMPARE(pixel(QPointF(45, 66)), QColor(Qt::white)); // ausserhalb der überstrichenen Fläche
+        QCOMPARE(pixel(QPointF(50, 45)), QColor(255, 220, 0)); // Objekt liegt darüber
+        // Folgt dem Objekt: Rechteck breiter machen, Schatten wächst mit
+        m_editor->transformSelection(xform::scaling(2.0, 1.0, QPointF(40, 40)), QStringLiteral("Breiter"));
+        QCOMPARE(pixel(QPointF(110, 65)), QColor(Qt::black));
+        m_editor->document().undo();
+        QCOMPARE(pixel(QPointF(110, 65)), QColor(Qt::white));
+        // Endgriff ziehen: Richtung ändern (nach rechts)
+        drag(screen(QPointF(70, 60)), screen(QPointF(75, 50)));
+        QVERIFY2(std::abs(obj()->blockShadow().offset.x() - 20) < kTol && std::abs(obj()->blockShadow().offset.y()) < kTol,
+                 qPrintable(QString::number(obj()->blockShadow().offset.y())));
+        QCOMPARE(pixel(QPointF(88, 45)), QColor(Qt::black));
+        // Eigenschaftsleiste: Tiefe und Richtung über die Felder
+        BlockShadow s = obj()->blockShadow();
+        s.setPolar(12, -90);
+        s.color = Color(0, 0, 200);
+        m_editor->setSelectionBlockShadow(s, QStringLiteral("Blockschatten"));
+        QCOMPARE(pixel(QPointF(50, 68)), QColor(0, 0, 200));
+        // Vektor in SVG: kein eingebettetes Bild
+        const QByteArray svg = output::pageSvg(*m_canvas, 0);
+        QVERIFY(!svg.contains("<image"));
+        QVERIFY(svg.contains("#0000c8"));
+        // Strg+K: Schatten als Kurve abtrennen
+        QVERIFY(m_editor->separateEffects());
+        const auto* group = m_editor->document().findAs<GroupObject>(m_editor->selection().value(0));
+        QVERIFY(group);
+        QCOMPARE(group->childCount(), 2);
+        const auto* curve = node_cast<CurveObject>(group->child(0));
+        QVERIFY(curve);
+        QCOMPARE(curve->style().fill.representativeColor().value_or(Color()), Color(0, 0, 200));
+        QVERIFY2(std::abs(curve->boundingRect().bottom() - 72) < 0.3, qPrintable(describe(curve->boundingRect())));
+        QVERIFY(!obj()->blockShadow().active);
+        QCOMPARE(pixel(QPointF(50, 68)), QColor(0, 0, 200));
+        m_editor->document().undo();
+        QVERIFY(obj()->blockShadow().active);
+        // Speichern und laden
+        auto loaded = io::loadFromBytes(io::saveToBytes(m_editor->document()));
+        QVERIFY(loaded);
+        QCOMPARE(loaded->findAs<DrawObject>(r)->blockShadow(), obj()->blockShadow());
+        // Löschen über die Leiste: ein Undo-Schritt
+        m_editor->setSelection({r});
+        m_editor->setSelectionBlockShadow(BlockShadow(), QStringLiteral("Blockschatten löschen"));
+        QVERIFY(!obj()->blockShadow().active);
+        m_editor->document().undo();
+        QVERIFY(obj()->blockShadow().active);
+    }
+
+    void photoMosaicAndPointillizeFromMenu()
+    {
+        QCoreApplication::setOrganizationName(QStringLiteral("VektoreditorTest"));
+        Options::instance().resetWorkspace();
+        // Kachelordner mit vier einfarbigen Bildern
+        QTemporaryDir dir;
+        QVERIFY(dir.isValid());
+        const QList<std::pair<QString, QColor>> tiles{{QStringLiteral("a-rot.png"), QColor(240, 20, 20)},
+                                                       {QStringLiteral("b-blau.png"), QColor(20, 20, 240)},
+                                                       {QStringLiteral("c-gelb.png"), QColor(240, 230, 20)},
+                                                       {QStringLiteral("d-weiss.png"), QColor(250, 250, 250)}};
+        for (const auto& [name, color] : tiles) {
+            QImage t(32, 32, QImage::Format_RGB32);
+            t.fill(color);
+            {
+                QPainter p(&t); // etwas Zeichnung in der Kachel
+                p.fillRect(QRect(8, 8, 6, 6), color.darker(130));
+            }
+            QVERIFY(t.save(dir.filePath(name)));
+        }
+        MainWindow window;
+        window.resize(1300, 900);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        Editor& ed = window.canvas()->editor();
+        // Vorlage: links rot, rechts blau (60 x 30 Pixel)
+        QImage src(60, 30, QImage::Format_ARGB32);
+        src.fill(QColor(255, 0, 0));
+        {
+            QPainter p(&src);
+            p.fillRect(QRect(30, 0, 30, 30), QColor(0, 0, 255));
+        }
+        const NodeId image = ed.importImage(src, QPointF(100, 100));
+        QVERIFY(image);
+        ed.setSelection({image});
+        const QRectF imageBox = ed.document().findAs<DrawObject>(image)->boundingRect();
+        auto action = [&window](const QString& text) {
+            for (QAction* a : window.findChildren<QAction*>())
+                if (a->text() == text)
+                    return a;
+            return static_cast<QAction*>(nullptr);
+        };
+        QAction* mosaicAction = action(QStringLiteral("&Fotomosaik …"));
+        QAction* pointAction = action(QStringLiteral("P&unktraster …"));
+        QVERIFY(mosaicAction && pointAction);
+        QVERIFY(mosaicAction->isEnabled());
+
+        // Fotomosaik: Ordner eintippen, 6 Spalten, OK
+        bool seen = false;
+        QString found;
+        QTimer poll;
+        poll.setInterval(20);
+        QObject::disconnect(&poll, &QTimer::timeout, nullptr, nullptr);
+        QObject::connect(&poll, &QTimer::timeout, [&] {
+            auto* dialog = qobject_cast<PhotoMosaicDialog*>(QApplication::activeModalWidget());
+            if (!dialog)
+                return;
+            poll.stop();
+            seen = true;
+            QTest::keyClicks(dialog->folderEdit(), QDir::toNativeSeparators(dir.path()));
+            // Fertig mit Eingabe: unter Linux offscreen hat der Dialog keinen Fokus, Tab löst dort nichts aus
+            emit dialog->folderEdit()->editingFinished();
+            found = dialog->foundLabel()->text();
+            dialog->columnsBox()->setValue(6);
+            dialog->tintBox()->setValue(0);
+            dialog->neighborsBox()->setChecked(false);
+            if (const QString shots = qEnvironmentVariable("VEK_SCREENSHOT_DIR"); !shots.isEmpty()) {
+                QTest::qWait(200);
+                dialog->grab().save(shots + QStringLiteral("/92-fotomosaik-dialog.png"));
+            }
+            dialog->accept();
+        });
+        poll.start();
+        const int undoBefore = ed.document().undoCount();
+        mosaicAction->trigger();
+        QVERIFY(seen);
+        QCOMPARE(found, QStringLiteral("4 Bild(er) gefunden"));
+        const auto* group = ed.document().findAs<GroupObject>(ed.selection().value(0));
+        QVERIFY(group);
+        QCOMPARE(group->childCount(), 18); // 6 x 3 Zellen
+        QVERIFY(ed.document().findAs<ImageObject>(image)); // Original bleibt darunter
+        QVERIFY(near(group->boundingRect(), imageBox, 0.01));
+        // Linke Zellen rot, rechte blau
+        for (int i = 0; i < group->childCount(); ++i) {
+            const auto* tile = node_cast<ImageObject>(group->child(i));
+            QVERIFY(tile);
+            const QColor mean = mosaics::meanColor(tile->displayImage());
+            const bool left = tile->boundingRect().center().x() < imageBox.center().x();
+            QVERIFY2(left ? mean.red() > 180 && mean.blue() < 60 : mean.blue() > 180 && mean.red() < 60, qPrintable(mean.name()));
+        }
+        QCOMPARE(ed.document().undoCount(), undoBefore + 1);
+        QCOMPARE(ed.document().undoText(), QStringLiteral("Fotomosaik"));
+        ed.document().undo();
+        QVERIFY(!ed.document().findAs<GroupObject>(group->id()));
+        // Ordner wird gemerkt
+        QCOMPARE(QDir(Options::instance().text(QStringLiteral("ws/tools/photoMosaic/folder"))), QDir(dir.path()));
+
+        // Ausgabe als ein Bild, Original ersetzen
+        ed.setSelection({image});
+        seen = false;
+        QObject::disconnect(&poll, &QTimer::timeout, nullptr, nullptr);
+        QObject::connect(&poll, &QTimer::timeout, [&] {
+            auto* dialog = qobject_cast<PhotoMosaicDialog*>(QApplication::activeModalWidget());
+            if (!dialog)
+                return;
+            poll.stop();
+            seen = true;
+            dialog->outputBox()->setCurrentIndex(1);
+            dialog->replaceBox()->setChecked(true);
+            dialog->accept();
+        });
+        poll.start();
+        mosaicAction->trigger();
+        QVERIFY(seen);
+        const auto* single = ed.document().findAs<ImageObject>(ed.selection().value(0));
+        QVERIFY(single && single->id() != image);
+        QVERIFY(!ed.document().findAs<ImageObject>(image));
+        ed.document().undo();
+        QVERIFY(ed.document().findAs<ImageObject>(image));
+
+        // Punktraster: 2-mm-Raster, Ergebnis je Farbe eine Gruppe
+        ed.setSelection({image});
+        seen = false;
+        int count = 0;
+        QObject::disconnect(&poll, &QTimer::timeout, nullptr, nullptr);
+        QObject::connect(&poll, &QTimer::timeout, [&] {
+            auto* dialog = qobject_cast<PointillizeDialog*>(QApplication::activeModalWidget());
+            if (!dialog)
+                return;
+            poll.stop();
+            seen = true;
+            dialog->cellBox()->setValue(imageBox.width() / 6.0);
+            dialog->groupingBox()->setCurrentIndex(1);
+            count = int(dialog->dots().size());
+            if (const QString shots = qEnvironmentVariable("VEK_SCREENSHOT_DIR"); !shots.isEmpty()) {
+                QTest::qWait(300);
+                dialog->grab().save(shots + QStringLiteral("/93-punktraster-dialog.png"));
+            }
+            dialog->accept();
+        });
+        poll.start();
+        pointAction->trigger();
+        QVERIFY(seen);
+        QCOMPARE(count, 18);
+        const auto* dots = ed.document().findAs<GroupObject>(ed.selection().value(0));
+        QVERIFY(dots);
+        QCOMPARE(dots->childCount(), 2); // rot und blau
+        int curves = 0;
+        for (int i = 0; i < dots->childCount(); ++i) {
+            const auto* sub = node_cast<GroupObject>(dots->child(i));
+            QVERIFY(sub);
+            for (int k = 0; k < sub->childCount(); ++k) {
+                const auto* c = node_cast<CurveObject>(sub->child(k));
+                QVERIFY(c && !c->style().stroke);
+                ++curves;
+            }
+        }
+        QCOMPARE(curves, 18);
+        QVERIFY(dots->boundingRect().width() < imageBox.width() + 0.01);
+        if (const QString shots = qEnvironmentVariable("VEK_SCREENSHOT_DIR"); !shots.isEmpty()) {
+            ed.setSelection({});
+            QTest::qWait(100);
+            window.canvas()->grab().save(shots + QStringLiteral("/94-punktraster.png"));
+        }
+        ed.document().undo();
+        QVERIFY(!ed.document().findAs<GroupObject>(dots->id()));
+        // Eigene Form: Bild und ein Stern ausgewählt
+        auto star = std::make_unique<PolygonObject>(QSizeF(10, 10), PolygonObject::Kind::Star, 5, 50);
+        star->setTransform(QTransform::fromTranslate(10, 10));
+        const NodeId starId = ed.addObject(std::move(star), QStringLiteral("Stern"));
+        ed.setSelection({image, starId});
+        seen = false;
+        bool customEnabled = false;
+        QObject::disconnect(&poll, &QTimer::timeout, nullptr, nullptr);
+        QObject::connect(&poll, &QTimer::timeout, [&] {
+            auto* dialog = qobject_cast<PointillizeDialog*>(QApplication::activeModalWidget());
+            if (!dialog)
+                return;
+            poll.stop();
+            seen = true;
+            customEnabled = dialog->shapeBox()->currentIndex() == 2;
+            dialog->cellBox()->setValue(imageBox.width() / 6.0);
+            dialog->groupingBox()->setCurrentIndex(2);
+            dialog->keepBox()->setChecked(false);
+            dialog->accept();
+        });
+        poll.start();
+        pointAction->trigger();
+        QVERIFY(seen && customEnabled);
+        const auto* combined = ed.document().findAs<GroupObject>(ed.selection().value(0));
+        QVERIFY(combined);
+        QCOMPARE(combined->childCount(), 2); // je Farbe ein kombiniertes Objekt
+        QCOMPARE(node_cast<CurveObject>(combined->child(0))->subPaths().size(), 9);
+        QVERIFY(!ed.document().findAs<ImageObject>(image)); // Original nicht behalten
+        QVERIFY(ed.document().find(starId));                 // Formvorlage bleibt
+        ed.document().undo();
+        QVERIFY(ed.document().findAs<ImageObject>(image));
+        Options::instance().resetWorkspace();
+    }
+
+    void envelopeMappingFromDocker()
+    {
+        QCoreApplication::setOrganizationName(QStringLiteral("VektoreditorTest"));
+        Options::instance().resetWorkspace();
+        // Ellipse: ihr Umriss liegt fast ganz im Inneren der Hülle (die Zuordnungen unterscheiden
+        // sich dort, auf dem Rand der Hülle sind Frei und Kitt gleich)
+        auto ellipse = std::make_unique<EllipseObject>(QSizeF(60, 40));
+        ellipse->setTransform(QTransform::fromTranslate(30, 30));
+        const NodeId r = m_editor->addObject(std::move(ellipse), QStringLiteral("E"));
+        m_editor->setSelection({r});
+        auto obj = [this, r] { return m_editor->document().findAs<DrawObject>(r); };
+        EnvelopeDocker docker(*m_editor, *m_canvas);
+        QVERIFY(docker.mappingBox()->count() == 5);
+        // Neue Hülle, oberen Mittelgriff hochziehen
+        QVERIFY(m_editor->applyEnvelopeShape({}, false, Envelope::Mode::Unconstrained, true, EnvelopeDocker::mapping()));
+        QList<Envelope> list = obj()->envelopes();
+        list.last().moveHandle(1, list.last().handles()[1] + QPointF(10, -15));
+        list.last().moveHandle(3, list.last().handles()[3] + QPointF(12, 0));
+        m_editor->setObjectEnvelopes(r, list, QStringLiteral("Hülle"));
+        const QPainterPath standard = obj()->path();
+        // Zuordnung im Andockfenster wählen: andere Form, ein Undo-Schritt
+        QSet<QString> shapes{QString::number(standard.boundingRect().width())};
+        for (int i = 1; i < docker.mappingBox()->count(); ++i) {
+            const int undoBefore = m_editor->document().undoCount();
+            docker.mappingBox()->setCurrentIndex(i);
+            emit docker.mappingBox()->activated(i);
+            QCOMPARE(int(obj()->envelopes().last().mapping), docker.mappingBox()->itemData(i).toInt());
+            QCOMPARE(m_editor->document().undoCount(), undoBefore + 1);
+            QVERIFY2(obj()->path() != standard, qPrintable(QStringLiteral("%1 %2 %3").arg(i).arg(describe(obj()->path().boundingRect()), describe(standard.boundingRect()))));
+        }
+        QCOMPARE(obj()->envelopes().last().mapping, Envelope::Mapping::Vertical);
+        // Vertikal: senkrechte Kanten bleiben gerade (rechte Kante nicht ausgebeult)
+        QVERIFY(obj()->path().boundingRect().right() < 90.01);
+        m_editor->document().undo();
+        QCOMPARE(obj()->envelopes().last().mapping, Envelope::Mapping::Putty);
+        // Neue Hüllen übernehmen die gewählte Zuordnung
+        docker.mappingBox()->setCurrentIndex(docker.mappingBox()->findData(int(Envelope::Mapping::Horizontal)));
+        emit docker.mappingBox()->activated(docker.mappingBox()->currentIndex());
+        QCOMPARE(EnvelopeDocker::mapping(), Envelope::Mapping::Horizontal);
+        QVERIFY(docker.apply());
+        QCOMPARE(obj()->envelopes().last().mapping, Envelope::Mapping::Horizontal);
+        Options::instance().resetWorkspace();
+    }
+
+    void bevelToCenterDialog()
+    {
+        QCoreApplication::setOrganizationName(QStringLiteral("VektoreditorTest"));
+        MainWindow window;
+        window.resize(1300, 900);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        Editor& ed = window.canvas()->editor();
+        Canvas& canvas = *window.canvas();
+        auto rect = std::make_unique<RectangleObject>(QSizeF(40, 40));
+        rect->setTransform(QTransform::fromTranslate(50, 50));
+        Style st;
+        st.fill = Fill::solid(Color(60, 160, 60));
+        rect->setStyle(st);
+        const NodeId r = ed.addObject(std::move(rect), QStringLiteral("R"));
+        ed.setSelection({r});
+        auto render = [&canvas] {
+            QImage img(200, 200, QImage::Format_ARGB32_Premultiplied);
+            img.fill(Qt::white);
+            QPainter p(&img);
+            canvas.renderPage(p, 0, 4.0, -QPointF(45, 45) * 4.0, true);
+            return img;
+        };
+        QAction* bevelAction = nullptr;
+        for (QAction* a : window.findChildren<QAction*>())
+            if (a->text() == QStringLiteral("Ab&schrägung …"))
+                bevelAction = a;
+        QVERIFY(bevelAction);
+        auto runDialog = [&](bool toCenter) {
+            bool seen = false;
+            QTimer poll;
+            poll.setInterval(20);
+            QObject::disconnect(&poll, &QTimer::timeout, nullptr, nullptr);
+        QObject::connect(&poll, &QTimer::timeout, [&] {
+                auto* dialog = qobject_cast<QDialog*>(QApplication::activeModalWidget());
+                if (!dialog)
+                    return;
+                auto* center = dialog->findChild<QRadioButton*>(QStringLiteral("bevelToCenter"));
+                if (!center)
+                    return;
+                poll.stop();
+                seen = true;
+                if (toCenter)
+                    center->click();
+                dialog->accept();
+            });
+            poll.start();
+            bevelAction->trigger();
+            return seen;
+        };
+        QVERIFY(runDialog(false));
+        QVERIFY(ed.document().findAs<DrawObject>(r)->bevel().isActive());
+        QVERIFY(!ed.document().findAs<DrawObject>(r)->bevel().toCenter);
+        const QImage distance = render();
+        QVERIFY(runDialog(true));
+        QVERIFY(ed.document().findAs<DrawObject>(r)->bevel().toCenter);
+        const QImage center = render();
+        if (const QString shots = qEnvironmentVariable("VEK_SCREENSHOT_DIR"); !shots.isEmpty()) {
+            distance.save(shots + QStringLiteral("/95-abschraegung-abstand.png"));
+            center.save(shots + QStringLiteral("/96-abschraegung-bis-mitte.png"));
+        }
+        // Abstand: flache Mitte in der Füllfarbe; bis Mitte: auch die Mitte schattiert, mit Grat
+        // auf der Diagonalen (oben links hell, unten rechts dunkel bis ganz innen)
+        const QPoint mid(100, 100), nearMidTL(90, 92), nearMidBR(110, 108);
+        QCOMPARE(distance.pixelColor(nearMidTL), QColor(60, 160, 60));
+        QCOMPARE(distance.pixelColor(nearMidBR), QColor(60, 160, 60));
+        QVERIFY(center.pixelColor(nearMidTL) != center.pixelColor(nearMidBR));
+        QVERIFY(center != distance);
+        Q_UNUSED(mid);
+        ed.document().undo();
+        QVERIFY(!ed.document().findAs<DrawObject>(r)->bevel().toCenter);
+    }
+
+    void lensBitmapEffectChangesBelow()
+    {
+        auto add = [this](std::unique_ptr<DrawObject> o, const QRectF& r, std::optional<Color> fill) {
+            o->setTransform(QTransform::fromTranslate(r.left(), r.top()));
+            Style s;
+            s.fill = fill ? Fill::solid(*fill) : Fill::none();
+            s.stroke.reset();
+            o->setStyle(s);
+            return m_editor->addObject(std::move(o), QStringLiteral("O"));
+        };
+        auto render = [this] {
+            QImage img(160, 160, QImage::Format_ARGB32_Premultiplied);
+            img.fill(Qt::white);
+            QPainter p(&img);
+            m_canvas->renderPage(p, 0, 4.0, -QPointF(100, 100) * 4.0, true);
+            return img;
+        };
+        // Streifen unter einem Kreis
+        for (int i = 0; i < 10; ++i)
+            add(std::make_unique<RectangleObject>(QSizeF(2, 40)), QRectF(100 + 4 * i, 100, 2, 40), Color(0, 0, 0));
+        const NodeId ball = add(std::make_unique<EllipseObject>(QSizeF(30, 30)), QRectF(105, 105, 30, 30), std::nullopt);
+        m_editor->setSelection({ball});
+        const QImage plain = render();
+        LensDocker docker(*m_editor);
+        docker.setLensType(Lens::Type::BitmapEffect);
+        QVERIFY(docker.effectBox()->isVisibleTo(&docker));
+        QVERIFY(!docker.frozenBox()->isEnabled());
+        docker.effectBox()->setCurrentIndex(docker.effectBox()->findData(QStringLiteral("blur")));
+        docker.amountBox()->setValue(60);
+        docker.apply();
+        const Lens l = m_editor->document().findAs<DrawObject>(ball)->lens();
+        QCOMPARE(l.type, Lens::Type::BitmapEffect);
+        QCOMPARE(l.bitmapEffect, QStringLiteral("blur"));
+        const QImage blurred = render();
+        // In der Linse: Streifen verwischt (grau statt schwarz/weiss); ausserhalb unverändert
+        const QPoint inside(80, 80), outside(4, 4);
+        QVERIFY(plain.pixelColor(inside) == QColor(Qt::black) || plain.pixelColor(inside) == QColor(Qt::white));
+        const QColor g = blurred.pixelColor(inside);
+        QVERIFY2(g.red() > 40 && g.red() < 215, qPrintable(g.name()));
+        QCOMPARE(blurred.pixelColor(outside), plain.pixelColor(outside));
+        screenshot(QStringLiteral("97-linse-bitmap-effekt"));
+        if (const QString shots = qEnvironmentVariable("VEK_SCREENSHOT_DIR"); !shots.isEmpty())
+            blurred.save(shots + QStringLiteral("/97-linse-bitmap-effekt.png"));
+        // Gespeichert und geladen
+        auto loaded = io::loadFromBytes(io::saveToBytes(m_editor->document()));
+        QVERIFY(loaded);
+        QCOMPARE(loaded->findAs<DrawObject>(ball)->lens(), l);
+        // Docker zeigt die gewählte Linse wieder an
+        m_editor->setSelection({});
+        m_editor->setSelection({ball});
+        QCOMPARE(docker.effectBox()->currentData().toString(), QStringLiteral("blur"));
+        m_editor->document().undo();
+        QVERIFY(!m_editor->document().findAs<DrawObject>(ball)->lens().isActive());
+    }
+
 };
 
 QTEST_MAIN(TestTools)

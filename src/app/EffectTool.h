@@ -1,14 +1,23 @@
 #pragma once
 
+#include "Blend.h"
 #include "Node.h"
 #include "Ramp.h"
 #include "Tool.h"
+
+class QComboBox;
+class QWidget;
 
 #include <optional>
 
 namespace vek {
 
 class DrawObject;
+class NodePopup;
+
+// Auswahlliste der Mischmodi (Transparenz, Schatten, Objekteigenschaften); Daten = BlendMode
+QComboBox* createBlendModeCombo(QWidget* parent, const QString& tooltip);
+void setBlendModeComboValue(QComboBox* combo, BlendMode mode);
 
 // Interaktive Transparenz und interaktive Unschärfe wie das Transparenzwerkzeug:
 // Über ein Objekt ziehen legt einen linearen Verlauf an (Transparenz von deckend nach
@@ -30,6 +39,8 @@ public:
 
     // Standardwerte, wenn ein Objekt den Effekt neu bekommt
     static Ramp defaultRamp(Effect effect, Ramp::Type type, const Ramp& current);
+    // Transparenz: Fenster neben dem angeklickten Endpunkt (Regler für dessen Wert)
+    NodePopup* popup() const { return m_popup; }
 
 private:
     enum class Drag { None, Create, Start, End, Mid };
@@ -38,6 +49,8 @@ private:
     QPointF toUnit(const DrawObject& o, const QPointF& doc) const;
     QPointF fromUnit(const DrawObject& o, const QPointF& unit) const;
     QString label() const;
+    void showPopup();
+    void hidePopup();
 
     Effect m_effect;
     Drag m_drag = Drag::None;
@@ -45,6 +58,9 @@ private:
     QPointF m_pressDoc;
     std::optional<Ramp> m_preview;
     int m_selectedEnd = -1; // 0 = Anfang, 1 = Ende
+    QPointF m_pressScreen;
+    bool m_moved = false;
+    NodePopup* m_popup = nullptr;
 };
 
 } // namespace vek

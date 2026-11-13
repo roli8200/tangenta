@@ -25,6 +25,7 @@ struct TableRange {
 };
 
 class Canvas;
+class PagesDocker;
 class Ruler;
 class RulerCorner;
 class StyleIndicator;
@@ -43,11 +44,15 @@ public:
     // Optionen > Allgemein > "Beim Starten von TANGENTA" (nur ohne Datei in der Befehlszeile)
     void applyStartup();
     // Neues Dokument mit Seitengrösse/Seitenzahl (Dialog "Neues Dokument erstellen" je nach Option)
-    void createDocument(const QSizeF& pageSize, int pages);
+    // multiPageView: Mehrseitenansicht (Dialog "Neues Dokument")
+    void createDocument(const QSizeF& pageSize, int pages, bool multiPageView = false);
+    // Kontextmenü einer Seite (Register, Seitenname in der Mehrseitenansicht)
+    void showPageContextMenu(int index, const QPoint& globalPos);
     Canvas* canvas() const { return m_canvas; }
 
 protected:
     void closeEvent(QCloseEvent* e) override;
+    void showEvent(QShowEvent* e) override;
 
 private:
     QWidget* createCanvasArea();
@@ -73,6 +78,10 @@ private:
     void sharePdf();
     bool writePdf(const QString& path, const PdfSettings& settings);
     void showAlignDialog(int tab);
+    // QR-Code: neu auf die Seitenmitte bzw. bestehenden im Dialog bearbeiten
+    void insertQrCode();
+    void editQrCode(NodeId id);
+    void blendAlongPath();
     class AlignDialog* m_alignDialog = nullptr;
     class TransformDocker* m_transformDocker = nullptr;
     QDockWidget* m_transformDock = nullptr;
@@ -92,6 +101,9 @@ private:
     void showFullPreview(bool selectedOnly);
     void createTableMenu();
     void addBitmapCommands(QMenu* bitmaps);
+    // Bitmap-Effekt aus fx::definitions() ins Menü; an Bitmaps destruktiv, sonst Effektstapel
+    QAction* addBitmapEffectAction(QMenu* menu, const QString& id);
+    void runBitmapEffect(const QString& id);
     void convertToBitmap();
     // Tabellenbefehl auf die bearbeitete bzw. ausgewählte Tabelle mit dem markierten Bereich
     void tableCommand(const QString& label, const std::function<void(class TableObject&, const struct TableRange&)>& fn);
@@ -104,9 +116,19 @@ private:
     QDockWidget* m_lensDock = nullptr;
     class EnvelopeDocker* m_envelopeDocker = nullptr;
     QDockWidget* m_envelopeDock = nullptr;
+    QDockWidget* m_cornersDock = nullptr;
+    class BitmapEffectsDocker* m_fxDocker = nullptr;
+    QDockWidget* m_fxDock = nullptr;
+    class MediaDocker* m_mediaDocker = nullptr;
+    QDockWidget* m_mediaDock = nullptr;
+    class PagesDocker* m_pagesDocker = nullptr;
+    QDockWidget* m_pagesDock = nullptr;
 public:
     LensDocker* lensDocker() const { return m_lensDocker; }
     EnvelopeDocker* envelopeDocker() const { return m_envelopeDocker; }
+    PagesDocker* pagesDocker() const { return m_pagesDocker; }
+    BitmapEffectsDocker* bitmapEffectsDocker() const { return m_fxDocker; }
+    MediaDocker* mediaDocker() const { return m_mediaDocker; }
 private:
     void rememberLastFile(const QString& path);
     // Optionen > Global > Filter > Verknüpfen (Windows, Benutzer-Registry)
@@ -122,6 +144,7 @@ private:
     void applyImageEffect(const QString& label, const std::function<QImage(const QImage&)>& fn);
     void runImageDialog(const QString& label, class ImagePreviewDialog& dialog);
     QList<QAction*> m_bitmapActions; // nur mit einem ausgewählten Bild
+    QList<QAction*> m_fxActions;     // Bitmap-Effekte: Bild (destruktiv) oder beliebige Objekte (Effektstapel)
     void deleteSelectionOrGuide();
     void showGuideContextMenu(int index, const QPoint& globalPos);
     // Kontextmenü auf Objekten
@@ -166,12 +189,16 @@ private:
     QAction* m_redo = nullptr;
     QAction* m_paste = nullptr;
     QHash<int, QAction*> m_toolActions;
+    QMenu* m_toolCommands = nullptr; // Werkzeuge als Befehle (nicht in der Menüleiste), Tastaturbefehle frei belegbar
     QList<QAction*> m_selectionActions;
     // Objektbefehle, die je nach Auswahl ein- oder ausgeschaltet werden
     QAction* m_cut = nullptr;
     QAction* m_copy = nullptr;
     QAction* m_delete = nullptr;
     QAction* m_toCurves = nullptr;
+    bool m_fittedToScreen = false;
+    QAction* m_group = nullptr;
+    QAction* m_ungroup = nullptr;
     QAction* m_combine = nullptr;
     QAction* m_breakApart = nullptr;
     QAction* m_lock = nullptr;

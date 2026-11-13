@@ -9,6 +9,7 @@
 class QCheckBox;
 class QDialog;
 class QComboBox;
+class QKeyEvent;
 class QLabel;
 class QLineEdit;
 class QListWidget;
@@ -53,6 +54,10 @@ public:
 
 signals:
     void optionsRequested();
+
+protected:
+    // Escape bei offener grosser Vorschau schliesst nur die Vorschau
+    void keyPressEvent(QKeyEvent* event) override;
 
 private:
     void updateSources();

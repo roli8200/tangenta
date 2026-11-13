@@ -703,14 +703,29 @@ QString sizeLabel(const Size& size)
     return parts.isEmpty() ? QObject::tr("Standard") : parts.join(QStringLiteral(" · "));
 }
 
+// Lange Titel und Namen an einer Wortgrenze kürzen, mit «…»; mehrfache Leerzeichen zusammenfassen
+static QString shortened(const QString& text, int max)
+{
+    const QString clean = text.simplified();
+    if (clean.length() <= max)
+        return clean;
+    QString cut = clean.left(max);
+    const int space = int(cut.lastIndexOf(QLatin1Char(' ')));
+    if (space > max / 2)
+        cut.truncate(space);
+    while (!cut.isEmpty() && QStringLiteral(" ,;:-–").contains(cut.back()))
+        cut.chop(1);
+    return cut + QStringLiteral("…");
+}
+
 QString attribution(const Hit& hit)
 {
     const Source* s = source(hit.source);
     QStringList parts;
-    if (!hit.title.isEmpty())
-        parts << hit.title.left(80);
-    if (!hit.author.isEmpty())
-        parts << QObject::tr("von %1").arg(hit.author.left(60));
+    if (!hit.title.trimmed().isEmpty())
+        parts << shortened(hit.title, 80);
+    if (!hit.author.trimmed().isEmpty())
+        parts << QObject::tr("von %1").arg(shortened(hit.author, 60));
     QString tail = s ? s->name : hit.source;
     if (!hit.license.isEmpty())
         tail += QStringLiteral(", ") + hit.license;

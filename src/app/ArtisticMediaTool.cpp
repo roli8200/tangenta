@@ -1,6 +1,7 @@
 #include "ArtisticMediaTool.h"
 
 #include "Canvas.h"
+#include "MediaLibrary.h"
 #include "PathOps.h"
 
 #include <QKeyEvent>
@@ -111,6 +112,14 @@ void ArtisticMediaTool::mouseRelease(QMouseEvent* event, const QPointF& doc)
     style.stroke.reset();
     curve->setStyle(style);
     ed.addObject(std::move(curve), QObject::tr("Künstlerische Medien"));
+    MediaLibrary::instance().noteUsed(MediaStroke{QString(), media, false});
+}
+
+bool ArtisticMediaTool::claimsKey(const QKeyEvent* event) const
+{
+    // Pfeil auf/ab beim Zeichnen ändert den Druck, statt zu schubsen
+    return m_drawing && m_media.kind == ArtisticMedia::Kind::Pressure
+        && (event->key() == Qt::Key_Up || event->key() == Qt::Key_Down);
 }
 
 bool ArtisticMediaTool::keyPress(QKeyEvent* event)

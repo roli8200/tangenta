@@ -31,8 +31,16 @@ public:
     virtual bool keyPress(QKeyEvent*) { return false; }
     // true: alle Tasten gehen ans Werkzeug, auch solche mit Menükürzel (z.B. Entf beim Tippen)
     virtual bool capturesKeyboard() const { return false; }
+    // true: diese Taste gehört gerade dem Werkzeug, auch wenn ein Tastaturbefehl auf ihr liegt
+    // (z.B. Leertaste beim Ziehen = Kopie stempeln)
+    virtual bool claimsKey(const QKeyEvent*) const { return false; }
+    // Schubsen (Tastaturbefehle "Schubsen …"); true = vom Werkzeug ausgeführt
+    virtual bool nudge(const QPointF& /*delta*/) { return false; }
     // Farbe aus der Palette; true = vom Werkzeug verbraucht
     virtual bool paletteColor(const std::optional<Color>& /*color*/, bool /*fill*/) { return false; }
+    // Aus der Palette auf die Zeichenfläche gezogene Farbe (screen = Bildschirmstelle der
+    // Zeichenfläche); true = vom Werkzeug verbraucht, sonst füllt sie das Objekt darunter
+    virtual bool colorDropped(const Color& /*color*/, const QPointF& /*screen*/) { return false; }
     virtual void paintOverlay(QPainter&) {}
 
 protected:

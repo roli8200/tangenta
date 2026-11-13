@@ -33,6 +33,7 @@ private:
     QDoubleSpinBox* m_width;
     QComboBox* m_dash;
     QDoubleSpinBox* m_transparency;
+    QComboBox* m_blendMode;
     QDoubleSpinBox* m_blur;
     QCheckBox* m_locked;
     bool m_updating = false;

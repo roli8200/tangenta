@@ -4,6 +4,7 @@
 #include "ColorDialog.h"
 #include "ColorPalette.h"
 #include "DocumentIO.h"
+#include "ExpressionSpinBox.h"
 #include "FlyoutButton.h"
 #include "GradientDialog.h"
 #include "ImageObject.h"
@@ -15,15 +16,19 @@
 #include "TraceDialog.h"
 #include "Icons.h"
 #include "ObjectManager.h"
+#include "PagesDocker.h"
 #include "Options.h"
 #include "RectangleObject.h"
 #include "EllipseObject.h"
 #include "OptionsDialog.h"
 #include "CutTools.h"
 #include "ShapingDocker.h"
+#include "CornersDocker.h"
+#include "MediaDocker.h"
 #include "EffectDockers.h"
 #include "OutlineDialog.h"
 #include "PatternDialog.h"
+#include "QrCodeDialog.h"
 #include "ExportDialog.h"
 #include "SvgImport.h"
 #include "PdfImport.h"
@@ -47,11 +52,13 @@
 #include "ShapeTool.h"
 #include "CloneObject.h"
 #include "SuperClipObject.h"
+#include "BlendObject.h"
 #include "PerspectiveTool.h"
 #include "TableObject.h"
 #include "TableTool.h"
 #include "BitmapArt.h"
 #include "BitmapFilters.h"
+#include "BitmapEffect.h"
 #include "TextTool.h"
 #include "Language.h"
 #include "UiScale.h"
@@ -60,6 +67,8 @@
 #include <QActionGroup>
 #include <QKeyEvent>
 #include <QPushButton>
+#include <QRadioButton>
+#include "MosaicDialogs.h"
 #include <QInputDialog>
 #include <QUrl>
 #include <QDesktopServices>
@@ -90,6 +99,7 @@
 #include <QMessageBox>
 #include <QPainter>
 #include <QScreen>
+#include <QScrollArea>
 #include <QSettings>
 #include <QDir>
 #include <QStandardPaths>
@@ -180,13 +190,14 @@ QString number(double v, int decimals = 3)
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
 {
+    installEnterAppliesFilter();
     {
-        // Wörterbücher: neben dem Programm, unter share/tangenta (Linux), sonst im Quellbaum
+        // Wörterbücher: neben dem Programm, unter share/tangenta (Linux), im App-Paket (macOS), sonst im Quellbaum
         const QString app = QCoreApplication::applicationDirPath();
         SpellChecker& sc = SpellChecker::instance();
         if (sc.searchPaths().isEmpty())
             sc.setSearchPaths({app + QStringLiteral("/dictionaries"), app + QStringLiteral("/../share/tangenta/dictionaries"),
-                               QStringLiteral(VEK_DICTIONARY_SOURCE)});
+                               app + QStringLiteral("/../Resources/dictionaries"), QStringLiteral(VEK_DICTIONARY_SOURCE)});
         sc.setUserDictionary(QStandardPaths::writableLocation(QStandardPaths::AppDataLocation)
                              + QStringLiteral("/benutzerwoerterbuch.txt"));
     }
@@ -277,6 +288,8 @@ MainWindow::MainWindow(QWidget* parent)
     connect(m_canvas, &Canvas::viewChanged, this, &MainWindow::updateZoomCombo);
     connect(m_canvas, &Canvas::contextMenuRequested, this, &MainWindow::showObjectContextMenu);
     connect(m_canvas, &Canvas::guideContextMenuRequested, this, &MainWindow::showGuideContextMenu);
+    connect(m_canvas, &Canvas::pageContextMenuRequested, this, &MainWindow::showPageContextMenu);
+    connect(m_canvas, &Canvas::objectEditRequested, this, &MainWindow::editQrCode);
     connect(&m_editor, &Editor::documentChanged, this, [this] {
         rebuildPageTabs();
         updateActions();
@@ -313,9 +326,12 @@ MainWindow::MainWindow(QWidget* parent)
     QSettings settings;
     m_editor.shapeDefaults().blurSteps = settings.value(QStringLiteral("bake/steps"), 48).toInt();
     m_editor.shapeDefaults().blurBands = settings.value(QStringLiteral("bake/bands"), 32).toInt();
-    if (!restoreGeometry(settings.value(QStringLiteral("window/geometry")).toByteArray()))
-        resize(1400, 900);
-    restoreState(settings.value(QStringLiteral("window/state")).toByteArray(), 3); // 3: Palette nicht mehr als Andockfenster
+    if (!restoreGeometry(settings.value(QStringLiteral("window/geometry")).toByteArray())) {
+        const QRect avail = screen()->availableGeometry();
+        resize(std::min(1400, avail.width() * 9 / 10), std::min(900, avail.height() * 9 / 10));
+    }
+    // 4: Andockfenster als Reiter (ältere Stände hatten sie übereinander, höher als der Bildschirm)
+    restoreState(settings.value(QStringLiteral("window/state")).toByteArray(), 4);
     m_canvas->setFocus();
 }
 
@@ -352,6 +368,25 @@ QWidget* MainWindow::createCanvasArea()
     grid->setColumnStretch(1, 1);
     return area;
 }
+
+namespace {
+
+// Meldet das Drücken einer Maustaste auf einem Widget (ohne es zu verbrauchen)
+class PressWatcher final : public QObject {
+public:
+    PressWatcher(QObject* parent, std::function<void()> onPress) : QObject(parent), m_onPress(std::move(onPress)) {}
+    bool eventFilter(QObject*, QEvent* e) override
+    {
+        if (e->type() == QEvent::MouseButtonPress)
+            m_onPress();
+        return false;
+    }
+
+private:
+    std::function<void()> m_onPress;
+};
+
+} // namespace
 
 QWidget* MainWindow::createPageNavigator()
 {
@@ -390,6 +425,7 @@ QWidget* MainWindow::createPageNavigator()
     m_pageTabs->setExpanding(false);
     m_pageTabs->setDrawBase(false);
     m_pageTabs->setContextMenuPolicy(Qt::CustomContextMenu);
+    m_pageTabs->setMovable(true); // Register ziehen ordnet die Seiten um
     row->addSpacing(6);
     row->addWidget(m_pageTabs);
     row->addStretch(1);
@@ -397,16 +433,21 @@ QWidget* MainWindow::createPageNavigator()
         if (index >= 0)
             m_editor.setCurrentPageIndex(index);
     });
+    // Ein Zug am Register kann die Seite über mehrere Plätze schieben: ein Rückgängig-Schritt
+    auto dragMark = std::make_shared<std::size_t>(0);
+    m_pageTabs->installEventFilter(new PressWatcher(m_pageTabs, [this, dragMark] { *dragMark = m_editor.document().undoMark(); }));
+    connect(m_pageTabs, &QTabBar::tabMoved, this, [this, dragMark](int from, int to) {
+        // Die Registerleiste hat schon umgestellt; das Dokument folgt (danach baut
+        // rebuildPageTabs die Beschriftungen aus dem Dokument neu auf)
+        m_editor.movePage(from, to);
+        if (m_editor.document().undoMark() > *dragMark + 1)
+            m_editor.document().mergeUndo(*dragMark, tr("Seite verschieben"));
+        rebuildPageTabs();
+    });
     connect(m_pageTabs, &QTabBar::customContextMenuRequested, this, [this](const QPoint& pos) {
         const int index = m_pageTabs->tabAt(pos);
-        if (index < 0)
-            return;
-        QMenu menu;
-        menu.addAction(tr("Seite davor einfügen"), this, [this, index] { m_editor.insertPage(index); });
-        menu.addAction(tr("Seite danach einfügen"), this, [this, index] { m_editor.insertPage(index + 1); });
-        QAction* del = menu.addAction(tr("Seite löschen"), this, [this, index] { m_editor.deletePage(index); });
-        del->setEnabled(m_editor.document().pageCount() > 1);
-        menu.exec(m_pageTabs->mapToGlobal(pos));
+        if (index >= 0)
+            showPageContextMenu(index, m_pageTabs->mapToGlobal(pos));
     });
     return bar;
 }
@@ -427,7 +468,7 @@ void MainWindow::createMenusAndToolbars()
     QAction* saveDocAs = action(QString(), tr("Speichern &unter …"), QKeySequence::SaveAs, [this] { saveAs(); });
     QAction* importDoc = action(QStringLiteral("doc-import"), tr("&Importieren …"), QKeySequence(Qt::CTRL | Qt::Key_I),
                                 [this] { importFiles(); });
-    QAction* imageSearch = action(QString(), tr("&Bildersuche …"), QKeySequence(), [this] { searchImages(); });
+    QAction* imageSearch = action(QStringLiteral("image-search"), tr("&Bildersuche …"), QKeySequence(), [this] { searchImages(); });
     QAction* exportDoc = action(QStringLiteral("doc-export"), tr("&Exportieren …"), QKeySequence(Qt::CTRL | Qt::Key_E),
                                 [this] { exportFile(); });
     QAction* html = action(QString(), tr("Im Web veröffentlichen: &HTML …"), QKeySequence(), [this] { publishHtml(); });
@@ -443,7 +484,8 @@ void MainWindow::createMenusAndToolbars()
 
     m_undo = action(QStringLiteral("edit-undo"), tr("&Rückgängig"), QKeySequence::Undo,
                     [this] { m_editor.document().undo(); });
-    m_redo = action(QStringLiteral("edit-redo"), tr("&Wiederholen"), QKeySequence::Redo,
+    // Vorbelegung wie beim Vorbild: Strg+Umschalt+Z (Strg+Y ist "Am Gitter ausrichten"); "Wiederholen" = Strg+R
+    m_redo = action(QStringLiteral("edit-redo"), tr("Wieder&herstellen"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Z),
                     [this] { m_editor.document().redo(); });
     QAction* cut = action(QStringLiteral("edit-cut"), tr("&Ausschneiden"), QKeySequence::Cut,
                           [this] { m_editor.cutSelection(); });
@@ -452,10 +494,14 @@ void MainWindow::createMenusAndToolbars()
     m_paste = action(QStringLiteral("edit-paste"), tr("&Einfügen"), QKeySequence::Paste, [this] { m_editor.paste(); });
     QAction* duplicate = action(QString(), tr("&Duplizieren"), QKeySequence(Qt::CTRL | Qt::Key_D),
                                 [this] { m_editor.duplicateSelection(); });
+    // Ziffernblock +: Kopie ohne Versatz
+    QAction* duplicateInPlace = action(QString(), tr("An &Ort und Stelle duplizieren"),
+                                       QKeySequence(Qt::KeypadModifier | Qt::Key_Plus),
+                                       [this] { m_editor.duplicateInPlace(); });
     QAction* del = action(QStringLiteral("edit-delete"), tr("&Löschen"), QKeySequence::Delete, [this] { deleteSelectionOrGuide(); });
     QAction* selectAll = action(QString(), tr("Alles &auswählen"), QKeySequence::SelectAll,
                                 [this] { m_editor.selectAll(); });
-    m_selectionActions = {cut, copy, duplicate};
+    m_selectionActions = {cut, copy, duplicate, duplicateInPlace};
     m_cut = cut;
     m_copy = copy;
     m_delete = del;
@@ -491,12 +537,14 @@ void MainWindow::createMenusAndToolbars()
     });
     m_selectionActions << symbolMenu->addAction(tr("In &Objekte zurückwandeln"), this, [this] { m_editor.convertClonesToObjects(); });
     symbolMenu->addSeparator();
-    symbolMenu->addAction(tr("Symbol-&Manager"), this, [this] {
+    symbolMenu->addAction(tr("Symbol-&Manager"), QKeySequence(Qt::CTRL | Qt::Key_F3), this, [this] {
         m_symbolDock->show();
         m_symbolDock->raise();
     });
+    edit->addAction(icon(QStringLiteral("qr-code")), tr("&QR-Code einfügen …"), this, [this] { insertQrCode(); });
     edit->addSeparator();
     edit->addAction(duplicate);
+    edit->addAction(duplicateInPlace);
     m_selectionActions << edit->addAction(icon(QStringLiteral("edit-clone")), tr("&Klonen"), this, [this] { m_editor.cloneSelection(); });
     m_selectionActions << edit->addAction(tr("&Eigenschaften kopieren von …"), this, [this] { copyPropertiesDialog(); });
     QAction* multi = edit->addAction(tr("&Vielfach duplizieren …"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_D), this,
@@ -550,6 +598,13 @@ void MainWindow::createMenusAndToolbars()
                 a->setChecked(a->data().toInt() == now);
         });
         view->addSeparator();
+        QAction* multi = view->addAction(icon(QStringLiteral("pages-multi")), tr("&Mehrseitenansicht"));
+        multi->setObjectName(QStringLiteral("multiPageView"));
+        multi->setCheckable(true);
+        connect(multi, &QAction::triggered, this, [this](bool on) { m_canvas->setMultiPageView(on); });
+        connect(view, &QMenu::aboutToShow, this, [this, multi] { multi->setChecked(m_canvas->multiPageView()); });
+        view->addAction(tr("A&lle Seiten einpassen"), this, [this] { m_canvas->fitAllPages(); });
+        view->addSeparator();
         view->addAction(icon(QStringLiteral("view-fullscreen")), tr("&Ganzseitenvorschau"), QKeySequence(Qt::Key_F9), this,
                         [this] { showFullPreview(false); });
         m_selectionActions << view->addAction(tr("&Vorschau markierter Objekte"), this, [this] { showFullPreview(true); });
@@ -557,10 +612,25 @@ void MainWindow::createMenusAndToolbars()
     }
     view->addAction(action(QStringLiteral("zoom-in"), tr("Ver&grössern"), QKeySequence::ZoomIn,
                            [this] { m_canvas->zoomIn(); }));
-    view->addAction(action(QStringLiteral("zoom-out"), tr("Ver&kleinern"), QKeySequence::ZoomOut,
+    view->addAction(action(QStringLiteral("zoom-out"), tr("Ver&kleinern"), QKeySequence(Qt::Key_F3),
                            [this] { m_canvas->zoomOut(); }));
     view->addAction(action(QStringLiteral("zoom-page"), tr("&Seite einpassen"), QKeySequence(Qt::SHIFT | Qt::Key_F4),
                            [this] { m_canvas->fitPage(); }));
+    // Auf Auswahl bzw. alle Objekte zoomen, mit etwas Rand wie bei "Seite einpassen"
+    auto zoomWithMargin = [this](const QRectF& r) {
+        if (r.isNull())
+            return;
+        const double m = std::max(r.width(), r.height()) * 0.05;
+        m_canvas->zoomToRect(r.adjusted(-m, -m, m, m));
+    };
+    m_selectionActions << view->addAction(tr("Auf &Auswahl zoomen"), QKeySequence(Qt::SHIFT | Qt::Key_F2), this,
+                                          [this, zoomWithMargin] { zoomWithMargin(m_editor.selectionBounds()); });
+    view->addAction(tr("Auf a&lle Objekte zoomen"), QKeySequence(Qt::Key_F4), this, [this, zoomWithMargin] {
+        QRectF all;
+        for (const DrawObject* o : m_editor.pickableObjects())
+            all = all.isNull() ? o->boundingRect() : all.united(o->boundingRect());
+        zoomWithMargin(all);
+    });
     view->addSeparator();
     // Lineale, Hilfslinien, Gitter und "Ausrichten an" sind Optionen (Extras > Optionen)
     auto optionToggle = [this](QMenu* menu, const QString& text, const QString& key) {
@@ -587,6 +657,7 @@ void MainWindow::createMenusAndToolbars()
     alignGuides->setShortcut(QKeySequence(Qt::ALT | Qt::SHIFT | Qt::Key_A));
     m_snapActions << dyn << alignGuides;
     m_snapActions[2]->setShortcut(QKeySequence(Qt::ALT | Qt::Key_Z)); // An Objekten ausrichten
+    m_snapActions[4]->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Y)); // Am Gitter ausrichten
     snapMenu->addSeparator();
     snapMenu->addAction(tr("Einstellungen …"), this, [this] {
         OptionsDialog dialog(m_editor, this, this);
@@ -674,15 +745,32 @@ void MainWindow::createMenusAndToolbars()
     }
 
     QMenu* layoutMenu = menuBar()->addMenu(tr("&Layout"));
-    layoutMenu->addAction(tr("Seite &einfügen"), this, [this] { m_editor.insertPage(m_editor.currentPageIndex() + 1); });
-    layoutMenu->addAction(tr("Seite &löschen"), this, [this] { m_editor.deletePage(m_editor.currentPageIndex()); });
+    // Öffnet den Dialog "Seiten einfügen" (Text wie bisher, damit er übersetzt bleibt)
+    layoutMenu->addAction(icon(QStringLiteral("page-insert")), tr("Seite &einfügen"), this,
+                          [this] { pagecommands::insertPages(this, m_editor, m_editor.currentPageIndex()); });
+    layoutMenu->addAction(icon(QStringLiteral("page-duplicate")), tr("Seite d&uplizieren …"), this,
+                          [this] { pagecommands::duplicate(this, m_editor, m_editor.currentPageIndex()); });
+    layoutMenu->addAction(tr("Seite &umbenennen …"), this,
+                          [this] { pagecommands::rename(this, m_editor, m_editor.currentPageIndex()); });
+    layoutMenu->addAction(icon(QStringLiteral("page-delete")), tr("Seite &löschen"), this,
+                          [this] { m_editor.deletePage(m_editor.currentPageIndex()); });
+    layoutMenu->addAction(tr("Seite &verschieben …"), this,
+                          [this] { pagecommands::move(this, m_editor, m_editor.currentPageIndex()); });
+    layoutMenu->addSeparator();
+    layoutMenu->addAction(tr("Vorige Seite"), QKeySequence(Qt::Key_PageUp), this,
+                          [this] { m_editor.setCurrentPageIndex(m_editor.currentPageIndex() - 1); });
+    layoutMenu->addAction(tr("Nächste Seite"), QKeySequence(Qt::Key_PageDown), this,
+                          [this] { m_editor.setCurrentPageIndex(m_editor.currentPageIndex() + 1); });
+    layoutMenu->addSeparator();
+    layoutMenu->addAction(tr("Seitenausrichtung &wechseln"), this,
+                          [this] { pagecommands::toggleOrientation(m_editor, m_editor.currentPageIndex()); });
 
     // Menü "Anordnen"
     QMenu* object = menuBar()->addMenu(tr("An&ordnen"));
-    m_selectionActions << object->addAction(tr("&Gruppieren"), QKeySequence(Qt::CTRL | Qt::Key_G), this,
-                                            [this] { m_editor.groupSelection(); });
-    m_selectionActions << object->addAction(tr("Gruppierung &aufheben"), QKeySequence(Qt::CTRL | Qt::Key_U), this,
-                                            [this] { m_editor.ungroupSelection(); });
+    m_group = object->addAction(tr("&Gruppieren"), QKeySequence(Qt::CTRL | Qt::Key_G), this,
+                                [this] { m_editor.groupSelection(); });
+    m_ungroup = object->addAction(tr("Gruppierung &aufheben"), QKeySequence(Qt::CTRL | Qt::Key_U), this,
+                                  [this] { m_editor.ungroupSelection(); });
     m_selectionActions << object->addAction(tr("Gruppierung a&ller Objekte aufheben"), this, [this] { m_editor.ungroupAll(); });
     object->addSeparator();
     m_toCurves = object->addAction(icon(QStringLiteral("to-curves")), tr("In &Kurven konvertieren"),
@@ -897,9 +985,8 @@ void MainWindow::createMenusAndToolbars()
         m_bitmapActions << a;
         return a;
     };
-    effectAction(adjustMenu, tr("&Kontrastverbesserung"), {}, [this] {
-        applyImageEffect(tr("Kontrastverbesserung"), [](const QImage& i) { return adjust::stretchContrast(i); });
-    });
+    for (const char* id : {"adjust.contrast", "adjust.localequalize", "adjust.sampletarget"})
+        addBitmapEffectAction(adjustMenu, QString::fromLatin1(id));
     effectAction(adjustMenu, tr("&Tonkurve …"), {}, [this] {
         if (const ImageObject* image = m_editor.selectedImage()) {
             ToneCurveDialog dialog(image->image(), this);
@@ -907,64 +994,24 @@ void MainWindow::createMenusAndToolbars()
         }
     });
     adjustMenu->addSeparator();
-    effectAction(adjustMenu, tr("&Helligkeit/Kontrast/Intensität …"), QKeySequence(Qt::CTRL | Qt::Key_B), [this] {
-        if (const ImageObject* image = m_editor.selectedImage()) {
-            EffectDialog dialog(tr("Helligkeit/Kontrast/Intensität"), image->image(),
-                                {{tr("Helligkeit:")}, {tr("Kontrast:")}, {tr("Intensität:")}},
-                                [](const QImage& i, const QList<int>& v) {
-                                    return adjust::brightnessContrastIntensity(i, v[0], v[1], v[2]);
-                                },
-                                this);
-            runImageDialog(tr("Helligkeit/Kontrast/Intensität"), dialog);
-        }
-    });
-    effectAction(adjustMenu, tr("&Farbbalance …"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_B), [this] {
-        if (const ImageObject* image = m_editor.selectedImage()) {
-            EffectDialog dialog(tr("Farbbalance"), image->image(),
-                                {{tr("Cyan – Rot:")}, {tr("Magenta – Grün:")}, {tr("Gelb – Blau:")}},
-                                [](const QImage& i, const QList<int>& v) { return adjust::colorBalance(i, v[0], v[1], v[2]); },
-                                this);
-            runImageDialog(tr("Farbbalance"), dialog);
-        }
-    });
-    effectAction(adjustMenu, tr("&Gamma …"), {}, [this] {
-        if (const ImageObject* image = m_editor.selectedImage()) {
-            EffectDialog dialog(tr("Gamma"), image->image(), {{tr("Gamma-Wert (×100):"), 10, 500, 100}},
-                                [](const QImage& i, const QList<int>& v) { return adjust::gamma(i, v[0] / 100.0); }, this);
-            runImageDialog(tr("Gamma"), dialog);
-        }
-    });
+    for (const char* id : {"adjust.bci", "adjust.colorbalance", "adjust.gamma"})
+        addBitmapEffectAction(adjustMenu, QString::fromLatin1(id));
     adjustMenu->addSeparator();
-    effectAction(adjustMenu, tr("Farbton/&Sättigung/Helligkeit …"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_U), [this] {
-        if (const ImageObject* image = m_editor.selectedImage()) {
-            EffectDialog dialog(tr("Farbton/Sättigung/Helligkeit"), image->image(),
-                                {{tr("Farbton:"), -180, 180, 0}, {tr("Sättigung:")}, {tr("Helligkeit:")}},
-                                [](const QImage& i, const QList<int>& v) {
-                                    return adjust::hueSaturationLightness(i, v[0], v[1], v[2]);
-                                },
-                                this);
-            runImageDialog(tr("Farbton/Sättigung/Helligkeit"), dialog);
-        }
-    });
-    effectAction(adjustMenu, tr("Sättigung &reduzieren"), {}, [this] {
-        applyImageEffect(tr("Sättigung reduzieren"), [](const QImage& i) { return adjust::desaturate(i); });
-    });
+    for (const char* id : {"adjust.hsl", "adjust.selectivecolor", "adjust.replacecolors", "adjust.desaturate", "adjust.channelmixer"})
+        addBitmapEffectAction(adjustMenu, QString::fromLatin1(id));
     QMenu* correction = effects->addMenu(tr("&Korrektur"));
-    effectAction(correction, tr("&Invertieren"), {}, [this] {
-        applyImageEffect(tr("Invertieren"), [](const QImage& i) { return adjust::invert(i); });
-    });
-    effectAction(correction, tr("&Abstufen …"), {}, [this] {
-        if (const ImageObject* image = m_editor.selectedImage()) {
-            EffectDialog dialog(tr("Abstufen"), image->image(), {{tr("Stufen:"), 2, 32, 4}},
-                                [](const QImage& i, const QList<int>& v) { return adjust::posterize(i, v[0]); }, this);
-            runImageDialog(tr("Abstufen"), dialog);
-        }
-    });
+    for (const char* id : {"correction.invert", "correction.posterize"})
+        addBitmapEffectAction(correction, QString::fromLatin1(id));
 
     // Bitmaps
     // Effekte: Überblendung, Kontur, Hülle, Extrudieren, Linse, Abschrägung, …
     effects->addSeparator();
+    effects->addAction(icon(QStringLiteral("tool-media")), tr("Künstlerische Medien"), this, [this] {
+        m_mediaDock->show();
+        m_mediaDock->raise();
+    });
     effects->addAction(icon(QStringLiteral("tool-blend")), tr("Ü&berblendung"), this, [this] { m_canvas->setTool(ToolId::Blend); });
+    m_selectionActions << effects->addAction(icon(QStringLiteral("blend-path")), tr("Überblendung an &Pfad …"), this, [this] { blendAlongPath(); });
     effects->addAction(icon(QStringLiteral("tool-contour")), tr("&Kontur", "Effekt"), QKeySequence(Qt::CTRL | Qt::Key_F9), this,
                        [this] { m_canvas->setTool(ToolId::Contour); });
     effects->addAction(icon(QStringLiteral("tool-envelope")), tr("&Hülle"), QKeySequence(Qt::CTRL | Qt::Key_F7), this, [this] {
@@ -977,6 +1024,34 @@ void MainWindow::createMenusAndToolbars()
     QAction* lens = effects->addAction(icon(QStringLiteral("fx-lens")), tr("&Linse …"), QKeySequence(Qt::ALT | Qt::Key_F3), this,
                                        [this] { lensDialog(); });
     m_selectionActions << lens;
+    // Fotomosaik und Punktraster aus einem Bild (oder der Auswahl als Bild)
+    m_selectionActions << effects->addAction(icon(QStringLiteral("fx-photomosaic")), tr("&Fotomosaik …"), this, [this] {
+        std::optional<MosaicSource> src = mosaicSource(*m_canvas);
+        if (!src)
+            return;
+        PhotoMosaicDialog dialog(*m_canvas, std::move(*src), this);
+        if (dialog.exec() == QDialog::Accepted)
+            dialog.apply();
+    });
+    m_selectionActions << effects->addAction(icon(QStringLiteral("fx-pointillize")), tr("P&unktraster …"), this, [this] {
+        // Bild und ein weiteres Objekt ausgewählt: das Objekt ist die eigene Form
+        QPainterPath custom;
+        bool hasImage = false;
+        for (const DrawObject* o : m_editor.selectedObjects()) {
+            if (node_cast<ImageObject>(o))
+                hasImage = true;
+            else if (custom.isEmpty())
+                custom = o->path();
+        }
+        if (!hasImage || m_editor.selectedObjects().size() != 2)
+            custom = QPainterPath();
+        std::optional<MosaicSource> src = mosaicSource(*m_canvas, 150.0, !custom.isEmpty());
+        if (!src)
+            return;
+        PointillizeDialog dialog(*m_canvas, std::move(*src), custom, this);
+        if (dialog.exec() == QDialog::Accepted)
+            dialog.apply();
+    });
     m_selectionActions << effects->addAction(icon(QStringLiteral("fx-perspective")), tr("&Perspektive hinzufügen"), this,
                                              [this] { m_canvas->setTool(ToolId::Perspective); });
     QMenu* superclip = effects->addMenu(icon(QStringLiteral("fx-superclip")), tr("Super&Clip"));
@@ -1019,11 +1094,11 @@ void MainWindow::createMenusAndToolbars()
     m_selectionActions << cloneFx->addAction(tr("Effekte von …"), this, [pickEffects] { pickEffects(tr("Effekt klonen")); });
 
     QMenu* bitmaps = menuBar()->addMenu(tr("&Bitmaps"));
-    m_bitmapActions << bitmaps->addAction(tr("&Automatische Anpassung"), this, [this] {
-        applyImageEffect(tr("Automatische Anpassung"), [](const QImage& i) { return adjust::autoAdjust(i); });
-    });
-    m_bitmapActions << bitmaps->addAction(icon(QStringLiteral("bitmap-edit")), tr("Bildanpassungs&editor …"), this,
-                                          [this] { editBitmap(); });
+    // Bildersuche auch hier, wo man Bilder bearbeitet (zusätzlich zu Datei)
+    bitmaps->addAction(imageSearch);
+    bitmaps->addSeparator();
+    addBitmapEffectAction(bitmaps, QStringLiteral("adjust.auto"));
+    addBitmapEffectAction(bitmaps, QStringLiteral("adjust.lab"))->setIcon(icon(QStringLiteral("bitmap-edit")));
     m_bitmapActions << bitmaps->addAction(tr("Bild &geraderichten …"), this, [this] {
         if (const ImageObject* image = m_editor.selectedImage()) {
             EffectDialog dialog(tr("Bild geraderichten"), image->image(),
@@ -1204,6 +1279,15 @@ void MainWindow::createMenusAndToolbars()
     connect(propertyBar, &PropertyBar::traceRequested, this, &MainWindow::traceImage);
     connect(propertyBar, &PropertyBar::alignDialogRequested, this, [this] { showAlignDialog(0); });
     connect(propertyBar, &PropertyBar::editBitmapRequested, this, &MainWindow::editBitmap);
+    connect(propertyBar, &PropertyBar::objectActionRequested, this, [this](const QString& id) {
+        const QList<const DrawObject*> objects = m_editor.selectedObjects();
+        if (id == QLatin1String("qrEdit") && objects.size() == 1)
+            editQrCode(objects.first()->id());
+        else if (id == QLatin1String("blendPath"))
+            blendAlongPath();
+        else if (id == QLatin1String("blendDetach") && objects.size() == 1)
+            m_editor.detachBlendPath(objects.first()->id());
+    });
     addToolBar(propertyBar);
     m_propertyBar = propertyBar;
 }
@@ -1218,13 +1302,20 @@ void MainWindow::createToolbox()
     addToolBar(Qt::LeftToolBarArea, tools);
 
     auto* group = new QActionGroup(this);
-    // Werkzeug als Aktion; key erscheint rechts in der Ausklappliste
-    auto tool = [&](ToolId id, const QString& iconName, const QString& name, const QString& key = QString()) {
-        auto* a = new QAction(icon(iconName), key.isEmpty() ? name : name + QLatin1Char('\t') + key, this);
-        a->setToolTip(key.isEmpty() ? name : tr("%1 (%2)").arg(name, key));
+    // Werkzeug als Aktion mit vorbelegtem Tastaturbefehl (Optionen > Befehle > Hilfsmittel). Die Aktionen
+    // hängen auch am Fenster, sonst greifen die Kürzel nicht (die Ausklapplisten sind meist zu).
+    m_toolCommands = new QMenu(tr("Hilfsmittel"), this);
+    m_toolCommands->setObjectName(QStringLiteral("toolCommands"));
+    m_toolCommands->setProperty("commandGroup", true);
+    auto tool = [&](ToolId id, const QString& iconName, const QString& name, const QKeySequence& key = {}) {
+        auto* a = new QAction(icon(iconName), name, this);
+        a->setProperty("toolName", name);
+        a->setShortcut(key);
         a->setCheckable(true);
         connect(a, &QAction::triggered, this, [this, id] { m_canvas->setTool(id); });
         group->addAction(a);
+        m_toolCommands->addAction(a);
+        addAction(a);
         m_toolActions.insert(static_cast<int>(id), a);
         return a;
     };
@@ -1232,9 +1323,11 @@ void MainWindow::createToolbox()
         tools->addWidget(new FlyoutButton(FlyoutButton::Kind::ToolGroup, actions, tools));
     };
     // Reihenfolge und Gruppen
-    tools->addAction(tool(ToolId::Pick, QStringLiteral("tool-pick"), tr("Auswahl"), tr("Leertaste")));
+    tools->addAction(tool(ToolId::Pick, QStringLiteral("tool-pick"), tr("Auswahl")));
+    // Leertaste wechselt in der Arbeitsfläche zwischen Auswahl und dem letzten Zeichenwerkzeug
+    m_toolActions.value(static_cast<int>(ToolId::Pick))->setProperty("toolHint", tr("Leertaste"));
     // Form mit den Formgebungswerkzeugen
-    flyout({tool(ToolId::Shape, QStringLiteral("tool-shape"), tr("Form"), QStringLiteral("F10")),
+    flyout({tool(ToolId::Shape, QStringLiteral("tool-shape"), tr("Form"), QKeySequence(Qt::Key_F10)),
             tool(ToolId::Smear, QStringLiteral("tool-smear"), tr("Verschmieren")),
             tool(ToolId::Twirl, QStringLiteral("tool-twirl"), tr("Wirbel")),
             tool(ToolId::Attract, QStringLiteral("tool-attract"), tr("Anziehen")),
@@ -1244,36 +1337,36 @@ void MainWindow::createToolbox()
             tool(ToolId::FreeTransform, QStringLiteral("tool-free-transform"), tr("Freie Transformation"))});
     flyout({tool(ToolId::Crop, QStringLiteral("tool-crop"), tr("Beschneiden")),
             tool(ToolId::Knife, QStringLiteral("tool-knife"), tr("Messer")),
-            tool(ToolId::Eraser, QStringLiteral("tool-eraser"), tr("Radierer"), QStringLiteral("X")),
+            tool(ToolId::Eraser, QStringLiteral("tool-eraser"), tr("Radierer"), QKeySequence(Qt::Key_X)),
             tool(ToolId::VirtualDelete, QStringLiteral("tool-virtual-delete"), tr("Virtuelles Segment löschen"))});
-    flyout({tool(ToolId::Zoom, QStringLiteral("tool-zoom"), tr("Zoom"), QStringLiteral("Z")),
-            tool(ToolId::Pan, QStringLiteral("tool-pan"), tr("Schwenken"), QStringLiteral("H"))});
-    flyout({tool(ToolId::Freehand, QStringLiteral("tool-freehand"), tr("Freihand"), QStringLiteral("F5")),
+    flyout({tool(ToolId::Zoom, QStringLiteral("tool-zoom"), tr("Zoom"), QKeySequence(Qt::Key_Z)),
+            tool(ToolId::Pan, QStringLiteral("tool-pan"), tr("Schwenken"), QKeySequence(Qt::Key_H))});
+    flyout({tool(ToolId::Freehand, QStringLiteral("tool-freehand"), tr("Freihand"), QKeySequence(Qt::Key_F5)),
             tool(ToolId::Line, QStringLiteral("tool-line"), tr("2-Punkt-Linie")),
             tool(ToolId::Bezier, QStringLiteral("tool-bezier"), tr("Bézier")),
-            tool(ToolId::ArtisticMedia, QStringLiteral("tool-media"), tr("Künstlerische Medien"), QStringLiteral("I")),
-            tool(ToolId::SmartDrawing, QStringLiteral("tool-smart"), tr("Smart-Zeichnen"), tr("Umschalt+S")),
+            tool(ToolId::ArtisticMedia, QStringLiteral("tool-media"), tr("Künstlerische Medien"), QKeySequence(Qt::Key_I)),
+            tool(ToolId::SmartDrawing, QStringLiteral("tool-smart"), tr("Smart-Zeichnen"), QKeySequence(Qt::SHIFT | Qt::Key_S)),
             tool(ToolId::Pen, QStringLiteral("tool-pen"), tr("Stift")),
             tool(ToolId::BSpline, QStringLiteral("tool-bspline"), tr("B-Spline")),
             tool(ToolId::Polyline, QStringLiteral("tool-polyline"), tr("Polylinie")),
             tool(ToolId::ThreePointCurve, QStringLiteral("tool-3point"), tr("3-Punkt-Kurve"))});
     tools->addSeparator();
-    flyout({tool(ToolId::Rectangle, QStringLiteral("tool-rectangle"), tr("Rechteck"), QStringLiteral("F6")),
+    flyout({tool(ToolId::Rectangle, QStringLiteral("tool-rectangle"), tr("Rechteck"), QKeySequence(Qt::Key_F6)),
             tool(ToolId::ThreePointRectangle, QStringLiteral("tool-rectangle-3point"), tr("3-Punkt-Rechteck"))});
-    flyout({tool(ToolId::Ellipse, QStringLiteral("tool-ellipse"), tr("Ellipse"), QStringLiteral("F7")),
+    flyout({tool(ToolId::Ellipse, QStringLiteral("tool-ellipse"), tr("Ellipse"), QKeySequence(Qt::Key_F7)),
             tool(ToolId::ThreePointEllipse, QStringLiteral("tool-ellipse-3point"), tr("3-Punkt-Ellipse"))});
-    flyout({tool(ToolId::Polygon, QStringLiteral("tool-polygon"), tr("Polygon"), QStringLiteral("Y")),
+    flyout({tool(ToolId::Polygon, QStringLiteral("tool-polygon"), tr("Polygon"), QKeySequence(Qt::Key_Y)),
             tool(ToolId::Star, QStringLiteral("tool-star"), tr("Stern")),
             tool(ToolId::ComplexStar, QStringLiteral("tool-complex-star"), tr("Komplexer Stern")),
-            tool(ToolId::GraphPaper, QStringLiteral("tool-graph-paper"), tr("Millimeterpapier"), QStringLiteral("D")),
-            tool(ToolId::Spiral, QStringLiteral("tool-spiral"), tr("Spirale"), QStringLiteral("A"))});
+            tool(ToolId::GraphPaper, QStringLiteral("tool-graph-paper"), tr("Millimeterpapier"), QKeySequence(Qt::Key_D)),
+            tool(ToolId::Spiral, QStringLiteral("tool-spiral"), tr("Spirale"), QKeySequence(Qt::Key_A))});
     // Perfekte Formen
     flyout({tool(ToolId::PerfectBasic, QStringLiteral("perfect-basic"), tr("Grundformen")),
             tool(ToolId::PerfectArrow, QStringLiteral("perfect-arrow"), tr("Pfeilformen")),
             tool(ToolId::PerfectFlowchart, QStringLiteral("perfect-flowchart"), tr("Flussdiagrammformen")),
             tool(ToolId::PerfectBanner, QStringLiteral("perfect-banner"), tr("Banner- und Sternformen")),
             tool(ToolId::PerfectCallout, QStringLiteral("perfect-callout"), tr("Legendenformen"))});
-    tools->addAction(tool(ToolId::Text, QStringLiteral("tool-text"), tr("Text"), QStringLiteral("F8")));
+    tools->addAction(tool(ToolId::Text, QStringLiteral("tool-text"), tr("Text"), QKeySequence(Qt::Key_F8)));
     tools->addAction(tool(ToolId::Table, QStringLiteral("tool-table"), tr("Tabelle")));
     flyout({tool(ToolId::DimensionParallel, QStringLiteral("tool-dimension"), tr("Parallelbemassung")),
             tool(ToolId::DimensionHV, QStringLiteral("tool-dimension-hv"), tr("Horizontal- oder Vertikalbemassung")),
@@ -1286,20 +1379,53 @@ void MainWindow::createToolbox()
     tools->addSeparator();
     flyoutButton(tools, QStringLiteral("tool-outline"), tr("Kontur"), m_outlineActions);
     flyoutButton(tools, QStringLiteral("tool-fill"), tr("Füllung"), m_fillActions);
-    flyout({tool(ToolId::InteractiveFill, QStringLiteral("tool-interactive-fill"), tr("Interaktive Füllung"),
-                 QStringLiteral("G")),
-            tool(ToolId::Mesh, QStringLiteral("tool-mesh"), tr("Maschenfüllung"), QStringLiteral("M")),
+    flyout({tool(ToolId::InteractiveFill, QStringLiteral("tool-interactive-fill"), tr("Interaktive Füllung"), QKeySequence(Qt::Key_G)),
+            tool(ToolId::Mesh, QStringLiteral("tool-mesh"), tr("Maschenfüllung"), QKeySequence(Qt::Key_M)),
             tool(ToolId::SmartFill, QStringLiteral("tool-smart-fill"), tr("Smart-Füllung")),
             tool(ToolId::Blend, QStringLiteral("tool-blend"), tr("Überblendung")),
             tool(ToolId::Contour, QStringLiteral("tool-contour"), tr("Kontur")),
             tool(ToolId::Distort, QStringLiteral("tool-distort"), tr("Verzerren")),
             tool(ToolId::DropShadow, QStringLiteral("tool-shadow"), tr("Hinterlegter Schatten")),
+            tool(ToolId::BlockShadow, QStringLiteral("tool-block-shadow"), tr("Blockschatten")),
             tool(ToolId::Envelope, QStringLiteral("tool-envelope"), tr("Hülle")),
             tool(ToolId::Extrude, QStringLiteral("tool-extrude"), tr("Extrusion")),
             tool(ToolId::Transparency, QStringLiteral("tool-transparency"), tr("Transparenz")),
             tool(ToolId::Blur, QStringLiteral("tool-blur"), tr("Blur (Unschärfe)"))});
+    // Kein Werkzeug, sondern ein Befehl: freie Fotos und Symbole suchen und einfügen
+    tools->addSeparator();
+    QAction* search = tools->addAction(icon(QStringLiteral("image-search")), tr("Bildersuche"), this, [this] { searchImages(); });
+    search->setToolTip(tr("Bildersuche: freie Fotos und Symbole suchen und einfügen"));
+    search->setObjectName(QStringLiteral("toolbox-image-search"));
 
     m_toolActions.value(static_cast<int>(ToolId::Pick))->setChecked(true);
+
+    // Befehle der Arbeitsfläche: greifen nur, wenn sie den Fokus hat (Pfeile und Leertaste bleiben in
+    // Feldern und Listen der Andockfenster normal)
+    auto canvasCommand = [this](QMenu* group, const QString& text, const QKeySequence& key, auto slot) {
+        auto* a = new QAction(text, this);
+        a->setShortcut(key);
+        a->setShortcutContext(Qt::WidgetShortcut);
+        connect(a, &QAction::triggered, this, slot);
+        group->addAction(a);
+        m_canvas->addAction(a);
+        return a;
+    };
+    canvasCommand(m_toolCommands, tr("Auswahl und letztes Werkzeug wechseln"), QKeySequence(Qt::Key_Space),
+                  [this] { m_canvas->togglePickTool(); });
+    auto* nudgeCommands = new QMenu(tr("Schubsen"), this);
+    nudgeCommands->setProperty("commandGroup", true);
+    const QList<std::tuple<QString, int, int, Qt::Key>> directions{
+        {tr("nach oben"), 0, -1, Qt::Key_Up}, {tr("nach unten"), 0, 1, Qt::Key_Down},
+        {tr("nach links"), -1, 0, Qt::Key_Left}, {tr("nach rechts"), 1, 0, Qt::Key_Right}};
+    const QList<std::tuple<QString, int, Qt::KeyboardModifiers>> kinds{
+        {tr("Schubsen"), 0, Qt::NoModifier}, {tr("Super-Schubsen"), 1, Qt::ShiftModifier},
+        {tr("Mikro-Schubsen"), -1, Qt::ControlModifier}};
+    for (const auto& [kind, scale, mods] : kinds) {
+        for (const auto& [dir, dx, dy, key] : directions) {
+            canvasCommand(nudgeCommands, kind + QLatin1Char(' ') + dir, QKeySequence(QKeyCombination(mods, key)),
+                          [this, dx, dy, scale] { m_canvas->nudge(dx, dy, scale); });
+        }
+    }
     connect(m_canvas, &Canvas::toolChanged, this, [this](ToolId id) {
         if (QAction* a = m_toolActions.value(static_cast<int>(id)))
             a->setChecked(true);
@@ -1368,7 +1494,14 @@ QDockWidget* MainWindow::addDocker(const QString& title, const QString& objectNa
 {
     auto* dock = new QDockWidget(title, this);
     dock->setObjectName(objectName);
-    dock->setWidget(content);
+    // In einer Rollfläche: übereinander angedockt bestimmt sonst die Summe der Mindesthöhen
+    // die Mindesthöhe des ganzen Fensters (auf kleinen Bildschirmen höher als der Bildschirm)
+    auto* scroll = new QScrollArea(dock);
+    scroll->setWidget(content);
+    scroll->setWidgetResizable(true);
+    scroll->setFrameShape(QFrame::NoFrame);
+    scroll->setMinimumSize(content->minimumSizeHint().width(), 80);
+    dock->setWidget(scroll);
     dock->setAllowedAreas(Qt::LeftDockWidgetArea | Qt::RightDockWidgetArea);
     addDockWidget(Qt::RightDockWidgetArea, dock);
     m_dockerMenu->addAction(dock->toggleViewAction());
@@ -1393,6 +1526,13 @@ void MainWindow::createDockers()
     m_lensDock = addDocker(tr("Linse"), QStringLiteral("lens"), m_lensDocker);
     m_envelopeDocker = new EnvelopeDocker(m_editor, *m_canvas, this);
     m_envelopeDock = addDocker(tr("Hülle"), QStringLiteral("envelope"), m_envelopeDocker);
+    m_cornersDock = addDocker(tr("Ecken"), QStringLiteral("corners"), new CornersDocker(m_editor, *m_canvas, this));
+    m_fxDocker = new BitmapEffectsDocker(m_editor, *m_canvas, this);
+    m_fxDock = addDocker(tr("Effekte"), QStringLiteral("bitmapEffects"), m_fxDocker);
+    m_mediaDocker = new MediaDocker(m_editor, *m_canvas, this);
+    m_mediaDock = addDocker(tr("Künstlerische Medien"), QStringLiteral("artisticMedia"), m_mediaDocker);
+    m_pagesDocker = new PagesDocker(m_editor, *m_canvas, this);
+    m_pagesDock = addDocker(tr("Seiten"), QStringLiteral("pages"), m_pagesDocker);
     // KI-Assistent (Extras > KI-Assistent)
     m_aiPanel = new AiPanel(m_editor, *m_canvas, this, this);
     m_aiDock = addDocker(tr("KI"), QStringLiteral("ai"), m_aiPanel);
@@ -1402,9 +1542,20 @@ void MainWindow::createDockers()
         dialog.exec();
         m_aiPanel->reloadAccounts();
     });
+    // Alle als Reiter einer Gruppe (wie gewohnt), nicht übereinander
+    for (QDockWidget* d : {m_propertiesDock, m_symbolDock, m_transformDock, m_scriptDock})
+        tabifyDockWidget(m_firstDocker, d);
     tabifyDockWidget(m_firstDocker, m_shapingDock);
     tabifyDockWidget(m_firstDocker, m_lensDock);
     tabifyDockWidget(m_firstDocker, m_envelopeDock);
+    tabifyDockWidget(m_firstDocker, m_cornersDock);
+    m_cornersDock->hide();
+    tabifyDockWidget(m_firstDocker, m_fxDock);
+    m_fxDock->hide();
+    tabifyDockWidget(m_firstDocker, m_mediaDock);
+    m_mediaDock->hide();
+    tabifyDockWidget(m_firstDocker, m_pagesDock);
+    m_pagesDock->hide();
     m_shapingDock->hide();
     m_lensDock->hide();
     m_envelopeDock->hide();
@@ -1445,6 +1596,8 @@ void MainWindow::updateActions()
     const bool editable = m_editor.selectionHasUnlocked();
     m_cut->setEnabled(editable);
     m_toCurves->setEnabled(m_editor.canConvertSelectionToCurves());
+    m_group->setEnabled(m_editor.canGroupSelection());
+    m_ungroup->setEnabled(m_editor.canUngroupSelection());
     m_combine->setEnabled(m_editor.canCombineSelection());
     m_breakApart->setEnabled(m_editor.canBreakApartSelection());
     m_lock->setEnabled(editable);
@@ -1461,6 +1614,9 @@ void MainWindow::updateActions()
     const bool image = m_editor.selectedImage() && editable;
     for (QAction* a : std::as_const(m_bitmapActions))
         a->setEnabled(image);
+    // Bitmap-Effekte: an Bitmaps destruktiv, an allen anderen Objekten als Effektstapel
+    for (QAction* a : std::as_const(m_fxActions))
+        a->setEnabled(editable && !m_editor.selection().isEmpty());
 }
 
 void MainWindow::traceImage(int preset, bool quick)
@@ -1496,10 +1652,7 @@ void MainWindow::traceImage(int preset, bool quick)
 
 void MainWindow::editBitmap()
 {
-    if (const ImageObject* image = m_editor.selectedImage()) {
-        ImageAdjustDialog dialog(image->image(), this);
-        runImageDialog(tr("Bildanpassung"), dialog);
-    }
+    runBitmapEffect(QStringLiteral("adjust.lab"));
 }
 
 void MainWindow::applyImageEffect(const QString& label, const std::function<QImage(const QImage&)>& fn)
@@ -1545,6 +1698,8 @@ void MainWindow::showObjectContextMenu(const QPoint& globalPos)
 {
     updateActions();
     QMenu menu(this); // erbt das Stylesheet des Fensters
+    menu.addActions({m_group, m_ungroup});
+    menu.addSeparator();
     menu.addActions({m_toCurves, m_breakApart, m_wrapText, m_breakConnector});
     if (m_linkText->isEnabled() || m_unlinkText->isEnabled()) {
         menu.addSeparator();
@@ -1646,6 +1801,24 @@ void MainWindow::applyShortcuts()
                 a->setProperty("defaultShortcut", a->shortcut().toString());
             a->setShortcut(custom.contains(path) ? QKeySequence(custom.value(path).toString())
                                                  : QKeySequence(a->property("defaultShortcut").toString()));
+        });
+    }
+    // Befehle ausserhalb der Menüleiste (Werkzeuge, Schubsen): gleiche Ablage unter "<Gruppe>/<Befehl>";
+    // der Tooltip eines Werkzeugs nennt das aktuelle Kürzel
+    for (QMenu* group : findChildren<QMenu*>()) {
+        if (!group->property("commandGroup").toBool())
+            continue;
+        forEachMenuAction(group, plainMenuText(group->title()), [&custom](const QString& path, QAction* a) {
+            if (!a->property("defaultShortcut").isValid())
+                a->setProperty("defaultShortcut", a->shortcut().toString());
+            a->setShortcut(custom.contains(path) ? QKeySequence(custom.value(path).toString())
+                                                 : QKeySequence(a->property("defaultShortcut").toString()));
+            const QString name = a->property("toolName").toString();
+            if (name.isEmpty())
+                return;
+            const QString key = a->shortcut().isEmpty() ? a->property("toolHint").toString()
+                                                        : a->shortcut().toString(QKeySequence::NativeText);
+            a->setToolTip(key.isEmpty() ? name : MainWindow::tr("%1 (%2)").arg(name, key));
         });
     }
 }
@@ -1844,7 +2017,7 @@ void MainWindow::newDocument()
         format->addItem(f.name);
     format->setCurrentIndex(1);
     auto spin = [&dialog](double v) {
-        auto* s = new QDoubleSpinBox(&dialog);
+        auto* s = new ExpressionSpinBox(&dialog);
         s->setRange(1, 5000);
         s->setDecimals(1);
         s->setSuffix(QStringLiteral(" mm"));
@@ -1856,6 +2029,9 @@ void MainWindow::newDocument()
     auto* landscape = new QCheckBox(tr("Querformat"), &dialog);
     auto* pages = new QSpinBox(&dialog);
     pages->setRange(1, 999);
+    auto* pageView = new QComboBox(&dialog);
+    pageView->setObjectName(QStringLiteral("pageView"));
+    pageView->addItems({tr("Einzelseitenansicht"), tr("Mehrseitenansicht")});
     auto* again = new QCheckBox(tr("Dieses Dialogfeld immer anzeigen"), &dialog);
     again->setChecked(true);
     connect(format, &QComboBox::currentIndexChanged, &dialog, [=](int i) {
@@ -1878,6 +2054,7 @@ void MainWindow::newDocument()
     form->addRow(tr("Höhe:"), height);
     form->addRow(QString(), landscape);
     form->addRow(tr("Seitenanzahl:"), pages);
+    form->addRow(tr("Seitenansicht:"), pageView);
     form->addRow(QString(), again);
     auto* buttons = new QDialogButtonBox(QDialogButtonBox::Ok | QDialogButtonBox::Cancel, &dialog);
     connect(buttons, &QDialogButtonBox::accepted, &dialog, &QDialog::accept);
@@ -1887,17 +2064,38 @@ void MainWindow::newDocument()
         return;
     if (!again->isChecked())
         o.set(QStringLiteral("ws/general/newDocDialog"), false);
-    createDocument(QSizeF(width->value(), height->value()), pages->value());
+    createDocument(QSizeF(width->value(), height->value()), pages->value(), pageView->currentIndex() == 1);
 }
 
-void MainWindow::createDocument(const QSizeF& pageSize, int pages)
+void MainWindow::createDocument(const QSizeF& pageSize, int pages, bool multiPageView)
 {
-    m_editor.setDocument(std::make_unique<Document>(pageSize), QString());
-    for (int i = 1; i < pages; ++i)
-        m_editor.insertPage(i);
+    if (multiPageView) {
+        // Mehrseitenansicht gehört zum Dokument: gleich auf die Masterseite, ohne Rückgängig-Schritt
+        auto root = std::make_unique<DocumentRoot>();
+        auto master = createPage(pageSize, QCoreApplication::translate("vek::Document", "Master-Ebene 1"), true);
+        master->setOptions(QJsonObject{{QStringLiteral("doc/layout/multiPage"), true}});
+        attachDetachedChild(*root, std::move(master));
+        for (int i = 0; i < std::max(1, pages); ++i)
+            attachDetachedChild(*root, createPage(pageSize, QCoreApplication::translate("vek::Document", "Ebene 1")));
+        m_editor.setDocument(Document::fromTree(std::move(root)), QString());
+    } else {
+        m_editor.setDocument(std::make_unique<Document>(pageSize), QString());
+        for (int i = 1; i < pages; ++i)
+            m_editor.insertPage(i);
+    }
     m_editor.setCurrentPageIndex(0);
     m_editor.document().setClean();
     updateTitle();
+}
+
+void MainWindow::showPageContextMenu(int index, const QPoint& globalPos)
+{
+    if (index < 0 || index >= m_editor.document().pageCount())
+        return;
+    QMenu menu(this);
+    menu.setObjectName(QStringLiteral("pageContextMenu"));
+    pagecommands::fillMenu(menu, this, m_editor, index);
+    menu.exec(globalPos);
 }
 
 void MainWindow::applyStartup()
@@ -2058,7 +2256,8 @@ bool MainWindow::importVectorFile(const QString& path, bool asNewDocument)
         for (int i = 0; i < int(pages.size()); ++i) {
             m_editor.setCurrentPageIndex(i);
             if (pages[std::size_t(i)].group && pages[std::size_t(i)].group->childCount() > 0)
-                m_editor.importGroup(std::move(pages[std::size_t(i)].group), false, tr("Importieren"));
+                m_editor.importObjects(std::move(pages[std::size_t(i)].group), tr("Importieren"));
+            m_editor.clearSelection();
         }
         m_editor.setCurrentPageIndex(0);
     } else {
@@ -2293,30 +2492,10 @@ void MainWindow::addBitmapCommands(QMenu* bitmaps)
             applyImageEffect(tr("Bitmap-Farbmaske"), [color, t = tolerance->value()](const QImage& i) { return filters::colorMask(i, {color}, t); });
     });
     QMenu* mode = bitmaps->addMenu(tr("&Modus"));
-    m_bitmapActions << mode->addAction(tr("&Schwarzweiss (1 Bit) …"), this, [this] {
-        if (const ImageObject* image = m_editor.selectedImage()) {
-            EffectDialog dialog(tr("Schwarzweiss"), image->image(), {SliderSpec{tr("Schwelle:"), 0, 255, 128}},
-                                [](const QImage& i, const QList<int>& v) { return filters::toBlackWhite(i, v[0]); }, this);
-            runImageDialog(tr("Modus Schwarzweiss"), dialog);
-        }
-    });
-    for (int bits : {8, 16})
-        m_bitmapActions << mode->addAction(tr("&Graustufen (%1 Bit)").arg(bits), this, [this, bits] {
-            applyImageEffect(tr("Modus Graustufen"), [bits](const QImage& i) { return filters::toGrayscale(i, bits); });
-        });
-    for (int bits : {8, 16})
-        m_bitmapActions << mode->addAction(tr("&Duoton (%1 Bit) …").arg(bits), this, [this, bits] {
-            if (const ImageObject* image = m_editor.selectedImage()) {
-                EffectDialog dialog(tr("Duoton"), image->image(),
-                                    {ColorSpec{tr("Farbe 1 (Tiefen):"), Color(0, 0, 0)}, ColorSpec{tr("Farbe 2:"), Color(150, 95, 40)}},
-                                    {SliderSpec{tr("Gewichtung Farbe 2:"), 0, 100, 50}},
-                                    [bits](const QImage& i, const QList<int>& v, const QList<Color>& c) {
-                                        return filters::duotone(i, c[0], c[1], v[0], bits);
-                                    },
-                                    this);
-                runImageDialog(tr("Modus Duoton"), dialog);
-            }
-        });
+    m_fxActions << mode->menuAction();
+    for (const fx::Definition& def : fx::definitions())
+        if (def.group == QStringLiteral("mode"))
+            addBitmapEffectAction(mode, def.id);
     m_bitmapActions << bitmaps->addAction(tr("Bitmap &neu aufbauen …"), this, [this] {
         const ImageObject* image = m_editor.selectedImage();
         if (!image)
@@ -2353,73 +2532,74 @@ void MainWindow::addBitmapCommands(QMenu* bitmaps)
     });
     bitmaps->addSeparator();
 
-    // Filtergruppen; jeder Filter mit Vorschau-Dialog
-    struct Filter {
-        QString name;
-        QList<SliderSpec> sliders;
-        std::function<QImage(const QImage&, const QList<int>&)> fn;
-        QList<ColorSpec> colors = {}; // mit Farbfeldern: colorFn statt fn
-        EffectDialog::ColorFunction colorFn = {};
-        QList<int> pixels = {}; // Regler in Pixeln: für die verkleinerte Vorschau mitskalieren
-    };
-    using F = Filter;
-    using V = const QList<int>&;
-    const QList<std::pair<QString, QList<F>>> groups{
-        {tr("&3D-Effekte"),
-         {F{tr("3D-Drehung"), {{tr("Senkrecht (Grad):"), -75, 75, 20}, {tr("Waagrecht (Grad):"), -75, 75, 20}},
-            [](const QImage& i, V v) { return filters::rotate3d(i, v[0], v[1]); }},
-          F{tr("Perspektive"), {{tr("Waagrecht (%):"), -100, 100, 40}, {tr("Senkrecht (%):"), -100, 100, 0}},
-            [](const QImage& i, V v) { return filters::perspective(i, v[0], v[1]); }},
-          F{tr("Sphäre"), {{tr("Stärke:"), 0, 100, 60}}, [](const QImage& i, V v) { return filters::sphere(i, v[0]); }}}},
-        {tr("Künstlerische &Striche"),
-         {F{tr("Posterisieren"), {{tr("Stufen:"), 2, 32, 6}}, [](const QImage& i, V v) { return filters::posterize(i, v[0]); }},
-          F{tr("Kohle"), {{tr("Grösse:"), 1, 20, 3}, {tr("Kante:"), 0, 100, 50}}, [](const QImage& i, V v) { return filters::charcoal(i, v[0], v[1]); },
-            {}, {}, {0}},
-          F{tr("Impressionismus"), {{tr("Strichgrösse (Pixel):"), 3, 100, 16}, {tr("Färbung:"), 0, 100, 30}, {tr("Helligkeit:"), -100, 100, 0}},
-            [](const QImage& i, V v) { return filters::impressionism(i, v[0], v[1], v[2]); }, {}, {}, {0}},
-          F{tr("Wasserfarben"), {{tr("Pinselgrösse:"), 1, 50, 5}, {tr("Körnung:"), 0, 100, 50}, {tr("Wassermenge:"), 0, 100, 50}, {tr("Helligkeit:"), -100, 100, 0}},
-            [](const QImage& i, V v) { return filters::watercolor(i, v[0], v[1], v[2], v[3]); }, {}, {}, {0}},
-          F{tr("Papierschnitzel"), {{tr("Dichte:"), 1, 100, 50}, {tr("Strichbreite:"), 1, 100, 50}, {tr("Farbig (1/0):"), 0, 1, 0}},
-            [](const QImage& i, V v) { return filters::scraperboard(i, v[0], v[1], v[2] == 1); }},
-          F{tr("Wellenpapier"), {{tr("Pinseldruck:"), 0, 100, 50}, {tr("Farbig (1/0):"), 0, 1, 1}},
-            [](const QImage& i, V v) { return filters::wavyPaper(i, v[0], v[1] == 1); }}}},
-        {tr("&Unschärfe"),
-         {F{tr("Glätten"), {{tr("Stärke:"), 1, 100, 40}}, [](const QImage& i, V v) { return filters::smooth(i, v[0]); }},
-          F{tr("Weichzeichnen"), {{tr("Prozent:"), 1, 100, 50}}, [](const QImage& i, V v) { return filters::soften(i, v[0]); }}}},
-        {tr("Kr&eativ"),
-         {F{tr("Gewebe"), {{tr("Grösse (Pixel):"), 3, 200, 16}, {tr("Komplexität:"), 0, 100, 50}, {tr("Helligkeit:"), -100, 100, 0}, {tr("Drehung (Grad):"), -90, 90, 0}},
-            [](const QImage& i, V v) { return filters::fabric(i, v[0], v[1], v[2], v[3]); }, {}, {}, {0}},
-          F{tr("Glasblock"), {{tr("Blockbreite (Pixel):"), 4, 2000, 60}, {tr("Blockhöhe (Pixel):"), 4, 2000, 60}},
-            [](const QImage& i, V v) { return filters::glassBlock(i, v[0], v[1]); }, {}, {}, {0, 1}},
-          F{tr("Rauchglas"), {{tr("Färbung (%):"), 0, 100, 50}, {tr("Unschärfe (%):"), 0, 100, 20}}, {},
-            {ColorSpec{tr("Farbe:"), Color(32, 32, 32)}},
-            [](const QImage& i, V v, const QList<Color>& c) { return filters::smokedGlass(i, c[0], v[0], v[1]); }}}},
-    };
-    for (const auto& [groupName, list] : groups) {
+    // Filtergruppen; jeder Filter mit Vorschau-Dialog, an Vektorobjekten als Live-Effekt
+    const QList<std::pair<QString, QString>> groups{{tr("&3D-Effekte"), QStringLiteral("3d")},
+                                                    {tr("Künstlerische &Striche"), QStringLiteral("art")},
+                                                    {tr("&Unschärfe"), QStringLiteral("blur")},
+                                                    {tr("&Farbtransformation"), QStringLiteral("color")},
+                                                    {tr("&Kontur", "Bitmap-Effekte"), QStringLiteral("contour")},
+                                                    {tr("Kr&eativ"), QStringLiteral("creative")},
+                                                    {tr("&Verzerren", "Bitmap-Effekte"), QStringLiteral("distort")},
+                                                    {tr("&Rauschen"), QStringLiteral("noise")},
+                                                    {tr("&Schärfe"), QStringLiteral("sharpen")}};
+    for (const auto& [groupName, key] : groups) {
         QMenu* group = bitmaps->addMenu(groupName);
-        m_bitmapActions << group->menuAction();
-        for (const F& f : list) {
-            m_bitmapActions << group->addAction(f.name + QStringLiteral(" …"), this, [this, f] {
-                if (const ImageObject* image = m_editor.selectedImage()) {
-                    // Pixelwerte auf die Grösse des bearbeiteten Bildes (Vorschau oder Original) umrechnen
-                    const int fullWidth = std::max(1, image->image().width());
-                    const QList<int> pixels = f.pixels;
-                    auto scaled = [fullWidth, pixels](const QImage& i, QList<int> v) {
-                        const double k = double(i.width()) / fullWidth;
-                        if (k < 1.0)
-                            for (int index : pixels)
-                                v[index] = std::max(1, int(std::lround(v[index] * k)));
-                        return v;
-                    };
-                    EffectDialog::ColorFunction fn = f.colorFn;
-                    if (!fn)
-                        fn = [plain = f.fn](const QImage& i, V v, const QList<Color>&) { return plain(i, v); };
-                    EffectDialog dialog(f.name, image->image(), f.colors, f.sliders,
-                                        [fn, scaled](const QImage& i, V v, const QList<Color>& c) { return fn(i, scaled(i, v), c); }, this);
-                    runImageDialog(f.name, dialog);
-                }
-            });
+        m_fxActions << group->menuAction();
+        for (const fx::Definition& def : fx::definitions())
+            if (def.group == key)
+                addBitmapEffectAction(group, def.id);
+    }
+}
+
+QAction* MainWindow::addBitmapEffectAction(QMenu* menu, const QString& id)
+{
+    const fx::Definition* def = fx::find(id);
+    Q_ASSERT(def);
+    QString text = fx::translate(def->menuText);
+    // Filter ohne eigenes Kürzel im Menütext: Dialog mit " …" kennzeichnen
+    if (def->dialog != fx::Dialog::None && !text.endsWith(QStringLiteral("…")))
+        text += QStringLiteral(" …");
+    QAction* a = menu->addAction(text, this, [this, id] { runBitmapEffect(id); });
+    if (!def->shortcut.isEmpty())
+        a->setShortcut(def->shortcut);
+    m_fxActions << a;
+    return a;
+}
+
+void MainWindow::runBitmapEffect(const QString& id)
+{
+    const fx::Definition* def = fx::find(id);
+    if (!def)
+        return;
+    const QString name = fx::translate(def->name);
+    if (const ImageObject* image = m_editor.selectedImage()) {
+        // Bitmap: Pixel direkt ändern (destruktiv, wie bisher)
+        if (def->dialog == fx::Dialog::None) {
+            applyImageEffect(name, [def](const QImage& i) { return fx::apply(i, fx::defaults(*def), 1.0); });
+            return;
         }
+        const std::unique_ptr<ImagePreviewDialog> dialog = createBitmapEffectDialog(*def, image->image(), image->image().width(), this);
+        runImageDialog(name, *dialog);
+        return;
+    }
+    // Vektorobjekte, Text, Gruppen: Effekt in den Effektstapel, das Objekt bleibt bearbeitbar
+    const QList<const DrawObject*> objects = m_editor.selectedObjects();
+    if (objects.isEmpty())
+        return;
+    BitmapEffect effect = fx::defaults(*def);
+    if (def->dialog != fx::Dialog::None) {
+        double width = 1.0;
+        QApplication::setOverrideCursor(Qt::WaitCursor);
+        const QImage source = BitmapEffectsDocker::dialogImage(*m_canvas, *objects.first(), -1, &width);
+        QApplication::restoreOverrideCursor();
+        const std::unique_ptr<ImagePreviewDialog> dialog = createBitmapEffectDialog(*def, source, width, this);
+        if (dialog->exec() != QDialog::Accepted)
+            return;
+        effect = bitmapEffectValues(*dialog, *def);
+    }
+    if (m_editor.addBitmapEffect(effect, name) && m_fxDock) {
+        m_fxDock->show();
+        m_fxDock->raise();
     }
 }
 
@@ -2438,7 +2618,7 @@ void MainWindow::createTableMenu()
         cols->setRange(1, 200);
         cols->setValue(Options::instance().integer(QStringLiteral("ws/tools/table/cols")));
         auto mm = [&dialog](double v) {
-            auto* s = new QDoubleSpinBox(&dialog);
+            auto* s = new ExpressionSpinBox(&dialog);
             s->setRange(1, 5000);
             s->setSuffix(QStringLiteral(" mm"));
             s->setValue(v);
@@ -2630,7 +2810,7 @@ void MainWindow::bevelDialog()
     style->addItems({tr("Keine"), tr("Weiche Kante"), tr("Relief")});
     style->setCurrentIndex(int(bevel.style));
     auto spin = [&dialog](double min, double max, double v, const QString& suffix) {
-        auto* s = new QDoubleSpinBox(&dialog);
+        auto* s = new ExpressionSpinBox(&dialog);
         s->setRange(min, max);
         s->setValue(v);
         s->setSuffix(suffix);
@@ -2640,8 +2820,16 @@ void MainWindow::bevelDialog()
     auto* intensity = spin(0, 100, bevel.intensity, QStringLiteral(" %"));
     auto* direction = spin(0, 360, bevel.direction, QStringLiteral(" °"));
     auto* altitude = spin(1, 89, bevel.altitude, QStringLiteral(" °"));
+    // Abschrägungsversatz: bis zur Mitte oder fester Abstand
+    auto* toCenter = new QRadioButton(tr("Bis Mitte"), &dialog);
+    toCenter->setObjectName(QStringLiteral("bevelToCenter"));
+    auto* byDistance = new QRadioButton(tr("Abstand:"), &dialog);
+    (bevel.toCenter ? toCenter : byDistance)->setChecked(true);
+    width->setEnabled(!bevel.toCenter);
+    connect(byDistance, &QRadioButton::toggled, width, &QWidget::setEnabled);
     form->addRow(tr("Stil:"), style);
-    form->addRow(tr("Abstand:"), width);
+    form->addRow(tr("Versatz:"), toCenter);
+    form->addRow(byDistance, width);
     form->addRow(tr("Intensität:"), intensity);
     form->addRow(tr("Lichtrichtung:"), direction);
     form->addRow(tr("Lichthöhe:"), altitude);
@@ -2653,6 +2841,7 @@ void MainWindow::bevelDialog()
         return;
     bevel.style = Bevel::Style(style->currentIndex());
     bevel.width = width->value();
+    bevel.toCenter = toCenter->isChecked();
     bevel.intensity = intensity->value();
     bevel.direction = direction->value();
     bevel.altitude = altitude->value();
@@ -2671,7 +2860,7 @@ void MainWindow::multiDuplicate()
     count->setRange(1, 1000);
     count->setValue(3);
     auto offset = [&dialog](double v) {
-        auto* s = new QDoubleSpinBox(&dialog);
+        auto* s = new ExpressionSpinBox(&dialog);
         s->setRange(-10000, 10000);
         s->setDecimals(3);
         s->setSuffix(QStringLiteral(" mm"));
@@ -3109,6 +3298,27 @@ bool MainWindow::openFile(const QString& path)
     return true;
 }
 
+void MainWindow::showEvent(QShowEvent* e)
+{
+    QMainWindow::showEvent(e);
+    if (m_fittedToScreen || isMaximized() || isFullScreen())
+        return;
+    m_fittedToScreen = true;
+    // Gespeicherte Grösse von einem grösseren Bildschirm: Fenster samt Rahmen in den freien Bereich
+    // holen, sonst ist die Titelleiste ausserhalb und das Fenster lässt sich oben nicht mehr fassen
+    const QRect avail = screen()->availableGeometry();
+    const QRect frame = frameGeometry();
+    const QSize border = frame.size() - size();
+    const QSize fitted(std::min(width(), avail.width() - border.width()), std::min(height(), avail.height() - border.height()));
+    if (fitted != size())
+        resize(fitted.expandedTo(minimumSizeHint()));
+    const QRect now = frameGeometry();
+    const int x = std::clamp(now.x(), avail.left(), std::max(avail.left(), avail.right() + 1 - now.width()));
+    const int y = std::clamp(now.y(), avail.top(), std::max(avail.top(), avail.bottom() + 1 - now.height()));
+    if (x != now.x() || y != now.y())
+        move(x, y);
+}
+
 void MainWindow::closeEvent(QCloseEvent* e)
 {
     if (!maybeSave()) {
@@ -3119,8 +3329,57 @@ void MainWindow::closeEvent(QCloseEvent* e)
     settings.setValue(QStringLiteral("window/geometry"), saveGeometry());
     settings.setValue(QStringLiteral("bake/steps"), m_editor.shapeDefaults().blurSteps);
     settings.setValue(QStringLiteral("bake/bands"), m_editor.shapeDefaults().blurBands);
-    settings.setValue(QStringLiteral("window/state"), saveState(3));
+    settings.setValue(QStringLiteral("window/state"), saveState(4));
     e->accept();
+}
+
+void MainWindow::insertQrCode()
+{
+    QrCodeObject sample;
+    QrCodeDialog dialog(sample, true, this);
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+    auto code = std::make_unique<QrCodeObject>();
+    dialog.applyTo(*code);
+    const QPointF c = QRectF(QPointF(0, 0), m_editor.currentPage().size()).center();
+    code->setTransform(QTransform::fromTranslate(c.x() - code->size().width() / 2.0, c.y() - code->size().height() / 2.0));
+    m_editor.addObject(std::move(code), tr("QR-Code einfügen"));
+}
+
+void MainWindow::blendAlongPath()
+{
+    // Überblendung und Pfad ausgewählt: gleich anhängen; nur die Überblendung: Pfad anklicken lassen
+    const QList<const DrawObject*> sel = m_editor.selectedObjects();
+    const DrawObject* blend = nullptr;
+    const DrawObject* guide = nullptr;
+    for (const DrawObject* o : sel)
+        (node_cast<BlendObject>(o) && !blend ? blend : guide) = o;
+    if (!blend || sel.size() > 2) {
+        statusBar()->showMessage(tr("Zuerst eine Überblendung auswählen"), 6000);
+        return;
+    }
+    if (guide) {
+        m_editor.blendAlongPath(blend->id(), guide->id());
+        return;
+    }
+    const NodeId id = blend->id();
+    m_canvas->setTool(ToolId::Pick);
+    m_canvas->pickTool().beginPickTarget([this, id](NodeId path) { m_editor.blendAlongPath(id, path); });
+    statusBar()->showMessage(tr("Pfad anklicken, an dem die Überblendung entlang laufen soll"), 8000);
+}
+
+void MainWindow::editQrCode(NodeId id)
+{
+    const auto* code = node_cast<QrCodeObject>(m_editor.document().find(id));
+    if (!code)
+        return;
+    QrCodeDialog dialog(*code, false, this);
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+    m_editor.modifyObject(id, [&dialog](DrawObject& o) {
+        if (auto* target = node_cast<QrCodeObject>(&o))
+            dialog.applyTo(*target);
+    }, tr("QR-Code bearbeiten"));
 }
 
 } // namespace vek

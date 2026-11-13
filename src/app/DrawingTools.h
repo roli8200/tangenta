@@ -1,11 +1,13 @@
 #pragma once
 
+#include "Arrangement.h"
 #include "PathOps.h"
 #include "Tool.h"
 
 #include <memory>
 
 #include <QList>
+#include <QMetaObject>
 #include <QPointF>
 
 namespace vek {
@@ -85,9 +87,10 @@ private:
     QPointF m_a, m_b, m_c;
 };
 
-// Smart-Füllung: Klick in eine von Formen umschlossene Fläche legt dort ein neues
-// Objekt in genau dieser Form an (z.B. die Schnittfläche zweier Kreise). Füllfarbe und Kontur
-// stehen in der Eigenschaftsleiste.
+// Smart-Füllung: Klick in eine von beliebigen Linien umschlossene Fläche (geschlossene Formen,
+// offene Linien und Kurven, auch in Gruppen) legt dort ein neues geschlossenes Kurvenobjekt in
+// genau dieser Form an, zuoberst; die Originale bleiben. Füllung und Kontur stehen in der
+// Eigenschaftsleiste.
 class SmartFillTool final : public Tool {
 public:
     using Tool::Tool;
@@ -98,13 +101,23 @@ public:
     void mouseRelease(QMouseEvent*, const QPointF&) override {}
     void paintOverlay(QPainter& p) override;
 
-    // Fläche unter doc: Schnitt aller geschlossenen Formen, die doc enthalten, ohne die übrigen
+    // Masche unter doc als geschlossene Linienzüge (Rand und Löcher); leer = keine
+    QList<SubPath> faceAt(const QPointF& doc) const;
     QPainterPath regionAt(const QPointF& doc) const;
     // Neues Objekt anlegen; liefert seine Id (0 = keine umschlossene Fläche)
     NodeId fillAt(const QPointF& doc);
+    // Stil des neuen Objekts nach den Einstellungen der Eigenschaftsleiste
+    static Style fillStyle(const Style& defaults);
+    // Linienzüge aller sichtbaren Objekte (Seitenkoordinaten), Gruppen aufgelöst
+    static QList<SubPath> boundaryPaths(const QList<const DrawObject*>& objects);
 
 private:
+    const pathops::Arrangement& arrangement() const;
+
     QPainterPath m_hover;
+    mutable std::unique_ptr<pathops::Arrangement> m_arrangement; // bis zur nächsten Änderung
+    mutable double m_arrangementGap = -1.0;
+    QMetaObject::Connection m_docConnection, m_pageConnection;
 };
 
 // Virtuelles Segment löschen: Klick auf ein Linienstück löscht es bis zu den

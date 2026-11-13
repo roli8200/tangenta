@@ -62,6 +62,7 @@ struct ExportOptions {
     int page = 0;
     QList<int> pages;    // PDF: diese Seiten (leer = nur page)
     QList<NodeId> only;  // leer = ganze Seite
+    QRectF area;         // ohne only: nur dieser Ausschnitt der Seite (mm), leer = ganze Seite
     double dpi = 300.0;
     bool transparent = false;
     int quality = 90;    // JPEG, WebP

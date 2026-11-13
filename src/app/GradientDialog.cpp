@@ -1,6 +1,7 @@
 #include "GradientDialog.h"
 
 #include "ColorDialog.h"
+#include "ExpressionSpinBox.h"
 
 #include <QButtonGroup>
 #include <QComboBox>
@@ -222,7 +223,7 @@ GradientDialog::GradientDialog(const Fill& initial, const QSizeF& objectSize, QW
         m_fill.stops = {GradientStop{0.0, Color(0, 0, 0)}, GradientStop{1.0, Color(255, 255, 255)}};
 
     auto spin = [this](double min, double max, const QString& suffix) {
-        auto* s = new QDoubleSpinBox(this);
+        auto* s = new ExpressionSpinBox(this);
         s->setRange(min, max);
         s->setDecimals(1);
         s->setSuffix(suffix);

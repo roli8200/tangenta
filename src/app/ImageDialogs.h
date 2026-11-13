@@ -1,5 +1,6 @@
 #pragma once
 
+#include "BitmapEffect.h"
 #include "Color.h"
 #include "ImageAdjust.h"
 
@@ -8,12 +9,17 @@
 #include <QWidget>
 
 #include <functional>
+#include <memory>
 
 class QComboBox;
+class QFormLayout;
 class QPushButton;
 class QLabel;
+class QListWidget;
 class QSlider;
 class QSpinBox;
+
+class QTimer;
 
 namespace vek {
 
@@ -43,6 +49,7 @@ public:
 protected:
     // Bild mit den aktuellen Einstellungen bearbeiten
     virtual QImage process(const QImage& image) const = 0;
+    // Vorschau neu rechnen (gebündelt, kurz nach der letzten Änderung)
     void refreshPreview();
     QWidget* settingsArea() const { return m_settings; }
     HistogramWidget* histogram() const { return m_histogram; }
@@ -56,8 +63,31 @@ public:
     int previewMode() const;
     void setPreviewMode(int mode);
     QImage previewImage() const;
+    // Pipette: Klick in die Vorschau liefert die Farbe des Originals an dieser Stelle
+    QLabel* previewLabel() const { return m_preview; }
+    bool isPicking() const { return bool(m_pick); }
+    void beginPick(std::function<void(const Color&)> done);
+    // Dialoge mit eigenen Bedienelementen: Werte als Effektwerte (Regler, Farben) wie in fx::Definition
+    virtual bool effectValues(QList<int>& values, QList<Color>& colors) const
+    {
+        Q_UNUSED(values);
+        Q_UNUSED(colors);
+        return false;
+    }
+    virtual void setEffectValues(const QList<int>& values, const QList<Color>& colors)
+    {
+        Q_UNUSED(values);
+        Q_UNUSED(colors);
+    }
+
+protected:
+    bool eventFilter(QObject* watched, QEvent* event) override;
 
 private:
+    void renderPreview();
+
+    std::function<void(const Color&)> m_pick;
+    QTimer* m_previewTimer = nullptr;
     QComboBox* m_mode = nullptr;
     QImage m_shown;
     QLabel* m_preview = nullptr;
@@ -72,6 +102,9 @@ struct SliderSpec {
     int maximum = 100;
     int value = 0;
 };
+
+// Regler mit gekoppeltem Zahlenfeld als Zeile eines Formulars
+QSlider* addEffectSlider(QFormLayout* form, const SliderSpec& spec, QWidget* parent);
 
 // Farbfeld (Knopf öffnet den Farbdialog)
 struct ColorSpec {
@@ -88,12 +121,15 @@ public:
     explicit ImageAdjustDialog(const QImage& image, QWidget* parent = nullptr);
     adjust::Basic basic() const;
     void setBasic(const adjust::Basic& basic);
+    bool autoAdjust() const { return m_auto; }
+    void setAutoAdjust(bool on);
 
 protected:
     QImage process(const QImage& image) const override;
 
 private:
     QList<QSlider*> m_sliders;
+    QPushButton* m_autoButton = nullptr;
     bool m_auto = false;
 };
 
@@ -127,6 +163,33 @@ private:
     QList<Color> m_colors;
     ColorFunction m_fn;
 };
+
+// Kreativ > Rahmen: Vorlagen als Vorschaubilder, Maske oder Farbrand als Auswahl; die übrigen
+// Einstellungen als Regler (Werte wie fx-Definition "creative.frame")
+class FrameDialog : public EffectDialog {
+    Q_OBJECT
+
+public:
+    FrameDialog(const QString& title, const QImage& image, const QList<ColorSpec>& colors, const QList<SliderSpec>& sliders,
+                ColorFunction fn, QWidget* parent = nullptr);
+    QListWidget* templates() const { return m_templates; }
+    QComboBox* modeBox() const { return m_mode; }
+
+private:
+    QListWidget* m_templates = nullptr;
+    QComboBox* m_mode = nullptr;
+};
+
+// Dialoge der Bitmap-Effekte (fx::definitions()). referenceWidth = Breite des Bildes in den
+// Pixeln, auf die sich die Pixelregler beziehen (bei Bitmaps die Bildbreite, bei Objekten in
+// der Referenzauflösung fx::kReferenceDpi). nullptr bei Effekten ohne Dialog.
+std::unique_ptr<ImagePreviewDialog> createBitmapEffectDialog(const fx::Definition& def, const QImage& image, double referenceWidth,
+                                                             QWidget* parent);
+void setBitmapEffectValues(ImagePreviewDialog& dialog, const BitmapEffect& effect);
+BitmapEffect bitmapEffectValues(const ImagePreviewDialog& dialog, const fx::Definition& def);
+// Dialog mit den Werten von effect öffnen; bei OK stehen die neuen Werte in effect (true).
+// Effekte ohne Dialog: sofort true.
+bool editBitmapEffect(QWidget* parent, const QImage& image, double referenceWidth, BitmapEffect& effect);
 
 // Kurve mit ziehbaren Punkten: Klick fügt hinzu, aus dem Feld ziehen entfernt
 class CurveWidget : public QWidget {

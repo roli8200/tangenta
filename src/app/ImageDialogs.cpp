@@ -1,19 +1,24 @@
 #include "ImageDialogs.h"
 #include "ColorDialog.h"
+#include "CorrectionDialogs.h"
 #include <QSettings>
 #include "Options.h"
+#include "BitmapFrame.h"
 
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QFormLayout>
 #include <QHBoxLayout>
 #include <QLabel>
+#include <QListWidget>
+#include <QCoreApplication>
 #include <QMouseEvent>
 #include <QPainter>
 #include <QPainterPath>
 #include <QPushButton>
 #include <QSlider>
 #include <QSpinBox>
+#include <QTimer>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -44,6 +49,11 @@ QSlider* addSlider(QFormLayout* form, const SliderSpec& spec, QWidget* parent)
 }
 
 } // namespace
+
+QSlider* addEffectSlider(QFormLayout* form, const SliderSpec& spec, QWidget* parent)
+{
+    return addSlider(form, spec, parent);
+}
 
 // --- Histogramm ----------------------------------------------------------------------------
 
@@ -94,6 +104,13 @@ ImagePreviewDialog::ImagePreviewDialog(const QString& title, const QImage& image
     m_preview->setFixedSize(kPreview + QSize(8, 8));
     m_preview->setAlignment(Qt::AlignCenter);
     m_preview->setFrameShape(QFrame::StyledPanel);
+    m_preview->installEventFilter(this);
+    // Vorschau gebündelt kurz nach der letzten Änderung rechnen: ein Klick auf OK direkt nach einer
+    // Eingabe wird so nicht von der Rechnung aufgehalten (und geht nicht verloren)
+    m_previewTimer = new QTimer(this);
+    m_previewTimer->setSingleShot(true);
+    m_previewTimer->setInterval(60);
+    connect(m_previewTimer, &QTimer::timeout, this, &ImagePreviewDialog::renderPreview);
     m_settings = new QWidget(this);
     m_histogram = new HistogramWidget(this);
 }
@@ -162,11 +179,48 @@ void ImagePreviewDialog::setPreviewMode(int mode)
 
 QImage ImagePreviewDialog::previewImage() const
 {
+    // Ausstehende Vorschau zuerst rechnen
+    if (m_previewTimer->isActive())
+        const_cast<ImagePreviewDialog*>(this)->renderPreview();
     return m_shown;
+}
+
+void ImagePreviewDialog::beginPick(std::function<void(const Color&)> done)
+{
+    m_pick = std::move(done);
+    m_preview->setCursor(Qt::CrossCursor);
+}
+
+bool ImagePreviewDialog::eventFilter(QObject* watched, QEvent* event)
+{
+    if (watched == m_preview && m_pick && event->type() == QEvent::MouseButtonPress) {
+        if (m_previewTimer->isActive())
+            renderPreview();
+        const auto* e = static_cast<QMouseEvent*>(event);
+        // Vorschau liegt mittig im Feld; gemessen wird immer im Original (auch bei Vorher/Nachher)
+        const QRect area = m_preview->contentsRect();
+        const QPoint offset = area.topLeft() + QPoint((area.width() - m_shown.width()) / 2, (area.height() - m_shown.height()) / 2);
+        const QPoint at = e->position().toPoint() - offset;
+        if (e->button() != Qt::LeftButton || !QRect(QPoint(0, 0), m_small.size()).contains(at))
+            return true;
+        const QColor c = m_small.pixelColor(at);
+        auto done = std::move(m_pick);
+        m_pick = nullptr;
+        m_preview->unsetCursor();
+        done(Color(quint8(c.red()), quint8(c.green()), quint8(c.blue())));
+        return true;
+    }
+    return QDialog::eventFilter(watched, event);
 }
 
 void ImagePreviewDialog::refreshPreview()
 {
+    m_previewTimer->start();
+}
+
+void ImagePreviewDialog::renderPreview()
+{
+    m_previewTimer->stop();
     const QImage result = process(m_small);
     m_histogram->setImage(result);
     m_shown = result;
@@ -194,6 +248,7 @@ ImageAdjustDialog::ImageAdjustDialog(const QImage& image, QWidget* parent)
     layout->setContentsMargins(0, 0, 0, 0);
     auto* autoButton = new QPushButton(tr("Automatische Anpassung"), this);
     autoButton->setCheckable(true);
+    m_autoButton = autoButton;
     layout->addWidget(autoButton);
     auto* form = new QFormLayout;
     for (const QString& name : {tr("Temperatur:"), tr("Tönung:"), tr("Sättigung:"), tr("Helligkeit:"), tr("Kontrast:"),
@@ -231,6 +286,11 @@ void ImageAdjustDialog::setBasic(const adjust::Basic& b)
     for (int i = 0; i < m_sliders.size(); ++i)
         m_sliders[i]->setValue(values[i]);
     refreshPreview();
+}
+
+void ImageAdjustDialog::setAutoAdjust(bool on)
+{
+    m_autoButton->setChecked(on);
 }
 
 QImage ImageAdjustDialog::process(const QImage& image) const
@@ -333,6 +393,150 @@ void EffectDialog::setValues(const QList<int>& values)
 QImage EffectDialog::process(const QImage& image) const
 {
     return m_fn(image, values(), m_colors);
+}
+
+// --- Rahmen --------------------------------------------------------------------------------
+
+FrameDialog::FrameDialog(const QString& title, const QImage& image, const QList<ColorSpec>& colors, const QList<SliderSpec>& sliders,
+                         ColorFunction fn, QWidget* parent)
+    : EffectDialog(title, image, colors, sliders, std::move(fn), parent)
+{
+    const QList<QSlider*> all = settingsArea()->findChildren<QSlider*>();
+    auto* layout = qobject_cast<QVBoxLayout*>(settingsArea()->layout());
+    auto* form = layout ? qobject_cast<QFormLayout*>(layout->itemAt(0)->layout()) : nullptr;
+    if (all.size() < 7 || !form)
+        return;
+    QSlider* shape = all[0];
+    QSlider* border = all[6];
+    // Regler für Vorlage und Modus verstecken, dafür Bilderliste und Auswahl
+    for (int row = 0; row < form->rowCount(); ++row) {
+        QLayoutItem* item = form->itemAt(row, QFormLayout::FieldRole);
+        if (item && item->layout() && (item->layout()->indexOf(shape) >= 0 || item->layout()->indexOf(border) >= 0))
+            form->setRowVisible(row, false);
+    }
+    m_templates = new QListWidget(this);
+    m_templates->setObjectName(QStringLiteral("frameTemplates"));
+    m_templates->setViewMode(QListView::IconMode);
+    m_templates->setIconSize(QSize(64, 48));
+    m_templates->setMovement(QListView::Static);
+    m_templates->setResizeMode(QListView::Adjust);
+    m_templates->setGridSize(QSize(96, 78));
+    m_templates->setFixedHeight(2 * 78 + 8);
+    for (int i = 0; i < filters::frameShapeCount(); ++i)
+        m_templates->addItem(new QListWidgetItem(QIcon(QPixmap::fromImage(filters::frameThumbnail(i, QSize(64, 48)))),
+                                                 QCoreApplication::translate("vek::fx", filters::frameShapeName(i))));
+    m_templates->setCurrentRow(shape->value());
+    m_mode = new QComboBox(this);
+    m_mode->setObjectName(QStringLiteral("frameMode"));
+    m_mode->addItems({tr("Maske (Rand durchsichtig)"), tr("Farbrand")});
+    m_mode->setCurrentIndex(border->value());
+    form->insertRow(0, tr("Modus:"), m_mode);
+    layout->insertWidget(0, m_templates);
+    layout->insertWidget(0, new QLabel(tr("Rahmenvorlage:"), this));
+    connect(m_templates, &QListWidget::currentRowChanged, shape, [shape](int row) {
+        if (row >= 0)
+            shape->setValue(row);
+    });
+    connect(shape, &QSlider::valueChanged, m_templates, [this](int v) {
+        const QSignalBlocker block(m_templates);
+        m_templates->setCurrentRow(v);
+    });
+    connect(m_mode, &QComboBox::currentIndexChanged, border, &QSlider::setValue);
+    connect(border, &QSlider::valueChanged, m_mode, [this](int v) {
+        const QSignalBlocker block(m_mode);
+        m_mode->setCurrentIndex(v);
+    });
+}
+
+// --- Dialoge der Bitmap-Effekte ------------------------------------------------------------
+
+std::unique_ptr<ImagePreviewDialog> createBitmapEffectDialog(const fx::Definition& def, const QImage& image, double referenceWidth,
+                                                             QWidget* parent)
+{
+    if (def.dialog == fx::Dialog::None)
+        return nullptr;
+    if (def.dialog == fx::Dialog::ImageAdjust)
+        return std::make_unique<ImageAdjustDialog>(image, parent);
+    if (def.dialog == fx::Dialog::Custom) {
+        if (def.id == QLatin1String("3d.cylinder"))
+            return std::make_unique<CylinderDialog>(image, parent);
+        if (def.id == QLatin1String("3d.pagecurl"))
+            return std::make_unique<PageCurlDialog>(image, parent);
+        if (def.id == QLatin1String("adjust.sampletarget"))
+            return std::make_unique<SampleTargetDialog>(image, parent);
+        if (def.id == QLatin1String("adjust.selectivecolor"))
+            return std::make_unique<SelectiveColorDialog>(image, parent);
+        if (def.id == QLatin1String("adjust.replacecolors"))
+            return std::make_unique<ReplaceColorsDialog>(image, parent);
+        if (def.id == QLatin1String("adjust.channelmixer"))
+            return std::make_unique<ChannelMixerDialog>(image, parent);
+        Q_ASSERT(false);
+        return nullptr;
+    }
+    QList<SliderSpec> sliders;
+    for (const fx::Slider& s : def.sliders)
+        sliders << SliderSpec{fx::translate(s.label), s.minimum, s.maximum, s.value};
+    QList<ColorSpec> colors;
+    for (const fx::ColorField& c : def.colors)
+        colors << ColorSpec{fx::translate(c.label), c.value};
+    // Pixelwerte auf die Grösse des bearbeiteten Bildes (Vorschau oder Original) umrechnen
+    const double width = std::max(1.0, referenceWidth);
+    EffectDialog::ColorFunction fn = [&def, width](const QImage& i, const QList<int>& v, const QList<Color>& c) {
+        return def.apply(i, fx::scaledValues(def, v, i.width() / width), c);
+    };
+    if (def.dialog == fx::Dialog::Frame)
+        return std::make_unique<FrameDialog>(fx::translate(def.name), image, colors, sliders, fn, parent);
+    return std::make_unique<EffectDialog>(fx::translate(def.name), image, colors, sliders, fn, parent);
+}
+
+void setBitmapEffectValues(ImagePreviewDialog& dialog, const BitmapEffect& effect)
+{
+    const BitmapEffect e = fx::normalized(effect);
+    if (auto* adjustDialog = qobject_cast<ImageAdjustDialog*>(&dialog)) {
+        const QList<int>& v = e.values;
+        if (v.size() >= 9) {
+            adjustDialog->setBasic(adjust::Basic{v[0], v[1], v[2], v[3], v[4], v[5], v[6], v[7]});
+            adjustDialog->setAutoAdjust(v[8] != 0);
+        }
+    } else if (auto* effectDialog = qobject_cast<EffectDialog*>(&dialog)) {
+        effectDialog->setColors(e.colors);
+        effectDialog->setValues(e.values);
+    } else {
+        dialog.setEffectValues(e.values, e.colors);
+    }
+}
+
+BitmapEffect bitmapEffectValues(const ImagePreviewDialog& dialog, const fx::Definition& def)
+{
+    BitmapEffect e = fx::defaults(def);
+    if (const auto* adjustDialog = qobject_cast<const ImageAdjustDialog*>(&dialog)) {
+        const adjust::Basic b = adjustDialog->basic();
+        e.values = {b.temperature, b.tint, b.saturation, b.brightness, b.contrast, b.highlights, b.shadows, b.midtones,
+                    adjustDialog->autoAdjust() ? 1 : 0};
+    } else if (const auto* effectDialog = qobject_cast<const EffectDialog*>(&dialog)) {
+        e.values = effectDialog->values();
+        e.colors = effectDialog->colors();
+    } else {
+        dialog.effectValues(e.values, e.colors);
+    }
+    return fx::normalized(e);
+}
+
+bool editBitmapEffect(QWidget* parent, const QImage& image, double referenceWidth, BitmapEffect& effect)
+{
+    const fx::Definition* def = fx::find(effect.id);
+    if (!def)
+        return false;
+    std::unique_ptr<ImagePreviewDialog> dialog = createBitmapEffectDialog(*def, image, referenceWidth, parent);
+    if (!dialog)
+        return true;
+    setBitmapEffectValues(*dialog, effect);
+    if (dialog->exec() != QDialog::Accepted)
+        return false;
+    const bool enabled = effect.enabled;
+    effect = bitmapEffectValues(*dialog, *def);
+    effect.enabled = enabled;
+    return true;
 }
 
 // --- Tonkurve ------------------------------------------------------------------------------

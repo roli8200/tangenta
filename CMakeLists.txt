@@ -1,5 +1,9 @@
 cmake_minimum_required(VERSION 3.21)
-project(Tangenta VERSION 0.86 LANGUAGES C CXX)
+# macOS: Qt 6.10 läuft ab macOS 13; muss vor project() stehen
+if(APPLE AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
+    set(CMAKE_OSX_DEPLOYMENT_TARGET 13.0 CACHE STRING "Älteste unterstützte macOS-Version")
+endif()
+project(Tangenta VERSION 0.91 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -36,6 +40,14 @@ target_include_directories(potrace PUBLIC third_party/potrace)
 set_target_properties(potrace PROPERTIES POSITION_INDEPENDENT_CODE ON)
 if(NOT MSVC)
     target_compile_options(potrace PRIVATE -w)
+endif()
+
+# --- qrcodegen 1.8.0 (QR-Codes kodieren; Project Nayuki, MIT) -------------------
+add_library(qrcodegen STATIC third_party/qrcodegen/qrcodegen.cpp)
+target_include_directories(qrcodegen PUBLIC third_party/qrcodegen)
+set_target_properties(qrcodegen PROPERTIES POSITION_INDEPENDENT_CODE ON)
+if(NOT MSVC)
+    target_compile_options(qrcodegen PRIVATE -w)
 endif()
 
 # --- LibRaw (Kamera-Rohdaten wie NEF; LGPL 2.1 oder CDDL 1.0) ------------------
@@ -82,22 +94,31 @@ add_library(vekcore STATIC
     src/core/Style.cpp
     src/core/Node.cpp
     src/core/Page.cpp
+    src/core/PageLayout.cpp
     src/core/DrawObject.cpp
     src/core/RectangleObject.cpp
     src/core/DimensionObject.cpp
+    src/core/QrCodeObject.cpp
     src/core/TableObject.cpp
     src/core/AutoCorrect.cpp
     src/core/Align.cpp
     src/core/CloneObject.cpp
+    src/core/Blend.cpp
     src/core/Effects.cpp
+    src/core/Mosaic.cpp
     src/core/BitmapFilters.cpp
     src/core/BitmapArt.cpp
+    src/core/BitmapFrame.cpp
+    src/core/BitmapEffect.cpp
     src/core/SuperClipObject.cpp
     src/core/BlendObject.cpp
     src/core/SpellChecker.cpp
     src/core/ConnectorObject.cpp
     src/core/CurveObject.cpp
     src/core/PathOps.cpp
+    src/core/MediaArt.cpp
+    src/core/MediaLibrary.cpp
+    src/core/Arrangement.cpp
     src/core/Outline.cpp
     src/core/EllipseObject.cpp
     src/core/PolygonObject.cpp
@@ -108,6 +129,7 @@ add_library(vekcore STATIC
     src/core/Hyphenator.cpp
     src/core/ImageObject.cpp
     src/core/ImageAdjust.cpp
+    src/core/ImageCorrect.cpp
     src/core/ImagePool.cpp
     src/core/RawImage.cpp
     src/core/Vectorizer.cpp
@@ -130,7 +152,7 @@ add_library(vekcore STATIC
     src/core/CdrImport.cpp
 )
 target_include_directories(vekcore PUBLIC src/core)
-target_link_libraries(vekcore PUBLIC Qt6::Core Qt6::Gui PRIVATE miniz libraw hunspell potrace vek_cdr)
+target_link_libraries(vekcore PUBLIC Qt6::Core Qt6::Gui PRIVATE miniz libraw hunspell potrace qrcodegen vek_cdr)
 target_compile_definitions(vekcore PUBLIC VEK_DICTIONARY_SOURCE="${VEK_DICTIONARY_SOURCE}")
 # Deutsche Trennmuster (hyph-utf8, MIT) für die Silbentrennung im Mengentext
 qt_add_resources(vekcore "hyphenation" PREFIX "/hyphenation" BASE resources/hyphenation
@@ -152,6 +174,7 @@ if(VEK_BUILD_APP)
         src/app/ShapingTools.cpp
         src/app/PerfectShapeTool.cpp
         src/app/PatternDialog.cpp
+        src/app/QrCodeDialog.cpp
         src/app/ExportDialog.cpp
         src/app/VectorRecorder.cpp
         src/app/FontMatchDialog.cpp
@@ -178,8 +201,12 @@ if(VEK_BUILD_APP)
         src/app/PipetteTools.cpp
         src/app/PerspectiveTool.cpp
         src/app/ShadowTool.cpp
+        src/app/BlockShadowTool.cpp
+        src/app/MosaicDialogs.cpp
         src/app/InteractiveTools.cpp
         src/app/ShapingDocker.cpp
+        src/app/CornersDocker.cpp
+        src/app/MediaDocker.cpp
         src/app/MainWindow.cpp
         src/app/Canvas.cpp
         src/app/Ruler.cpp
@@ -189,11 +216,13 @@ if(VEK_BUILD_APP)
         src/app/RectangleTool.cpp
         src/app/PropertyBar.cpp
         src/app/ObjectManager.cpp
+        src/app/PagesDocker.cpp
         src/app/ColorPalette.cpp
         src/app/ExpressionSpinBox.cpp
         src/app/Blur.cpp
         src/app/ArtisticMediaTool.cpp
         src/app/EffectTool.cpp
+        src/app/NodePopup.cpp
         src/app/DisplayDepth.cpp
         src/app/TextTool.cpp
         src/app/TraceDialog.cpp
@@ -207,6 +236,7 @@ if(VEK_BUILD_APP)
         src/app/ImageSearch.cpp
         src/app/ImageSearchDialog.cpp
         src/app/ImageDialogs.cpp
+        src/app/CorrectionDialogs.cpp
         src/app/BezierTool.cpp
         src/app/CutTools.cpp
         src/app/FlyoutButton.cpp
@@ -252,11 +282,30 @@ if(VEK_BUILD_APP)
 
     if(WIN32)
         set(TANGENTA_RC ${CMAKE_CURRENT_SOURCE_DIR}/resources/brand/tangenta.rc)
+    elseif(APPLE)
+        set(TANGENTA_RC ${CMAKE_CURRENT_SOURCE_DIR}/resources/brand/tangenta.icns)
+        set_source_files_properties(${TANGENTA_RC} PROPERTIES MACOSX_PACKAGE_LOCATION Resources)
     endif()
     qt_add_executable(tangenta src/app/main.cpp ${TANGENTA_RC})
     target_link_libraries(tangenta PRIVATE vekapp)
     target_compile_definitions(tangenta PRIVATE VEK_VERSION="${PROJECT_VERSION}")
     set_target_properties(tangenta PROPERTIES WIN32_EXECUTABLE ON)
+
+    if(APPLE)
+        # App-Paket TANGENTA.app; Qt-Bibliotheken bringt packaging/macos/package-macos.sh hinein
+        set_target_properties(tangenta PROPERTIES
+            MACOSX_BUNDLE ON
+            OUTPUT_NAME TANGENTA
+            MACOSX_BUNDLE_INFO_PLIST ${CMAKE_CURRENT_SOURCE_DIR}/packaging/macos/Info.plist.in
+            MACOSX_BUNDLE_GUI_IDENTIFIER ch.tangenta.Tangenta
+            MACOSX_BUNDLE_BUNDLE_NAME TANGENTA
+            MACOSX_BUNDLE_ICON_FILE tangenta.icns
+            MACOSX_BUNDLE_SHORT_VERSION_STRING ${PROJECT_VERSION}
+            MACOSX_BUNDLE_BUNDLE_VERSION ${PROJECT_VERSION})
+        add_custom_command(TARGET tangenta POST_BUILD
+            COMMAND ${CMAKE_COMMAND} -E copy_directory ${VEK_DICTIONARY_SOURCE}
+                    $<TARGET_BUNDLE_CONTENT_DIR:tangenta>/Resources/dictionaries)
+    endif()
 
     if(UNIX AND NOT APPLE)
         include(GNUInstallDirs)
@@ -288,6 +337,10 @@ if(VEK_BUILD_TESTS)
     if(VEK_BUILD_APP)
         qt_add_executable(tst_tools tests/tst_tools.cpp)
         target_link_libraries(tst_tools PRIVATE vekapp Qt6::Test)
+        # Viele Tests in einer Datei: MinGW braucht das grosse Objektformat
+        if(MINGW)
+            target_compile_options(tst_tools PRIVATE -Wa,-mbig-obj)
+        endif()
         target_compile_definitions(tst_tools PRIVATE VEK_SOURCE_DIR="${CMAKE_CURRENT_SOURCE_DIR}")
         add_test(NAME tst_tools COMMAND tst_tools)
         set_tests_properties(tst_tools PROPERTIES ENVIRONMENT "${VEK_TEST_ENV}")
