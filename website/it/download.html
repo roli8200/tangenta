@@ -65,14 +65,14 @@
    "@type": "SoftwareApplication",
    "@id": "https://tangenta.ch/#software",
    "name": "TANGENTA",
-   "description": "TANGENTA: grafica vettoriale libera sotto licenza GPL, per Windows e Linux. Con un assistente IA che disegna davvero, SuperTrace e la ricerca di immagini.",
+   "description": "TANGENTA: grafica vettoriale libera sotto licenza GPL, per Windows, macOS e Linux. Con un assistente IA che disegna davvero, SuperTrace e la ricerca di immagini.",
    "applicationCategory": "DesignApplication",
    "applicationSubCategory": "Vector graphics editor",
    "operatingSystem": "Windows 10, Windows 11, Debian 12, Debian 13, Ubuntu 24.04, Ubuntu 26.04",
-   "softwareVersion": "0.86",
+   "softwareVersion": "0.91",
    "license": "https://www.gnu.org/licenses/gpl-3.0.html",
    "isAccessibleForFree": true,
-   "downloadUrl": "https://github.com/roli8200/tangenta/releases/tag/v0.86",
+   "downloadUrl": "https://github.com/roli8200/tangenta/releases/tag/v0.91",
    "codeRepository": "https://github.com/roli8200/tangenta",
    "screenshot": [
     "https://tangenta.ch/img/01-hauptfenster.png",
@@ -111,9 +111,9 @@
 
 <main id="top">
   <section class="hero page-hero">
-    <p class="eyebrow">Download · versione 0.86</p>
+    <p class="eyebrow">Download · versione 0.91</p>
     <h1>Scaricare<br><span class="grad">TANGENTA.</span></h1>
-    <p class="lead">Gratuito per Windows e Linux. Tutti i pacchetti si trovano su GitHub con la versione attuale.</p>
+    <p class="lead">Gratuito per Windows, macOS e Linux. Tutti i pacchetti si trovano su GitHub con la versione attuale.</p>
   </section>
 
   <section class="section">
@@ -121,31 +121,37 @@
       <article class="card">
         <h3>Windows 10 / 11</h3>
         <p>Setup con procedura guidata o MSI per la distribuzione in rete, entrambi installabili in modo silenzioso.</p>
-        <a class="btn btn-primary" href="https://github.com/roli8200/tangenta/releases/download/v0.86/TANGENTA-0.86-x64-setup.exe">Scarica il setup</a>
-        <p><a class="more" href="https://github.com/roli8200/tangenta/releases/download/v0.86/TANGENTA-0.86-x64.msi">MSI per la distribuzione →</a></p>
-        <pre><code>TANGENTA-0.86-x64-setup.exe /quiet
-msiexec /i TANGENTA-0.86-x64.msi /qn</code></pre>
+        <a class="btn btn-primary" href="https://github.com/roli8200/tangenta/releases/download/v0.91/TANGENTA-0.91-x64-setup.exe">Scarica il setup</a>
+        <p><a class="more" href="https://github.com/roli8200/tangenta/releases/download/v0.91/TANGENTA-0.91-x64.msi">MSI per la distribuzione →</a></p>
+        <pre><code>TANGENTA-0.91-x64-setup.exe /quiet
+msiexec /i TANGENTA-0.91-x64.msi /qn</code></pre>
+      </article>
+      <article class="card">
+        <h3>macOS 13 o successivo</h3>
+        <p>Un programma per Mac con chip Apple e con processore Intel, come immagine disco.</p>
+        <a class="btn btn-primary" href="https://github.com/roli8200/tangenta/releases/download/v0.91/TANGENTA-0.91-macos.dmg">Scarica l’immagine disco</a>
+        <pre><code>xattr -dr com.apple.quarantine /Applications/TANGENTA.app</code></pre>
       </article>
       <article class="card">
         <h3>Debian e Ubuntu</h3>
         <p>Pacchetti per Debian 12, Debian 13, Ubuntu 24.04 e 26.04, con il proprio Qt 6.10.</p>
-        <a class="btn btn-primary" href="https://github.com/roli8200/tangenta/releases/download/v0.86/tangenta_0.86-1.debian13_amd64.deb">Scarica il .deb (Debian 13)</a>
+        <a class="btn btn-primary" href="https://github.com/roli8200/tangenta/releases/download/v0.91/tangenta_0.91-1.debian13_amd64.deb">Scarica il .deb (Debian 13)</a>
         <p>Pacchetti per sistema:</p>
-        <ul class="dl-list"><li><a class="more" href="https://github.com/roli8200/tangenta/releases/download/v0.86/tangenta_0.86-1.debian12_amd64.deb">Debian 12</a></li><li><a class="more" href="https://github.com/roli8200/tangenta/releases/download/v0.86/tangenta_0.86-1.debian13_amd64.deb">Debian 13</a></li><li><a class="more" href="https://github.com/roli8200/tangenta/releases/download/v0.86/tangenta_0.86-1.ubuntu24.04_amd64.deb">Ubuntu 24.04</a></li><li><a class="more" href="https://github.com/roli8200/tangenta/releases/download/v0.86/tangenta_0.86-1.ubuntu26.04_amd64.deb">Ubuntu 26.04</a></li></ul>
-        <pre><code>sudo apt install ./tangenta_0.86-1.debian13_amd64.deb</code></pre>
+        <ul class="dl-list"><li><a class="more" href="https://github.com/roli8200/tangenta/releases/download/v0.91/tangenta_0.91-1.debian12_amd64.deb">Debian 12</a></li><li><a class="more" href="https://github.com/roli8200/tangenta/releases/download/v0.91/tangenta_0.91-1.debian13_amd64.deb">Debian 13</a></li><li><a class="more" href="https://github.com/roli8200/tangenta/releases/download/v0.91/tangenta_0.91-1.ubuntu24.04_amd64.deb">Ubuntu 24.04</a></li><li><a class="more" href="https://github.com/roli8200/tangenta/releases/download/v0.91/tangenta_0.91-1.ubuntu26.04_amd64.deb">Ubuntu 26.04</a></li></ul>
+        <pre><code>sudo apt install ./tangenta_0.91-1.debian13_amd64.deb</code></pre>
       </article>
       <article class="card">
         <h3>Altri sistemi Linux</h3>
         <p>Flatpak per Fedora, openSUSE, Arch, Mint e ogni sistema con Flatpak. Il runtime arriva da Flathub.</p>
-        <a class="btn btn-primary" href="https://github.com/roli8200/tangenta/releases/download/v0.86/TANGENTA-0.86-x86_64.flatpak">Scarica il Flatpak</a>
-        <pre><code>flatpak install --user TANGENTA-0.86-x86_64.flatpak
+        <a class="btn btn-primary" href="https://github.com/roli8200/tangenta/releases/download/v0.91/TANGENTA-0.91-x86_64.flatpak">Scarica il Flatpak</a>
+        <pre><code>flatpak install --user TANGENTA-0.91-x86_64.flatpak
 flatpak run ch.tangenta.Tangenta</code></pre>
       </article>
-      <article class="card">
+      <article class="card full">
         <h3>GitHub</h3>
-        <p><a class="more" href="https://github.com/roli8200/tangenta/releases/tag/v0.86">Tutti i file e i checksum →</a></p>
-        <a class="btn btn-primary" href="https://github.com/roli8200/tangenta/releases/download/v0.86/SHA256SUMS-0.86.txt">SHA256SUMS-0.86.txt</a>
-        <pre><code>sha256sum --ignore-missing -c SHA256SUMS-0.86.txt</code></pre>
+        <p><a class="more" href="https://github.com/roli8200/tangenta/releases/tag/v0.91">Tutti i file e i checksum →</a></p>
+        <a class="btn btn-primary" href="https://github.com/roli8200/tangenta/releases/download/v0.91/SHA256SUMS-0.91.txt">SHA256SUMS-0.91.txt</a>
+        <pre><code>sha256sum --ignore-missing -c SHA256SUMS-0.91.txt</code></pre>
       </article>
     </div>
   </section>
@@ -154,41 +160,48 @@ flatpak run ch.tangenta.Tangenta</code></pre>
     <div class="split-text">
       <p class="label"><b>01</b> / Windows</p>
       <h2>Installare su Windows</h2>
-      <ol class="steps"><li>Scaricare <b>TANGENTA-0.86-x64-setup.exe</b> e avviarlo.</li><li>Accettare la licenza e scegliere <b>Install</b>. Il setup richiede i diritti di amministratore e installa per tutti gli utenti.</li><li>Aprire TANGENTA dal menu Start. I file <code>.vek</code> si aprono poi con un doppio clic.</li></ol>
+      <ol class="steps"><li>Scaricare <b>TANGENTA-0.91-x64-setup.exe</b> e avviarlo.</li><li>Accettare la licenza e scegliere <b>Install</b>. Il setup richiede i diritti di amministratore e installa per tutti gli utenti.</li><li>Aprire TANGENTA dal menu Start. I file <code>.vek</code> si aprono poi con un doppio clic.</li></ol>
       <p class="sub small">Se Windows mostra «PC protetto da Windows», faccia clic su <b>Ulteriori informazioni</b> e poi su <b>Esegui comunque</b>. I pacchetti non sono ancora firmati digitalmente.</p>
     </div>
     <div class="split-text">
       <p class="label"><b>02</b> / Linux</p>
       <h2>Installare su Linux</h2>
-      <ol class="steps"><li>Scaricare il pacchetto per il proprio sistema:</li><li>Installarlo in un terminale: <code>sudo apt install ./tangenta_0.86-1.debian12_amd64.deb</code> (adattare il nome del file).</li><li>Aprire TANGENTA dal menu delle applicazioni o digitare <code>tangenta</code>. Rimuoverlo con <code>sudo apt remove tangenta</code>.</li></ol>
-      <pre><code>tangenta_0.86-1.debian12_amd64.deb
-tangenta_0.86-1.debian13_amd64.deb
-tangenta_0.86-1.ubuntu24.04_amd64.deb
-tangenta_0.86-1.ubuntu26.04_amd64.deb</code></pre>
+      <ol class="steps"><li>Scaricare il pacchetto per il proprio sistema:</li><li>Installarlo in un terminale: <code>sudo apt install ./tangenta_0.91-1.debian12_amd64.deb</code> (adattare il nome del file).</li><li>Aprire TANGENTA dal menu delle applicazioni o digitare <code>tangenta</code>. Rimuoverlo con <code>sudo apt remove tangenta</code>.</li></ol>
+      <pre><code>tangenta_0.91-1.debian12_amd64.deb
+tangenta_0.91-1.debian13_amd64.deb
+tangenta_0.91-1.ubuntu24.04_amd64.deb
+tangenta_0.91-1.ubuntu26.04_amd64.deb</code></pre>
     </div>
   </section>
 
   <section class="section narrow">
-    <p class="label"><b>03</b> / Requisiti di sistema</p>
-    <h2>Cosa serve al suo computer.</h2>
-    <table class="table"><thead><tr><th></th><th>Minimo</th><th>Consigliato</th></tr></thead><tbody><tr><td>Sistema</td><td>Windows 10 (64 bit), Debian 12, Ubuntu 24.04</td><td>Windows 11, Debian 13, Ubuntu 26.04</td></tr><tr><td>Processore</td><td>x86-64 con 2 core</td><td>4 core o più</td></tr><tr><td>Memoria</td><td>4 GB</td><td>8 GB</td></tr><tr><td>Spazio su disco</td><td>300 MB</td><td>1 GB per immagini e salvataggi</td></tr><tr><td>Schermo</td><td>1366 × 768</td><td>Full HD o superiore</td></tr></tbody></table>
+    <p class="label"><b>03</b> / macOS</p>
+    <h2>Installare su Mac</h2>
+    <ol class="steps"><li>Scaricare <b>TANGENTA-0.91-macos.dmg</b> e aprirlo.</li><li>Trascinare TANGENTA nella cartella <b>Applicazioni</b>.</li><li>Al primo avvio macOS segnala che il programma non può essere aperto. Aprire allora <b>Impostazioni di Sistema › Privacy e sicurezza</b> e scegliere <b>Apri comunque</b> accanto a TANGENTA.</li></ol>
+    <p class="sub small">La versione per Mac non è ancora autenticata da Apple ed è stata provata meno delle versioni per Windows e Linux; i riscontri sono benvenuti. L’autorizzazione funziona anche in un terminale: <code>xattr -dr com.apple.quarantine /Applications/TANGENTA.app</code></p>
   </section>
 
   <section class="section narrow">
-    <p class="label"><b>04</b> / Per l’informatica</p>
+    <p class="label"><b>04</b> / Requisiti di sistema</p>
+    <h2>Cosa serve al suo computer.</h2>
+    <div class="table-wrap"><table class="table"><thead><tr><th></th><th>Minimo</th><th>Consigliato</th></tr></thead><tbody><tr><td>Sistema</td><td>Windows 10 (64 bit), Debian 12, Ubuntu 24.04, macOS 13</td><td>Windows 11, Debian 13, Ubuntu 26.04, macOS 15</td></tr><tr><td>Processore</td><td>x86-64 con 2 core o chip Apple</td><td>4 core o più</td></tr><tr><td>Memoria</td><td>4 GB</td><td>8 GB</td></tr><tr><td>Spazio su disco</td><td>300 MB</td><td>1 GB per immagini e salvataggi</td></tr><tr><td>Schermo</td><td>1366 × 768</td><td>Full HD o superiore</td></tr></tbody></table></div>
+  </section>
+
+  <section class="section narrow">
+    <p class="label"><b>05</b> / Per l’informatica</p>
     <h2>Installazione silenziosa.</h2>
     <p class="sub">Per GPO, Intune, SCCM o script propri. Entrambi i pacchetti si installano in <code>C:\Program Files\TANGENTA</code>; una versione più recente sostituisce quella precedente.</p>
-    <div class="table-wrap"><table class="table"><tbody><tr><td>Setup silenzioso</td><td><code>TANGENTA-0.86-x64-setup.exe /quiet</code></td></tr><tr><td>Setup con avanzamento</td><td><code>TANGENTA-0.86-x64-setup.exe /passive</code></td></tr><tr><td>Cartella e collegamento sul desktop</td><td><code>TANGENTA-0.86-x64-setup.exe /quiet InstallFolder="D:\Programmi\TANGENTA" DesktopShortcut=1</code></td></tr><tr><td>MSI silenzioso</td><td><code>msiexec /i TANGENTA-0.86-x64.msi /qn</code></td></tr><tr><td>MSI con registro</td><td><code>msiexec /i TANGENTA-0.86-x64.msi /qn /l*v C:\Temp\tangenta.log</code></td></tr><tr><td>Disinstallare</td><td><code>msiexec /x TANGENTA-0.86-x64.msi /qn</code></td></tr></tbody></table></div>
+    <div class="table-wrap"><table class="table"><tbody><tr><td>Setup silenzioso</td><td><code>TANGENTA-0.91-x64-setup.exe /quiet</code></td></tr><tr><td>Setup con avanzamento</td><td><code>TANGENTA-0.91-x64-setup.exe /passive</code></td></tr><tr><td>Cartella e collegamento sul desktop</td><td><code>TANGENTA-0.91-x64-setup.exe /quiet InstallFolder="D:\Programmi\TANGENTA" DesktopShortcut=1</code></td></tr><tr><td>MSI silenzioso</td><td><code>msiexec /i TANGENTA-0.91-x64.msi /qn</code></td></tr><tr><td>MSI con registro</td><td><code>msiexec /i TANGENTA-0.91-x64.msi /qn /l*v C:\Temp\tangenta.log</code></td></tr><tr><td>Disinstallare</td><td><code>msiexec /x TANGENTA-0.91-x64.msi /qn</code></td></tr></tbody></table></div>
   </section>
 
   <section class="section narrow">
-    <p class="label"><b>05</b> / Novità 0.86</p>
-    <h2>Apre i file CDR.</h2>
-    <ul class="dots"><li>Apertura diretta di file CDR e CMX, dalla versione 5 a X6 e successive</li><li>Testo CDR con rotazione, compressione, grassetto e corsivo; immagini scontornate</li><li>File/Apri legge anche PDF, AI, SVG (anche da Inkscape), EPS e DXF</li><li>SuperTrace conserva molto meglio le scritte piccole</li><li>I file grandi con foto si caricano molto più velocemente</li></ul>
+    <p class="label"><b>06</b> / Novità 0.91</p>
+    <h2>Ora anche su Mac.</h2>
+    <ul class="dots"><li>Versione macOS per Mac con chip Apple e con processore Intel</li><li>Fusione lungo un tracciato, con sfumature e ordine invertito</li><li>Effetti bitmap direttamente sugli oggetti, effetto cornice, pagina arrotolata e correzioni del colore</li><li>Mosaico di foto, retino a punti, ombra a blocco, pennello e spruzzatore</li><li>Più pagine: finestra Pagine e vista a più pagine</li><li>Codici QR, scorciatoie da tastiera proprie e molti miglioramenti nati dai video tutorial</li></ul>
   </section>
 
   <section class="section narrow">
-    <p class="label"><b>06</b> / Codice sorgente</p>
+    <p class="label"><b>07</b> / Codice sorgente</p>
     <h2>Preferisce compilare da sé?</h2>
     <p class="sub">La guida alla compilazione porta passo dopo passo da un computer vuoto alla propria build, su Windows e Linux. È scritta in tedesco.</p>
     <pre><code>git clone https://github.com/roli8200/tangenta.git
@@ -199,7 +212,7 @@ make test &amp;&amp; make run</code></pre>
 
   <section class="final">
     <h2>Inizi a disegnare.</h2>
-    <p>Gratuito, per Windows e Linux, con IA.</p>
+    <p>Gratuito, per Windows, macOS e Linux, con IA.</p>
     <div class="ctas">
       <a class="btn btn-primary" href="../it/download.html">Scarica</a>
       <a class="btn btn-ghost" href="https://github.com/roli8200/tangenta">Vedere su GitHub</a>
@@ -211,7 +224,7 @@ make test &amp;&amp; make run</code></pre>
   <div class="footer-cols">
     <div>
       <a class="brand" href="../it/index.html"><img src="../img/tangenta.svg" alt="" width="28" height="28"><span>TANGENTA</span></a>
-      <p>Grafica vettoriale libera per Windows e Linux.</p>
+      <p>Grafica vettoriale libera per Windows, macOS e Linux.</p>
     </div>
     <div><h4>Programma</h4><a href="../it/features.html">Funzioni</a><a href="../it/ai.html">Assistente IA</a><a href="../it/download.html">Download</a></div>
     <div><h4>Progetto</h4><a href="https://github.com/roli8200/tangenta">GitHub</a><a href="https://github.com/roli8200/tangenta/blob/main/BUILD.md">Compilare da sé</a><a href="https://github.com/roli8200/tangenta/issues">Segnalare un errore</a></div>

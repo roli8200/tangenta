@@ -171,6 +171,6 @@ A selection. Every shortcut is shown next to its command in the menus.
 
 ## Start drawing.
 
-Free of charge, for Windows and Linux, with AI.
+Free of charge, for Windows, macOS and Linux, with AI.
 
 [Download](https://tangenta.ch/en/download.html) [View on GitHub](https://github.com/roli8200/tangenta)

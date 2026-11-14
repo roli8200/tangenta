@@ -113,6 +113,6 @@ L’interface du programme est aujourd’hui en allemand ; vous pouvez écrire �
 
 ## À vos crayons.
 
-Gratuit, pour Windows et Linux, avec IA.
+Gratuit, pour Windows, macOS et Linux, avec IA.
 
 [Télécharger](https://tangenta.ch/fr/download.html) [Voir sur GitHub](https://github.com/roli8200/tangenta)

@@ -8,6 +8,40 @@ const char *rvngSkipSpace(const char *p, const char *end)
 	return p;
 }
 
+// Gleitkomma-from_chars fehlt in Apples libc++: Zahl abgrenzen (wie from_chars: Vorzeichen, Ziffern,
+// Punkt, Exponent) und nur diesen Teil mit der "C"-Locale lesen
+const char *rvngParseDouble(const char *p, const char *end, double &res)
+{
+	const char *q = p;
+	if (q < end && *q == '-')
+		++q;
+	const char *digits = q;
+	while (q < end && std::isdigit((unsigned char)*q))
+		++q;
+	if (q < end && *q == '.')
+		++q;
+	while (q < end && std::isdigit((unsigned char)*q))
+		++q;
+	if (q == digits || (q == digits + 1 && *digits == '.'))
+		return nullptr;
+	if (q < end && (*q == 'e' || *q == 'E'))
+	{
+		const char *e = q + 1;
+		if (e < end && (*e == '+' || *e == '-'))
+			++e;
+		if (e < end && std::isdigit((unsigned char)*e))
+		{
+			while (e < end && std::isdigit((unsigned char)*e))
+				++e;
+			q = e;
+		}
+	}
+	std::istringstream in(std::string(p, q));
+	in.imbue(std::locale::classic());
+	in >> res;
+	return in.fail() ? nullptr : q;
+}
+
 bool findDouble(const librevenge::RVNGString &str, double &res, librevenge::RVNGUnit &unit)
 {
 	if (str.empty())
@@ -17,10 +51,10 @@ bool findDouble(const librevenge::RVNGString &str, double &res, librevenge::RVNG
 	p = rvngSkipSpace(p, end);
 	if (p < end && *p == '+')
 		++p;
-	const auto parsed = std::from_chars(p, end, res);
-	if (parsed.ec != std::errc())
+	const char *parsed = rvngParseDouble(p, end, res);
+	if (!parsed)
 		return false;
-	p = rvngSkipSpace(parsed.ptr, end);
+	p = rvngSkipSpace(parsed, end);
 	using namespace librevenge;
 	double ratio = 1;
 	const std::string rest(p, end);

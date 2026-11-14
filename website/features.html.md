@@ -171,6 +171,6 @@ Eine Auswahl. Alle Kürzel stehen in den Menüs neben dem Befehl.
 
 ## Zeichnen Sie los.
 
-Kostenlos, für Windows und Linux, mit KI.
+Kostenlos, für Windows, macOS und Linux, mit KI.
 
 [Herunterladen](https://tangenta.ch/download.html) [Auf GitHub ansehen](https://github.com/roli8200/tangenta)

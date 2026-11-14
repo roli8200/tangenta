@@ -2,8 +2,8 @@ T = {
     'lang_name': 'Deutsch',
     'locale': 'de_CH',
     'meta': {
-        'index': ('TANGENTA – freie Vektorgrafik mit KI für Windows und Linux',
-                  'TANGENTA: Vektorgrafik, frei unter der GPL, für Windows und Linux. Mit KI-Assistent, der wirklich zeichnet, SuperTrace und Bildersuche.'),
+        'index': ('TANGENTA – freie Vektorgrafik mit KI für Windows, macOS und Linux',
+                  'TANGENTA: Vektorgrafik, frei unter der GPL, für Windows, macOS und Linux. Mit KI-Assistent, der wirklich zeichnet, SuperTrace und Bildersuche.'),
         'features': ('Funktionen – TANGENTA',
                      'Alle Werkzeuge von TANGENTA: Zeichnen, Formen, Füllungen, Effekte, Text, Bilder, Druck, Dateiformate und Tastenkürzel.'),
         'ai': ('KI-Assistent – TANGENTA',
@@ -13,10 +13,10 @@ T = {
     },
     'nav': {'features': 'Funktionen', 'ai': 'KI-Assistent', 'download': 'Download', 'cta': 'Herunterladen',
             'language': 'Sprache', 'menu': 'Menü'},
-    'footer': {'claim': 'Freie Vektorgrafik für Windows und Linux.', 'program': 'Programm', 'project': 'Projekt',
+    'footer': {'claim': 'Freie Vektorgrafik für Windows, macOS und Linux.', 'program': 'Programm', 'project': 'Projekt',
                'build': 'Selbst bauen', 'issues': 'Fehler melden', 'publisher': 'Herausgeber', 'license': 'Lizenz GPLv3',
                'fine': 'TANGENTA ist freie Software unter der GPLv3. Fotos in der Bildersuche: Wikimedia Commons, Lizenzen auf den Kacheln.'},
-    'final': {'h2': 'Zeichnen Sie los.', 'p': 'Kostenlos, für Windows und Linux, mit KI.', 'gh': 'Auf GitHub ansehen'},
+    'final': {'h2': 'Zeichnen Sie los.', 'p': 'Kostenlos, für Windows, macOS und Linux, mit KI.', 'gh': 'Auf GitHub ansehen'},
     'providers_short': ['Claude über Ihr Abo', 'Claude API', 'OpenAI', 'Gemini', 'DeepSeek', 'Ollama', 'LiteLLM'],
     'download_cards': {
         'win_h': 'Windows 10 / 11', 'win_p': 'Setup mit Assistent oder MSI für die Verteilung im Netzwerk, still installierbar.',
@@ -27,12 +27,14 @@ T = {
         'debs_h': 'Pakete je System:',
         'flat_h': 'Andere Linux-Systeme', 'flat_p': 'Flatpak für Fedora, openSUSE, Arch, Mint und alle Systeme mit Flatpak. Die Laufzeit kommt von Flathub.',
         'flat_btn': 'Flatpak herunterladen',
+        'mac_h': 'macOS 13 oder neuer', 'mac_p': 'Ein Programm für Macs mit Apple-Chip und mit Intel-Prozessor, als Disk-Image.',
+        'mac_btn': 'Disk-Image herunterladen',
     },
 
     # ------------------------------------------------------------ Startseite
     'home': {
         'hero': {
-            'eyebrow': 'Freie Vektorgrafik für Windows und Linux',
+            'eyebrow': 'Freie Vektorgrafik für Windows, macOS und Linux',
             'h1a': 'Zeichnen wie gewohnt.', 'h1b': 'Frei wie nie.',
             'lead': 'TANGENTA bringt die Werkzeuge, die Sie kennen, als freie Software. Dazu kommt ein KI-Assistent, '
                     'der nicht nur redet, sondern zeichnet.',
@@ -108,7 +110,7 @@ T = {
             ('Was kostet der KI-Assistent?', 'TANGENTA selbst nichts. Mit einem Claude-Abo (Pro oder Max) und installiertem Claude Code läuft er über Ihr Abo, ohne Zusatzkosten. Alternativ nutzen Sie einen eigenen API-Schlüssel (Claude, OpenAI, Gemini, DeepSeek) oder einen eigenen Ollama-Server.'),
             ('Muss der Assistent mein Dokument ändern dürfen?', 'Nein. Ohne Häkchen bei „darf ändern“ liest er nur. Und was er in einer Antwort ändert, nimmt ein einziges Strg+Z zurück.'),
             ('In welcher Sprache ist die Oberfläche?', 'Heute auf Deutsch. Die Rechtschreibprüfung kennt Deutsch (Schweiz und Deutschland), Englisch und Französisch.'),
-            ('Läuft TANGENTA auf dem Mac?', 'Heute für Windows und Linux. Qt macht eine Mac-Fassung möglich; sie steht auf der Wunschliste.'),
+            ('Läuft TANGENTA auf dem Mac?', 'Ja, ab Version 0.91 auf macOS 13 und neuer, auf Macs mit Apple-Chip und mit Intel-Prozessor. Die Mac-Fassung ist neu und noch nicht von Apple beglaubigt.'),
             ('Darf ich TANGENTA in der Firma einsetzen?', 'Ja, ohne Einschränkung. Die GPLv3 regelt nur die Weitergabe veränderter Fassungen, nicht die Nutzung.'),
         ]},
     },
@@ -229,20 +231,25 @@ T = {
 
     # ------------------------------------------------------------ Download
     'download': {
-        'hero': {'eyebrow': 'Download · Version 0.86', 'h1': 'TANGENTA<br><span class="grad">herunterladen.</span>',
-                 'lead': 'Kostenlos für Windows und Linux. Alle Pakete liegen auf GitHub bei der aktuellen Version.'},
+        'hero': {'eyebrow': 'Download · Version 0.91', 'h1': 'TANGENTA<br><span class="grad">herunterladen.</span>',
+                 'lead': 'Kostenlos für Windows, macOS und Linux. Alle Pakete liegen auf GitHub bei der aktuellen Version.'},
         'win': {'h2': 'Installieren unter Windows', 'steps': [
-            '<b>TANGENTA-0.86-x64-setup.exe</b> herunterladen und starten.',
+            '<b>TANGENTA-0.91-x64-setup.exe</b> herunterladen und starten.',
             'Lizenz bestätigen und <b>Installieren</b> wählen. Das Setup braucht Administratorrechte und installiert für alle Benutzer.',
             'TANGENTA im Startmenü öffnen. <code>.vek</code>-Dateien öffnen sich danach per Doppelklick.'],
             'note': 'Zeigt Windows „Der Computer wurde durch Windows geschützt“, klicken Sie auf <b>Weitere Informationen</b> und dann <b>Trotzdem ausführen</b>. Die Pakete sind noch nicht digital signiert.'},
+        'mac': {'h2': 'Installieren auf dem Mac', 'steps': [
+            '<b>TANGENTA-0.91-macos.dmg</b> herunterladen und öffnen.',
+            'TANGENTA in den Ordner <b>Programme</b> ziehen.',
+            'Beim ersten Start meldet macOS, dass sich das Programm nicht öffnen lässt. Dann <b>Systemeinstellungen › Datenschutz &amp; Sicherheit</b> öffnen und bei TANGENTA <b>Dennoch öffnen</b> wählen.'],
+            'note': 'Die Mac-Fassung ist noch nicht von Apple beglaubigt und weniger erprobt als die Fassungen für Windows und Linux; Rückmeldungen sind willkommen. Freigeben geht auch im Terminal: <code>xattr -dr com.apple.quarantine /Applications/TANGENTA.app</code>'},
         'lin': {'h2': 'Installieren unter Linux', 'steps': [
             'Das Paket für Ihr System herunterladen:',
-            'Im Terminal installieren: <code>sudo apt install ./tangenta_0.86-1.debian12_amd64.deb</code> (Dateiname anpassen).',
+            'Im Terminal installieren: <code>sudo apt install ./tangenta_0.91-1.debian12_amd64.deb</code> (Dateiname anpassen).',
             'TANGENTA im Startmenü öffnen oder <code>tangenta</code> eingeben. Entfernen mit <code>sudo apt remove tangenta</code>.']},
         'req': {'label': 'Systemanforderungen', 'h2': 'Was Ihr Rechner braucht.', 'th': ['', 'Mindestens', 'Empfohlen'],
-                'rows': [('System', 'Windows 10 (64 Bit), Debian 12, Ubuntu 24.04', 'Windows 11, Debian 13, Ubuntu 26.04'),
-                         ('Prozessor', 'x86-64 mit 2 Kernen', '4 Kerne oder mehr'),
+                'rows': [('System', 'Windows 10 (64 Bit), Debian 12, Ubuntu 24.04, macOS 13', 'Windows 11, Debian 13, Ubuntu 26.04, macOS 15'),
+                         ('Prozessor', 'x86-64 mit 2 Kernen oder Apple-Chip', '4 Kerne oder mehr'),
                          ('Arbeitsspeicher', '4 GB', '8 GB'),
                          ('Speicher', '300 MB', '1 GB für Bilder und Zwischenstände'),
                          ('Bildschirm', '1366 × 768', 'Full HD oder mehr')]},
@@ -254,12 +261,13 @@ T = {
                             ('MSI still', 'msiexec /i TANGENTA-{v}-x64.msi /qn'),
                             ('MSI mit Protokoll', 'msiexec /i TANGENTA-{v}-x64.msi /qn /l*v C:\\Temp\\tangenta.log'),
                             ('Entfernen', 'msiexec /x TANGENTA-{v}-x64.msi /qn')]},
-        'notes': {'label': 'Neu in 0.86', 'h2': 'CDR-Dateien öffnen.', 'items': [
-            'CDR- und CMX-Dateien direkt öffnen, von Version 5 bis X6 und neuer',
-            'Text aus CDR mit Drehung, Stauchung, fett und kursiv; freigestellte Bilder',
-            'Datei/Öffnen liest auch PDF, AI, SVG (auch aus Inkscape), EPS und DXF',
-            'SuperTrace erhält kleine Schrift deutlich besser',
-            'Grosse Dateien mit Fotos laden mehrfach schneller']},
+        'notes': {'label': 'Neu in 0.91', 'h2': 'Jetzt auch für den Mac.', 'items': [
+            'macOS-Fassung für Macs mit Apple-Chip und mit Intel-Prozessor',
+            'Überblendung entlang eines Pfads, mit Verläufen und umgekehrter Reihenfolge',
+            'Bitmap-Effekte direkt auf Objekten, Rahmen-Effekt, Seite aufrollen und Farbkorrekturen',
+            'Fotomosaik, Punktraster, Blockschatten, Pinsel und Sprühdose',
+            'Mehrere Seiten: Seiten-Andockfenster und Mehrseitenansicht',
+            'QR-Codes, eigene Tastenkürzel und viele Verbesserungen aus den Tutorial-Videos']},
         'source': {'label': 'Quellcode', 'h2': 'Lieber selbst bauen?',
                    'sub': 'Die Bauanleitung führt Schritt für Schritt vom leeren Rechner zum eigenen Build, unter Windows und Linux.',
                    'more': 'Zur Bauanleitung'},

@@ -48,6 +48,7 @@
 #include "QrCodeObject.h"
 #include "Mosaic.h"
 #include <QFileInfo>
+#include <numbers>
 
 using namespace vek;
 
@@ -701,7 +702,8 @@ private slots:
         using K = PolygonObject::Kind;
         auto corners = [](const PolygonObject& p) {
             int n = 0;
-            for (const SubPath& s : CurveObject::fromPath(p.localPath())->subPaths())
+            const auto curve = CurveObject::fromPath(p.localPath());
+            for (const SubPath& s : curve->subPaths())
                 n += int(s.nodes.size());
             return n;
         };

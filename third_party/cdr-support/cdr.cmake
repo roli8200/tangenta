@@ -56,6 +56,8 @@ if(APPLE)
     # iconv liegt unter macOS in einer eigenen Bibliothek
     target_link_libraries(vek_cdr PRIVATE iconv)
 endif()
+# C++17 wie upstream: libc++ kennt shared_ptr::unique() unter C++20 nicht mehr
+set_target_properties(vek_revenge vek_cdr PROPERTIES CXX_STANDARD 17)
 foreach(t vek_lcms2 vek_revenge vek_cdr)
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         target_compile_options(${t} PRIVATE -w)

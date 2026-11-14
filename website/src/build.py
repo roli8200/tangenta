@@ -208,6 +208,12 @@ def downloads_cards(t, lang):
 msiexec /i TANGENTA-{VERSION}-x64.msi /qn</code></pre>
       </article>
       <article class="card">
+        <h3>{d['mac_h']}</h3>
+        <p>{d['mac_p']}</p>
+        <a class="btn btn-primary" href="{asset(f'TANGENTA-{VERSION}-macos.dmg')}">{d['mac_btn']}</a>
+        <pre><code>xattr -dr com.apple.quarantine /Applications/TANGENTA.app</code></pre>
+      </article>
+      <article class="card">
         <h3>{d['lin_h']}</h3>
         <p>{d['lin_p']}</p>
         <a class="btn btn-primary" href="{asset(deb_file('debian13'))}">{d['lin_btn']} (Debian 13)</a>
@@ -222,7 +228,7 @@ msiexec /i TANGENTA-{VERSION}-x64.msi /qn</code></pre>
         <pre><code>flatpak install --user TANGENTA-{VERSION}-x86_64.flatpak
 flatpak run ch.tangenta.Tangenta</code></pre>
       </article>
-      <article class="card">
+      <article class="card full">
         <h3>GitHub</h3>
         <p><a class="more" href="{GITHUB}/releases/tag/v{VERSION}">{d['all']} →</a></p>
         <a class="btn btn-primary" href="{asset(f'SHA256SUMS-{VERSION}.txt')}">SHA256SUMS-{VERSION}.txt</a>
@@ -493,6 +499,7 @@ def download_page(t, lang):
     req = ''.join(f'<tr><td>{a}</td><td>{b}</td><td>{c}</td></tr>' for a, b, c in d['req']['rows'])
     win = ''.join(f'<li>{s}</li>' for s in d['win']['steps'])
     lin = ''.join(f'<li>{s}</li>' for s in d['lin']['steps'])
+    mac = ''.join(f'<li>{s}</li>' for s in d['mac']['steps'])
     debs = '\n'.join(deb_file(x) for x in DEBS)
     silent = ''.join(f'<tr><td>{label_}</td><td><code>{cmd.replace("{v}", VERSION)}</code></td></tr>' for label_, cmd in d['silent']['rows'])
     notes = ''.join(f'<li>{n}</li>' for n in d['notes']['items'])
@@ -519,26 +526,33 @@ def download_page(t, lang):
   </section>
 
   <section class="section narrow">
-    {label('03', d['req']['label'])}
-    <h2>{d['req']['h2']}</h2>
-    <table class="table"><thead><tr>{''.join(f'<th>{x}</th>' for x in d['req']['th'])}</tr></thead><tbody>{req}</tbody></table>
+    {label('03', 'macOS')}
+    <h2>{d['mac']['h2']}</h2>
+    <ol class="steps">{mac}</ol>
+    <p class="sub small">{d['mac']['note']}</p>
   </section>
 
   <section class="section narrow">
-    {label('04', d['silent']['label'])}
+    {label('04', d['req']['label'])}
+    <h2>{d['req']['h2']}</h2>
+    <div class="table-wrap"><table class="table"><thead><tr>{''.join(f'<th>{x}</th>' for x in d['req']['th'])}</tr></thead><tbody>{req}</tbody></table></div>
+  </section>
+
+  <section class="section narrow">
+    {label('05', d['silent']['label'])}
     <h2>{d['silent']['h2']}</h2>
     <p class="sub">{d['silent']['sub']}</p>
     <div class="table-wrap"><table class="table"><tbody>{silent}</tbody></table></div>
   </section>
 
   <section class="section narrow">
-    {label('05', d['notes']['label'])}
+    {label('06', d['notes']['label'])}
     <h2>{d['notes']['h2']}</h2>
     <ul class="dots">{notes}</ul>
   </section>
 
   <section class="section narrow">
-    {label('06', d['source']['label'])}
+    {label('07', d['source']['label'])}
     <h2>{d['source']['h2']}</h2>
     <p class="sub">{d['source']['sub']}</p>
     <pre><code>git clone {GITHUB}.git

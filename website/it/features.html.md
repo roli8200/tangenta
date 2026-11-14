@@ -171,6 +171,6 @@ Una selezione. Ogni scorciatoia è indicata nei menu accanto al comando.
 
 ## Inizi a disegnare.
 
-Gratuito, per Windows e Linux, con IA.
+Gratuito, per Windows, macOS e Linux, con IA.
 
 [Scarica](https://tangenta.ch/it/download.html) [Vedere su GitHub](https://github.com/roli8200/tangenta)

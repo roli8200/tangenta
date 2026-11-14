@@ -93,7 +93,7 @@ elseif(KIND STREQUAL "revenge")
         replace_region(${f} "void convertFromBase64(" "} // anonymous namespace" rvng-base64.inc)
         set(f ${SOURCE}/src/lib/RVNGPropertyList.cpp)
         replace_line(${f} "#include <boost/spirit/include/qi.hpp>"
-            "#include <cctype>\n#include <charconv>\n#include <cstring>\n#include <system_error>")
+            "#include <cctype>\n#include <charconv>\n#include <cstring>\n#include <locale>\n#include <sstream>\n#include <system_error>")
         replace_region(${f} "bool findDouble(" "} // anonymous namespace" rvng-numbers.inc)
         replace_line(${SOURCE}/src/lib/RVNGStreamImplementation.cpp "if ((unsigned long)d->offset+numBytes < d->buffer.size())"
             "if (numBytes < d->buffer.size() - (unsigned long)d->offset) // TANGENTA: ohne Überlauf")

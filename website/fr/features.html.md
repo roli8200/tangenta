@@ -171,6 +171,6 @@ Une sélection. Chaque raccourci figure dans les menus à côté de sa commande.
 
 ## À vos crayons.
 
-Gratuit, pour Windows et Linux, avec IA.
+Gratuit, pour Windows, macOS et Linux, avec IA.
 
 [Télécharger](https://tangenta.ch/fr/download.html) [Voir sur GitHub](https://github.com/roli8200/tangenta)

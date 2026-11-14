@@ -3,7 +3,7 @@ name: macOS
 
 on:
   push:
-    branches: [main]
+    branches: [main, 'ci/**']
     tags: ['v*']
   workflow_dispatch:
 
@@ -61,9 +61,10 @@ jobs:
           lipo -info build/TANGENTA.app/Contents/MacOS/TANGENTA
 
       - name: Startprobe
-        # Startet das fertige Paket ohne Bildschirm und prüft, dass es nicht sofort abstürzt
+        # Startet das fertige Paket und prüft, dass es nicht sofort abstürzt; das Paket enthält
+        # nur die echte Bildschirmanbindung (cocoa), die Runner haben eine Anmeldesitzung
         run: |
-          QT_QPA_PLATFORM=offscreen build/TANGENTA.app/Contents/MacOS/TANGENTA &
+          build/TANGENTA.app/Contents/MacOS/TANGENTA &
           pid=$!
           sleep 15
           kill -0 "$pid"

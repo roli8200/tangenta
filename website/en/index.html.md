@@ -1,10 +1,10 @@
-# TANGENTA – free vector graphics with AI for Windows and Linux
+# TANGENTA – free vector graphics with AI for Windows, macOS and Linux
 
-> TANGENTA: vector graphics, free under the GPL, for Windows and Linux. With an AI assistant that really draws, SuperTrace and image search.
+> TANGENTA: vector graphics, free under the GPL, for Windows, macOS and Linux. With an AI assistant that really draws, SuperTrace and image search.
 
 URL: https://tangenta.ch/en/
 
-Free vector graphics for Windows and Linux
+Free vector graphics for Windows, macOS and Linux
 
 # Draw the way you know.  Free as never before.
 
@@ -192,51 +192,61 @@ Invitations, labels and club logos, free of charge and without a subscription.
 
 Setup with a wizard, or an MSI for network deployment. Both install silently.
 
-[Download setup](https://github.com/roli8200/tangenta/releases/download/v0.86/TANGENTA-0.86-x64-setup.exe)
+[Download setup](https://github.com/roli8200/tangenta/releases/download/v0.91/TANGENTA-0.91-x64-setup.exe)
 
-[MSI for deployment →](https://github.com/roli8200/tangenta/releases/download/v0.86/TANGENTA-0.86-x64.msi)
+[MSI for deployment →](https://github.com/roli8200/tangenta/releases/download/v0.91/TANGENTA-0.91-x64.msi)
 
 ```
-TANGENTA-0.86-x64-setup.exe /quiet
-msiexec /i TANGENTA-0.86-x64.msi /qn
+TANGENTA-0.91-x64-setup.exe /quiet
+msiexec /i TANGENTA-0.91-x64.msi /qn
+```
+
+### macOS 13 or newer
+
+One program for Macs with Apple silicon and with Intel processors, as a disk image.
+
+[Download disk image](https://github.com/roli8200/tangenta/releases/download/v0.91/TANGENTA-0.91-macos.dmg)
+
+```
+xattr -dr com.apple.quarantine /Applications/TANGENTA.app
 ```
 
 ### Debian and Ubuntu
 
 Packages for Debian 12, Debian 13, Ubuntu 24.04 and 26.04, with their own Qt 6.10.
 
-[Download .deb (Debian 13)](https://github.com/roli8200/tangenta/releases/download/v0.86/tangenta_0.86-1.debian13_amd64.deb)
+[Download .deb (Debian 13)](https://github.com/roli8200/tangenta/releases/download/v0.91/tangenta_0.91-1.debian13_amd64.deb)
 
 Packages per system:
 
-- [Debian 12](https://github.com/roli8200/tangenta/releases/download/v0.86/tangenta_0.86-1.debian12_amd64.deb)
-- [Debian 13](https://github.com/roli8200/tangenta/releases/download/v0.86/tangenta_0.86-1.debian13_amd64.deb)
-- [Ubuntu 24.04](https://github.com/roli8200/tangenta/releases/download/v0.86/tangenta_0.86-1.ubuntu24.04_amd64.deb)
-- [Ubuntu 26.04](https://github.com/roli8200/tangenta/releases/download/v0.86/tangenta_0.86-1.ubuntu26.04_amd64.deb)
+- [Debian 12](https://github.com/roli8200/tangenta/releases/download/v0.91/tangenta_0.91-1.debian12_amd64.deb)
+- [Debian 13](https://github.com/roli8200/tangenta/releases/download/v0.91/tangenta_0.91-1.debian13_amd64.deb)
+- [Ubuntu 24.04](https://github.com/roli8200/tangenta/releases/download/v0.91/tangenta_0.91-1.ubuntu24.04_amd64.deb)
+- [Ubuntu 26.04](https://github.com/roli8200/tangenta/releases/download/v0.91/tangenta_0.91-1.ubuntu26.04_amd64.deb)
 
 ```
-sudo apt install ./tangenta_0.86-1.debian13_amd64.deb
+sudo apt install ./tangenta_0.91-1.debian13_amd64.deb
 ```
 
 ### Other Linux systems
 
 Flatpak for Fedora, openSUSE, Arch, Mint and every system with Flatpak. The runtime comes from Flathub.
 
-[Download Flatpak](https://github.com/roli8200/tangenta/releases/download/v0.86/TANGENTA-0.86-x86_64.flatpak)
+[Download Flatpak](https://github.com/roli8200/tangenta/releases/download/v0.91/TANGENTA-0.91-x86_64.flatpak)
 
 ```
-flatpak install --user TANGENTA-0.86-x86_64.flatpak
+flatpak install --user TANGENTA-0.91-x86_64.flatpak
 flatpak run ch.tangenta.Tangenta
 ```
 
 ### GitHub
 
-[All files and checksums →](https://github.com/roli8200/tangenta/releases/tag/v0.86)
+[All files and checksums →](https://github.com/roli8200/tangenta/releases/tag/v0.91)
 
-[SHA256SUMS-0.86.txt](https://github.com/roli8200/tangenta/releases/download/v0.86/SHA256SUMS-0.86.txt)
+[SHA256SUMS-0.91.txt](https://github.com/roli8200/tangenta/releases/download/v0.91/SHA256SUMS-0.91.txt)
 
 ```
-sha256sum --ignore-missing -c SHA256SUMS-0.86.txt
+sha256sum --ignore-missing -c SHA256SUMS-0.91.txt
 ```
 
 [All packages, system requirements and silent installation →](https://tangenta.ch/en/download.html)
@@ -263,7 +273,7 @@ No. Without the “darf ändern” (may change) tick, it only reads. And whateve
 
 **Does TANGENTA run on a Mac?**
 
-Today it runs on Windows and Linux. Qt makes a Mac version possible; it is on the wish list.
+Yes, since version 0.91 on macOS 13 and newer, on Macs with Apple silicon and with Intel processors. The Mac version is new and not yet notarized by Apple.
 
 **May I use TANGENTA at work?**
 
@@ -271,6 +281,6 @@ Yes, without restriction. The GPLv3 only governs distributing modified versions,
 
 ## Start drawing.
 
-Free of charge, for Windows and Linux, with AI.
+Free of charge, for Windows, macOS and Linux, with AI.
 
 [Download](https://tangenta.ch/en/download.html) [View on GitHub](https://github.com/roli8200/tangenta)
