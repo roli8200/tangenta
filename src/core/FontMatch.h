@@ -22,9 +22,12 @@ struct Candidate {
     double score = 0;      // 0..1
     double shape = -1;     // Formähnlichkeit 0..1, -1 = ohne Umrisse verglichen
     double widths = -1;    // Breitenähnlichkeit 0..1, -1 = ohne Breiten verglichen
+    double traits = -1;    // Art, Gewicht und Breite 0..1, -1 = nicht verglichen
 };
 // Die ähnlichsten installierten Schriften: Umrisse (falls eingebettet) und Zeichenbreiten
-// werden mit jeder installierten Familie verglichen, Schnitt (fett/kursiv) passend gewählt
+// werden mit jeder installierten Familie verglichen, Schnitt (fett/kursiv) passend gewählt.
+// Ohne Umrisse zählen auch Art (Grotesk, Antiqua, Schreibschrift …), Gewicht und Breite: beim
+// Original aus Name und Google-Fonts-Verzeichnis, bei installierten Schriften aus ihrer OS/2-Tabelle
 QList<Candidate> suggest(const ImportedFont& font, int count = 8);
 
 struct WebFont {

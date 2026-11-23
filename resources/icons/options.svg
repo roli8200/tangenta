@@ -1,0 +1,13 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><defs>
+<linearGradient id="paper" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#e5e5e5"/></linearGradient>
+<linearGradient id="steel" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#f6f6f6"/><stop offset="1" stop-color="#c2c2c2"/></linearGradient>
+<linearGradient id="blue" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#969696"/><stop offset="1" stop-color="#575757"/></linearGradient>
+<linearGradient id="glass" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#c3c3c3"/></linearGradient>
+<linearGradient id="folder" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#d9d9d9"/><stop offset="1" stop-color="#a8a8a8"/></linearGradient>
+<linearGradient id="orange" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#bcbcbc"/><stop offset="1" stop-color="#848484"/></linearGradient>
+<linearGradient id="gold" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#e0e0e0"/><stop offset="1" stop-color="#959595"/></linearGradient>
+<linearGradient id="bw" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#1a1a1a"/><stop offset="1" stop-color="#ffffff"/></linearGradient>
+<linearGradient id="hue" x1="0" y1="0" x2="1" y2="0"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#5d5d5d"/></linearGradient>
+<linearGradient id="shade" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#000000" stop-opacity="0"/><stop offset="1" stop-color="#000000"/></linearGradient>
+<radialGradient id="radial" cx="0.5" cy="0.5" r="0.6"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="#575757"/></radialGradient>
+</defs><path d="M15.50 9.00L13.32 10.79L13.60 13.60L10.79 13.32L9.00 15.50L7.21 13.32L4.40 13.60L4.68 10.79L2.50 9.00L4.68 7.21L4.40 4.40L7.21 4.68L9.00 2.50L10.79 4.68L13.60 4.40L13.32 7.21z" fill="url(#steel)" stroke="#3a3a3a" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/><circle cx="9" cy="9" r="2.08" fill="#ffffff" stroke="#3a3a3a" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/><path d="M22.00 17.00L20.49 18.24L20.68 20.18L18.74 19.99L17.50 21.50L16.26 19.99L14.32 20.18L14.51 18.24L13.00 17.00L14.51 15.76L14.32 13.82L16.26 14.01L17.50 12.50L18.74 14.01L20.68 13.82L20.49 15.76z" fill="url(#steel)" stroke="#3a3a3a" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/><circle cx="17.5" cy="17" r="1.44" fill="#ffffff" stroke="#3a3a3a" stroke-width="1" stroke-linejoin="round" stroke-linecap="round"/></svg>

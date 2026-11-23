@@ -31,7 +31,7 @@
   <meta name="twitter:image" content="https://tangenta.ch/img/01-hauptfenster.png">
   <link rel="icon" href="../img/favicon.png">
   <link rel="apple-touch-icon" href="../img/tangenta-256.png">
-  <link rel="stylesheet" href="../styles.css">
+  <link rel="stylesheet" href="../styles.css?v=28d09d3be0">
   <script type="application/ld+json">
 {
  "@context": "https://schema.org",
@@ -68,11 +68,11 @@
    "description": "TANGENTA: vector graphics, free under the GPL, for Windows, macOS and Linux. With an AI assistant that really draws, SuperTrace and image search.",
    "applicationCategory": "DesignApplication",
    "applicationSubCategory": "Vector graphics editor",
-   "operatingSystem": "Windows 10, Windows 11, Debian 12, Debian 13, Ubuntu 24.04, Ubuntu 26.04",
-   "softwareVersion": "0.91",
+   "operatingSystem": "Windows 10, Windows 11, macOS 13 or later, Debian 12, Debian 13, Ubuntu 24.04, Ubuntu 26.04",
+   "softwareVersion": "0.92",
    "license": "https://www.gnu.org/licenses/gpl-3.0.html",
    "isAccessibleForFree": true,
-   "downloadUrl": "https://github.com/roli8200/tangenta/releases/tag/v0.91",
+   "downloadUrl": "https://github.com/roli8200/tangenta/releases/tag/v0.92",
    "codeRepository": "https://github.com/roli8200/tangenta",
    "screenshot": [
     "https://tangenta.ch/img/01-hauptfenster.png",
@@ -103,10 +103,10 @@
 <body>
 <header class="nav">
   <a class="brand" href="../en/index.html"><img src="../img/tangenta.svg" alt="" width="32" height="32"><span>TANGENTA</span></a>
-  <nav class="links"><a href="../en/features.html">Features</a><a href="../en/ai.html">AI assistant</a><a href="../en/download.html">Download</a><a href="https://github.com/roli8200/tangenta">GitHub</a></nav>
+  <nav class="links"><a href="../en/features.html">Features</a><a href="../en/tutorials.html">Tutorials</a><a href="../en/ai.html">AI assistant</a><a href="../en/download.html">Download</a><a href="https://github.com/roli8200/tangenta">GitHub</a></nav>
   <details class="lang"><summary aria-label="Language">EN</summary><div class="lang-menu"><a href="../index.html" hreflang="de" lang="de"><b>DE</b> Deutsch</a><a href="../en/index.html" hreflang="en" lang="en" aria-current="true"><b>EN</b> English</a><a href="../fr/index.html" hreflang="fr" lang="fr"><b>FR</b> Français</a><a href="../it/index.html" hreflang="it" lang="it"><b>IT</b> Italiano</a></div></details>
   <a class="btn btn-primary btn-small" href="../en/download.html">Download</a>
-  <details class="menu"><summary aria-label="Menu"><span></span><span></span><span></span></summary><div class="menu-panel"><a href="../en/features.html">Features</a><a href="../en/ai.html">AI assistant</a><a href="../en/download.html">Download</a><a href="https://github.com/roli8200/tangenta">GitHub</a></div></details>
+  <details class="menu"><summary aria-label="Menu"><span></span><span></span><span></span></summary><div class="menu-panel"><a href="../en/features.html">Features</a><a href="../en/tutorials.html">Tutorials</a><a href="../en/ai.html">AI assistant</a><a href="../en/download.html">Download</a><a href="https://github.com/roli8200/tangenta">GitHub</a></div></details>
 </header>
 
 <main id="top">
@@ -119,12 +119,9 @@
       <a class="btn btn-primary" href="../en/download.html">Download</a>
       <a class="btn btn-ghost" href="https://github.com/roli8200/tangenta">Source code on GitHub</a>
     </div>
-    <p class="platforms">Windows 10 / 11 · Debian 12 / 13 · Ubuntu 24.04 / 26.04</p>
+    <p class="platforms">Windows 10 / 11 · macOS 13+ · Debian 12 / 13 · Ubuntu 24.04 / 26.04</p>
     <p class="note">No licence fee. No subscription. GPLv3.</p>
-    <figure class="window">
-      <div class="window-bar"><i></i><i></i><i></i><span>Poster.vek – TANGENTA</span></div>
-      <img src="../img/01-hauptfenster.png" alt="TANGENTA with a concert poster being edited" loading="eager">
-    </figure>
+    <div class="hero-video"><div class="embed"><iframe src="https://www.youtube.com/embed/TQNrNcHEbmg" title="TANGENTA – Free Vector Graphics for Windows and Linux (Introduction)" allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe></div></div>
   </section>
 
   <div class="ticker" aria-hidden="true"><div class="ticker-track"><span>Bézier</span><span>SuperTrace</span><span>Blend</span><span>Extrude</span><span>Envelope</span><span>SuperClip</span><span>Text on path</span><span>Mesh fill</span><span>Imposition</span><span>Camera RAW</span><span>AI assistant</span><span>Image search</span><span>PDF · SVG · EPS · DXF</span><span>JavaScript</span><span>Bézier</span><span>SuperTrace</span><span>Blend</span><span>Extrude</span><span>Envelope</span><span>SuperClip</span><span>Text on path</span><span>Mesh fill</span><span>Imposition</span><span>Camera RAW</span><span>AI assistant</span><span>Image search</span><span>PDF · SVG · EPS · DXF</span><span>JavaScript</span></div></div>
@@ -136,7 +133,7 @@
     <h2>Your hands already know it.</h2>
     <p class="sub">Menus, shortcuts, dockers and tools are where years of classic vector graphics taught you to look. Nothing to relearn, no week of training.</p>
     <div class="keys"><span><kbd>F6</kbd> Rectangle</span><span><kbd>F7</kbd> Ellipse</span><span><kbd>Y</kbd> Polygon</span><span><kbd>F10</kbd> Shape</span><span><kbd>Ctrl</kbd>+<kbd>Q</kbd> To curves</span><span><kbd>G</kbd> Interactive fill</span><span><kbd>Ctrl</kbd>+<kbd>L</kbd> Combine</span><span><kbd>Ctrl</kbd>+<kbd>J</kbd> Options</span></div>
-    <div class="cols3"><div><h3>Precise</h3><p>Measurements in mm, number fields that calculate (<code>297/2</code>), snapping to nodes, guidelines and the page.</p></div><div><h3>Fast</h3><p>A native program in C++ and Qt 6. It starts in seconds and responds instantly, even with large documents.</p></div><div><h3>Open</h3><p>PDF, SVG, EPS, DXF and all common image formats in and out. Scripts in JavaScript.</p></div></div>
+    <div class="cols3"><div><h3>Precise</h3><p>Measurements in mm, number fields that calculate (<code>297/2</code>), snapping to nodes, guidelines and the page.</p></div><div><h3>Fast</h3><p>A native program in C++ and Qt 6. It starts in seconds and responds instantly, even with large documents.</p></div><div><h3>Open</h3><p>Opens CDR, AI, PDF, SVG, EPS and DXF, exports to all common formats. Scripts in JavaScript.</p></div></div>
   </section>
 
   <section class="section split">
@@ -154,7 +151,7 @@
   <section class="section">
     <p class="label"><b>03</b> / Tools</p>
     <h2>Everything a graphic needs.</h2>
-    <div class="bento"><article class="card wide"><span class="num">01</span><h3>Draw</h3><p>Rectangle, ellipse and arc, polygon and star, spiral, freehand, Bézier, artistic media, perfect shapes, tables, dimensions, connectors.</p></article><article class="card "><span class="num">02</span><h3>Shape</h3><p>Every kind of node, knife, eraser, weld, intersect, trim.</p></article><article class="card "><span class="num">03</span><h3>Fills</h3><p>Gradient, pattern, texture, mesh fill and the interactive fill right on the object.</p></article><article class="card "><span class="num">04</span><h3>Effects</h3><p>Blend, contour, extrude, envelope, perspective, drop shadow, lens, bevel, SuperClip.</p></article><article class="card "><span class="num">05</span><h3>Text</h3><p>Artistic and paragraph text, linked frames, text on path, hyphenation, spell checking.</p></article><article class="card "><span class="num">06</span><h3>Images</h3><p>Up to camera RAW (NEF, CR3, DNG …), tone curve, colour balance, filters.</p></article><article class="card wide"><span class="num">07</span><h3>Document and print</h3><p>Pages with a master page, layers, symbols and clones, unlimited undo, print preview and imposition for booklets and step-and-repeat.</p></article>
+    <div class="bento"><article class="card wide"><span class="num">01</span><h3>Draw</h3><p>Rectangle, ellipse and arc, polygon and star, spiral, freehand, Bézier, artistic media, perfect shapes, tables, dimensions, connectors.</p></article><article class="card "><span class="num">02</span><h3>Shape</h3><p>Every kind of node, knife, eraser, weld, intersect, trim.</p></article><article class="card "><span class="num">03</span><h3>Fills</h3><p>Gradient, pattern, texture, mesh fill and the interactive fill right on the object.</p></article><article class="card "><span class="num">04</span><h3>Effects</h3><p>Blend, contour, extrude, envelope, perspective, drop shadow, lens, bevel, SuperClip and more than 60 bitmap effects.</p></article><article class="card "><span class="num">05</span><h3>Text</h3><p>Artistic and paragraph text, linked frames, text on path, hyphenation, spell checking.</p></article><article class="card "><span class="num">06</span><h3>Images</h3><p>Up to camera RAW (NEF, CR3, DNG …), tone curve, colour balance, filters.</p></article><article class="card wide"><span class="num">07</span><h3>Document and print</h3><p>Pages with a master page, layers, symbols and clones, unlimited undo, print preview and imposition for booklets and step-and-repeat.</p></article>
       <article class="card accent full"><span class="num">08</span><h3>Automate</h3><p>JavaScript scripts with an editor – or simply ask the AI assistant.</p><a href="../en/features.html">See all features →</a></article>
     </div>
   </section>
@@ -198,53 +195,61 @@
     <div class="cols4"><div class="card"><h3>Design and advertising</h3><p>Posters, flyers, logos and signs with the tools you have used for years.</p></div><div class="card"><h3>Companies and administration</h3><p>Silent installation via GPO or Intune, with no licence server and no counting seats.</p></div><div class="card"><h3>Schools</h3><p>Free software for every school computer and for home, with no licensing questions.</p></div><div class="card"><h3>Clubs and home users</h3><p>Invitations, labels and club logos, free of charge and without a subscription.</p></div></div>
   </section>
 
+  <section class="section">
+    <p class="label"><b>09</b> / Tutorials</p>
+    <h2>Watch.<br>Then make it.</h2>
+    <p class="sub">38 video tutorials on YouTube show step by step how logos, flyers, patterns and lettering come together in TANGENTA. Spoken in German, with an English audio track.</p>
+    <div class="videos"><article class="video"><a class="thumb" href="https://www.youtube.com/watch?v=38FLp_RBsBg" tabindex="-1" aria-hidden="true"><img src="../img/tutorials/33-en.webp" alt="" width="480" height="270" loading="lazy"><span class="dur">4:53</span></a><h3><a href="https://www.youtube.com/watch?v=38FLp_RBsBg">AI in TANGENTA: Setup and Use – Logo, Text and Photo on Request</a></h3></article><article class="video"><a class="thumb" href="https://www.youtube.com/watch?v=zhL5F3JGeNI" tabindex="-1" aria-hidden="true"><img src="../img/tutorials/39-en.webp" alt="" width="480" height="270" loading="lazy"><span class="dur">6:35</span></a><h3><a href="https://www.youtube.com/watch?v=zhL5F3JGeNI">Bitmap Effects Tour: 8 Effects on One Photo</a></h3></article><article class="video"><a class="thumb" href="https://www.youtube.com/watch?v=jchlvRJj8hI" tabindex="-1" aria-hidden="true"><img src="../img/tutorials/40-en.webp" alt="" width="480" height="270" loading="lazy"><span class="dur">3:05</span></a><h3><a href="https://www.youtube.com/watch?v=jchlvRJj8hI">Four-Colour Ring Monogram – Smart Fill with Open Guide Lines</a></h3></article><article class="video"><a class="thumb" href="https://www.youtube.com/watch?v=2BEWZDCxU9A" tabindex="-1" aria-hidden="true"><img src="../img/tutorials/10-en.webp" alt="" width="480" height="270" loading="lazy"><span class="dur">4:23</span></a><h3><a href="https://www.youtube.com/watch?v=2BEWZDCxU9A">Design a Complete Real Estate Flyer – Photo Fields, SuperClip and Typography</a></h3></article></div>
+    <p class="center"><a class="more" href="../en/tutorials.html">See all tutorials →</a></p>
+  </section>
+
   <section id="download" class="section">
-    <p class="label"><b>09</b> / Download</p>
+    <p class="label"><b>10</b> / Download</p>
     <h2>Get started.</h2>
     <div class="downloads">
       <article class="card">
         <h3>Windows 10 / 11</h3>
         <p>Setup with a wizard, or an MSI for network deployment. Both install silently.</p>
-        <a class="btn btn-primary" href="https://github.com/roli8200/tangenta/releases/download/v0.91/TANGENTA-0.91-x64-setup.exe">Download setup</a>
-        <p><a class="more" href="https://github.com/roli8200/tangenta/releases/download/v0.91/TANGENTA-0.91-x64.msi">MSI for deployment →</a></p>
-        <pre><code>TANGENTA-0.91-x64-setup.exe /quiet
-msiexec /i TANGENTA-0.91-x64.msi /qn</code></pre>
+        <a class="btn btn-primary" href="https://github.com/roli8200/tangenta/releases/download/v0.92/TANGENTA-0.92-x64-setup.exe">Download setup</a>
+        <p><a class="more" href="https://github.com/roli8200/tangenta/releases/download/v0.92/TANGENTA-0.92-x64.msi">MSI for deployment →</a></p>
+        <pre><code>TANGENTA-0.92-x64-setup.exe /quiet
+msiexec /i TANGENTA-0.92-x64.msi /qn</code></pre>
       </article>
       <article class="card">
         <h3>macOS 13 or newer</h3>
         <p>One program for Macs with Apple silicon and with Intel processors, as a disk image.</p>
-        <a class="btn btn-primary" href="https://github.com/roli8200/tangenta/releases/download/v0.91/TANGENTA-0.91-macos.dmg">Download disk image</a>
+        <a class="btn btn-primary" href="https://github.com/roli8200/tangenta/releases/download/v0.92/TANGENTA-0.92-macos.dmg">Download disk image</a>
         <pre><code>xattr -dr com.apple.quarantine /Applications/TANGENTA.app</code></pre>
       </article>
       <article class="card">
         <h3>Debian and Ubuntu</h3>
         <p>Packages for Debian 12, Debian 13, Ubuntu 24.04 and 26.04, with their own Qt 6.10.</p>
-        <a class="btn btn-primary" href="https://github.com/roli8200/tangenta/releases/download/v0.91/tangenta_0.91-1.debian13_amd64.deb">Download .deb (Debian 13)</a>
+        <a class="btn btn-primary" href="https://github.com/roli8200/tangenta/releases/download/v0.92/tangenta_0.92-1.debian13_amd64.deb">Download .deb (Debian 13)</a>
         <p>Packages per system:</p>
-        <ul class="dl-list"><li><a class="more" href="https://github.com/roli8200/tangenta/releases/download/v0.91/tangenta_0.91-1.debian12_amd64.deb">Debian 12</a></li><li><a class="more" href="https://github.com/roli8200/tangenta/releases/download/v0.91/tangenta_0.91-1.debian13_amd64.deb">Debian 13</a></li><li><a class="more" href="https://github.com/roli8200/tangenta/releases/download/v0.91/tangenta_0.91-1.ubuntu24.04_amd64.deb">Ubuntu 24.04</a></li><li><a class="more" href="https://github.com/roli8200/tangenta/releases/download/v0.91/tangenta_0.91-1.ubuntu26.04_amd64.deb">Ubuntu 26.04</a></li></ul>
-        <pre><code>sudo apt install ./tangenta_0.91-1.debian13_amd64.deb</code></pre>
+        <ul class="dl-list"><li><a class="more" href="https://github.com/roli8200/tangenta/releases/download/v0.92/tangenta_0.92-1.debian12_amd64.deb">Debian 12</a></li><li><a class="more" href="https://github.com/roli8200/tangenta/releases/download/v0.92/tangenta_0.92-1.debian13_amd64.deb">Debian 13</a></li><li><a class="more" href="https://github.com/roli8200/tangenta/releases/download/v0.92/tangenta_0.92-1.ubuntu24.04_amd64.deb">Ubuntu 24.04</a></li><li><a class="more" href="https://github.com/roli8200/tangenta/releases/download/v0.92/tangenta_0.92-1.ubuntu26.04_amd64.deb">Ubuntu 26.04</a></li></ul>
+        <pre><code>sudo apt install ./tangenta_0.92-1.debian13_amd64.deb</code></pre>
       </article>
       <article class="card">
         <h3>Other Linux systems</h3>
         <p>Flatpak for Fedora, openSUSE, Arch, Mint and every system with Flatpak. The runtime comes from Flathub.</p>
-        <a class="btn btn-primary" href="https://github.com/roli8200/tangenta/releases/download/v0.91/TANGENTA-0.91-x86_64.flatpak">Download Flatpak</a>
-        <pre><code>flatpak install --user TANGENTA-0.91-x86_64.flatpak
+        <a class="btn btn-primary" href="https://github.com/roli8200/tangenta/releases/download/v0.92/TANGENTA-0.92-x86_64.flatpak">Download Flatpak</a>
+        <pre><code>flatpak install --user TANGENTA-0.92-x86_64.flatpak
 flatpak run ch.tangenta.Tangenta</code></pre>
       </article>
       <article class="card full">
         <h3>GitHub</h3>
-        <p><a class="more" href="https://github.com/roli8200/tangenta/releases/tag/v0.91">All files and checksums →</a></p>
-        <a class="btn btn-primary" href="https://github.com/roli8200/tangenta/releases/download/v0.91/SHA256SUMS-0.91.txt">SHA256SUMS-0.91.txt</a>
-        <pre><code>sha256sum --ignore-missing -c SHA256SUMS-0.91.txt</code></pre>
+        <p><a class="more" href="https://github.com/roli8200/tangenta/releases/tag/v0.92">All files and checksums →</a></p>
+        <a class="btn btn-primary" href="https://github.com/roli8200/tangenta/releases/download/v0.92/SHA256SUMS-0.92.txt">SHA256SUMS-0.92.txt</a>
+        <pre><code>sha256sum --ignore-missing -c SHA256SUMS-0.92.txt</code></pre>
       </article>
     </div>
     <p class="center"><a class="more" href="../en/download.html">All packages, system requirements and silent installation →</a></p>
   </section>
 
   <section id="faq" class="section narrow">
-    <p class="label"><b>10</b> / Questions</p>
+    <p class="label"><b>11</b> / Questions</p>
     <h2>Good to know.</h2>
-    <details><summary>Is the interface available in English?</summary><p>Not yet: the program interface is currently in German. Spell checking already covers English, French and German. Translations of the interface are welcome on GitHub.</p></details><details><summary>Does TANGENTA open .cdr files?</summary><p>Not directly yet. Save as PDF, SVG or EPS; TANGENTA imports these formats as editable curves.</p></details><details><summary>What does the AI assistant cost?</summary><p>Nothing from TANGENTA. With a Claude subscription (Pro or Max) and Claude Code installed, it runs on your subscription at no extra cost. Alternatively, use your own API key (Claude, OpenAI, Gemini, DeepSeek) or your own Ollama server.</p></details><details><summary>Does the assistant have to be allowed to change my document?</summary><p>No. Without the “darf ändern” (may change) tick, it only reads. And whatever it changes in one answer, a single Ctrl+Z undoes.</p></details><details><summary>Does TANGENTA run on a Mac?</summary><p>Yes, since version 0.91 on macOS 13 and newer, on Macs with Apple silicon and with Intel processors. The Mac version is new and not yet notarized by Apple.</p></details><details><summary>May I use TANGENTA at work?</summary><p>Yes, without restriction. The GPLv3 only governs distributing modified versions, not using the program.</p></details>
+    <details><summary>Is the interface available in English?</summary><p>Yes. TANGENTA speaks seven languages: English, German, French, Italian, Spanish, Portuguese (Brazil) and Simplified Chinese. It follows the system language; you can switch under View › Language. Spell checking covers English, German and French.</p></details><details><summary>Does TANGENTA open .cdr files?</summary><p>Yes. TANGENTA opens CDR and CMX files directly, as well as AI, PDF, SVG and EPS, all as editable curves.</p></details><details><summary>Are there tutorials?</summary><p>Yes, more than 30 videos on YouTube, from the basics to a finished flyer. You will find them all on the Tutorials page, spoken in German with an English audio track.</p></details><details><summary>What does the AI assistant cost?</summary><p>Nothing from TANGENTA. With a Claude subscription (Pro or Max) and Claude Code installed, it runs on your subscription at no extra cost. Alternatively, use your own API key (Claude, OpenAI, Gemini, DeepSeek) or your own Ollama server.</p></details><details><summary>Does the assistant have to be allowed to change my document?</summary><p>No. Without the “may edit” switch, it only reads. And whatever it changes in one answer, a single Ctrl+Z undoes.</p></details><details><summary>Does TANGENTA run on a Mac?</summary><p>Yes, since version 0.91 on macOS 13 and newer, on Macs with Apple silicon and with Intel processors. The Mac version is new and not yet notarized by Apple.</p></details><details><summary>May I use TANGENTA at work?</summary><p>Yes, without restriction. The GPLv3 only governs distributing modified versions, not using the program.</p></details>
   </section>
 
   <section class="final">
@@ -264,8 +269,8 @@ flatpak run ch.tangenta.Tangenta</code></pre>
       <a class="brand" href="../en/index.html"><img src="../img/tangenta.svg" alt="" width="28" height="28"><span>TANGENTA</span></a>
       <p>Free vector graphics for Windows, macOS and Linux.</p>
     </div>
-    <div><h4>Program</h4><a href="../en/features.html">Features</a><a href="../en/ai.html">AI assistant</a><a href="../en/download.html">Download</a></div>
-    <div><h4>Project</h4><a href="https://github.com/roli8200/tangenta">GitHub</a><a href="https://github.com/roli8200/tangenta/blob/main/BUILD.md">Build it yourself</a><a href="https://github.com/roli8200/tangenta/issues">Report a bug</a></div>
+    <div><h4>Program</h4><a href="../en/features.html">Features</a><a href="../en/tutorials.html">Tutorials</a><a href="../en/ai.html">AI assistant</a><a href="../en/download.html">Download</a></div>
+    <div><h4>Project</h4><a href="https://github.com/roli8200/tangenta">GitHub</a><a href="https://www.youtube.com/channel/UCaCO4A6aae508OXRuN7OF1g">YouTube</a><a href="https://github.com/roli8200/tangenta/blob/main/BUILD.md">Build it yourself</a><a href="https://github.com/roli8200/tangenta/issues">Report a bug</a></div>
     <div><h4>Publisher</h4><a href="https://intersoft-networks.ch">Intersoft Networks</a><a href="https://github.com/roli8200/tangenta/blob/main/LICENSE">Licence GPLv3</a></div>
   </div>
   <p class="fine">© 2026 Intersoft Networks · TANGENTA is free software under the GPLv3. Photos in the image search: Wikimedia Commons, licences shown on each tile.</p>

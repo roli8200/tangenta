@@ -103,6 +103,216 @@ double overlap(const QImage& a, const QImage& b)
     return any ? double(both) / any : 1.0;
 }
 
+enum class Kind { Unknown, Sans, Serif, Mono, Script, Display, Symbol };
+
+// Gewicht 100..900 und Breite 1..9 wie in der OS/2-Tabelle, 0 = unbekannt
+struct Traits {
+    Kind kind = Kind::Unknown;
+    int weight = 0;
+    int width = 0;
+};
+
+Traits traitsFromName(const QString& name)
+{
+    const QString n = normalized(name);
+    Traits t;
+    // Längere Wörter zuerst: "extrabold" vor "bold", "extralight" vor "light"
+    static const std::pair<const char*, int> weights[] = {
+        {"hairline", 100}, {"extralight", 200}, {"ultralight", 200}, {"semibold", 600}, {"demibold", 600}, {"extrabold", 800},
+        {"ultrabold", 800}, {"thin", 100}, {"light", 300}, {"medium", 500}, {"heavy", 900}, {"black", 900},
+        {"bold", 700}, {"demi", 600}, {"book", 400}, {"regular", 400}};
+    for (const auto& [word, weight] : weights)
+        if (n.contains(QLatin1String(word))) {
+            t.weight = weight;
+            break;
+        }
+    if (n.contains(QLatin1String("semicondensed")))
+        t.width = 4;
+    else if (n.contains(QLatin1String("condensed")) || n.contains(QLatin1String("narrow")) || n.contains(QLatin1String("compressed")))
+        t.width = 3;
+    else if (n.contains(QLatin1String("extended")) || n.contains(QLatin1String("expanded")) || n.contains(QLatin1String("wide")))
+        t.width = 7;
+    // Bekannte Familien, dann Wörter im Namen ("sans" vor "serif": "Sans Serif")
+    static const std::pair<const char*, Kind> known[] = {
+        {"centurygothic", Kind::Sans}, {"franklingothic", Kind::Sans}, {"helvetica", Kind::Sans}, {"arial", Kind::Sans},
+        {"futura", Kind::Sans}, {"frutiger", Kind::Sans}, {"univers", Kind::Sans}, {"gillsans", Kind::Sans},
+        {"optima", Kind::Sans}, {"avantgarde", Kind::Sans}, {"myriad", Kind::Sans}, {"verdana", Kind::Sans},
+        {"tahoma", Kind::Sans}, {"segoe", Kind::Sans}, {"calibri", Kind::Sans}, {"roboto", Kind::Sans},
+        {"courier", Kind::Mono}, {"consolas", Kind::Mono}, {"lucidaconsole", Kind::Mono}, {"mono", Kind::Mono},
+        {"typewriter", Kind::Mono}, {"comicsans", Kind::Script}, {"brushscript", Kind::Script}, {"zapfchancery", Kind::Script},
+        {"script", Kind::Script}, {"hand", Kind::Script}, {"brush", Kind::Script}, {"callig", Kind::Script},
+        {"parkavenue", Kind::Script}, {"wingdings", Kind::Symbol}, {"webdings", Kind::Symbol}, {"symbol", Kind::Symbol}, {"dingbat", Kind::Symbol},
+        {"times", Kind::Serif}, {"garamond", Kind::Serif}, {"bodoni", Kind::Serif}, {"baskerville", Kind::Serif},
+        {"palatino", Kind::Serif}, {"georgia", Kind::Serif}, {"minion", Kind::Serif}, {"caslon", Kind::Serif},
+        {"cambria", Kind::Serif}, {"bookman", Kind::Serif}, {"century", Kind::Serif}, {"rockwell", Kind::Serif},
+        {"clarendon", Kind::Serif}, {"didot", Kind::Serif}, {"goudy", Kind::Serif}, {"cooper", Kind::Serif},
+        {"sans", Kind::Sans}, {"grotesk", Kind::Sans}, {"gothic", Kind::Sans}, {"serif", Kind::Serif},
+        {"antiqua", Kind::Serif}, {"roman", Kind::Serif}};
+    for (const auto& [word, kind] : known)
+        if (n.contains(QLatin1String(word))) {
+            t.kind = kind;
+            break;
+        }
+    return t;
+}
+
+Kind googleKind(const QString& category)
+{
+    if (category == QLatin1String("Sans Serif"))
+        return Kind::Sans;
+    if (category == QLatin1String("Serif"))
+        return Kind::Serif;
+    if (category == QLatin1String("Monospace"))
+        return Kind::Mono;
+    if (category == QLatin1String("Handwriting"))
+        return Kind::Script;
+    if (category == QLatin1String("Display"))
+        return Kind::Display;
+    return Kind::Unknown;
+}
+
+// Installierte Schrift: Gewicht und Breite aus der OS/2-Tabelle; die Art aus dem Namen, wenn er sie
+// nennt (manche Schriften tragen falsche PANOSE-Werte), sonst aus PANOSE und Schriftklasse
+Traits traitsFromFont(const QRawFont& raw, const QString& family)
+{
+    Traits t = traitsFromName(family);
+    const QByteArray os2 = raw.fontTable("OS/2");
+    if (os2.size() < 42)
+        return t;
+    auto u16 = [&os2](int at) { return int(quint8(os2[at])) << 8 | int(quint8(os2[at + 1])); };
+    t.weight = u16(4);
+    t.width = u16(6);
+    const int familyClass = quint8(os2[30]);
+    const int panoseFamily = quint8(os2[32]), serifStyle = quint8(os2[33]), proportion = quint8(os2[35]);
+    Kind kind = Kind::Unknown;
+    if (panoseFamily == 2 && proportion == 9)
+        kind = Kind::Mono;
+    else if (panoseFamily == 2 && serifStyle >= 11 && serifStyle <= 13)
+        kind = Kind::Sans;
+    else if (panoseFamily == 2 && serifStyle >= 2 && serifStyle <= 10)
+        kind = Kind::Serif;
+    else if (panoseFamily == 3)
+        kind = Kind::Script;
+    else if (panoseFamily == 4)
+        kind = Kind::Display;
+    else if (panoseFamily == 5)
+        kind = Kind::Symbol;
+    else if ((familyClass >= 1 && familyClass <= 5) || familyClass == 7)
+        kind = Kind::Serif;
+    else if (familyClass == 8)
+        kind = Kind::Sans;
+    else if (familyClass == 9)
+        kind = Kind::Display;
+    else if (familyClass == 10)
+        kind = Kind::Script;
+    else if (familyClass == 12)
+        kind = Kind::Symbol;
+    if (t.kind == Kind::Unknown)
+        t.kind = kind;
+    return t;
+}
+
+// Gesuchte Schrift: Art aus Google Fonts oder dem Namen, Gewicht aus dem Namen oder fett/normal
+Traits wantedTraits(const ImportedFont& font)
+{
+    Traits t = traitsFromName(font.baseName.isEmpty() ? font.family : font.baseName);
+    const Traits fromFamily = traitsFromName(font.family);
+    if (t.kind == Kind::Unknown)
+        t.kind = fromFamily.kind;
+    if (const auto g = googleIndex().constFind(normalized(font.family)); g != googleIndex().constEnd() && googleKind(g->category) != Kind::Unknown)
+        t.kind = googleKind(g->category);
+    if (t.kind == Kind::Unknown && font.fixedPitch)
+        t.kind = Kind::Mono;
+    if (t.kind == Kind::Unknown && font.serif)
+        t.kind = Kind::Serif;
+    if (!t.weight)
+        t.weight = font.bold ? 700 : 400;
+    if (!t.width)
+        t.width = 5;
+    return t;
+}
+
+// Bewährte Ersatzschriften (wie die Ersetzungsregeln von fontconfig): Namensteil der fehlenden
+// Schrift -> installierte Gegenstücke, das beste zuerst. Der erste passende Eintrag gilt.
+QStringList knownSubstitutes(const QString& key)
+{
+    static const QList<std::pair<QStringList, QStringList>> table{
+        {{QStringLiteral("arialnarrow"), QStringLiteral("helveticanarrow"), QStringLiteral("helveticacondensed")},
+         {QStringLiteral("Arial Narrow"), QStringLiteral("Liberation Sans Narrow")}},
+        {{QStringLiteral("helvetica"), QStringLiteral("nimbussans"), QStringLiteral("arial"), QStringLiteral("swiss721")},
+         {QStringLiteral("Arial"), QStringLiteral("Liberation Sans"), QStringLiteral("Arimo"), QStringLiteral("Swis721 BT")}},
+        {{QStringLiteral("myriad"), QStringLiteral("frutiger"), QStringLiteral("univers")},
+         {QStringLiteral("Segoe UI"), QStringLiteral("Source Sans Pro"), QStringLiteral("Calibri"), QStringLiteral("Arial")}},
+        {{QStringLiteral("avantgarde"), QStringLiteral("futura"), QStringLiteral("centurygothic")},
+         {QStringLiteral("Century Gothic"), QStringLiteral("Futura"), QStringLiteral("Tw Cen MT")}},
+        {{QStringLiteral("gillsans")}, {QStringLiteral("Gill Sans MT"), QStringLiteral("Gill Sans")}},
+        {{QStringLiteral("optima")}, {QStringLiteral("Optima"), QStringLiteral("Candara")}},
+        {{QStringLiteral("franklingothic")}, {QStringLiteral("Franklin Gothic Book"), QStringLiteral("Franklin Gothic Medium")}},
+        {{QStringLiteral("din")}, {QStringLiteral("Bahnschrift"), QStringLiteral("DIN")}},
+        {{QStringLiteral("calibri")}, {QStringLiteral("Calibri"), QStringLiteral("Carlito")}},
+        {{QStringLiteral("cambria")}, {QStringLiteral("Cambria"), QStringLiteral("Caladea")}},
+        {{QStringLiteral("times"), QStringLiteral("nimbusroman"), QStringLiteral("tinos")},
+         {QStringLiteral("Times New Roman"), QStringLiteral("Liberation Serif"), QStringLiteral("Tinos")}},
+        {{QStringLiteral("garamond")}, {QStringLiteral("Garamond"), QStringLiteral("EB Garamond")}},
+        {{QStringLiteral("caslon")}, {QStringLiteral("Big Caslon"), QStringLiteral("Libre Caslon Text"), QStringLiteral("Garamond")}},
+        {{QStringLiteral("palatino")}, {QStringLiteral("Palatino Linotype"), QStringLiteral("Book Antiqua")}},
+        {{QStringLiteral("bookman")}, {QStringLiteral("Bookman Old Style")}},
+        {{QStringLiteral("cooper")}, {QStringLiteral("Cooper Black")}},
+        {{QStringLiteral("rockwell")}, {QStringLiteral("Rockwell")}},
+        {{QStringLiteral("courier"), QStringLiteral("nimbusmono")},
+         {QStringLiteral("Courier New"), QStringLiteral("Liberation Mono"), QStringLiteral("Cousine")}},
+        {{QStringLiteral("brushscript")}, {QStringLiteral("Brush Script MT")}},
+        {{QStringLiteral("zapfchancery")}, {QStringLiteral("Monotype Corsiva")}},
+        {{QStringLiteral("comicsans")}, {QStringLiteral("Comic Sans MS")}},
+        {{QStringLiteral("stencil")}, {QStringLiteral("Stencil")}},
+    };
+    for (const auto& [names, substitutes] : table)
+        for (const QString& n : names)
+            if (key.contains(n))
+                return substitutes;
+    return {};
+}
+
+// Schriften für andere Schriftsysteme: ihre lateinischen Zeichen sind nur Beigabe
+bool otherScript(const QString& family)
+{
+    static const QStringList words{
+        QStringLiteral("arabic"), QStringLiteral("naskh"), QStringLiteral("hebrew"), QStringLiteral("lao"), QStringLiteral("thai"),
+        QStringLiteral("khmer"), QStringLiteral("myanmar"), QStringLiteral("georgian"), QStringLiteral("armenian"), QStringLiteral("devanagari"),
+        QStringLiteral("bengali"), QStringLiteral("tamil"), QStringLiteral("telugu"), QStringLiteral("ethiopic"), QStringLiteral("phagspa"),
+        QStringLiteral("taile"), QStringLiteral("yibaiti"), QStringLiteral("mongolian"), QStringLiteral("himalaya"), QStringLiteral("ebrima"),
+        QStringLiteral("nirmala"), QStringLiteral("leelawadee"), QStringLiteral("gadugi"), QStringLiteral("javanese"), QStringLiteral("math"),
+        QStringLiteral("symbol"), QStringLiteral("emoji"), QStringLiteral("cjk"), QStringLiteral("yahei"), QStringLiteral("jhenghei"),
+        QStringLiteral("malgun"), QStringLiteral("gothicjp"), QStringLiteral("mincho"), QStringLiteral("simsun"), QStringLiteral("mingliu"),
+        QStringLiteral("meiryo"), QStringLiteral("yugothic"), QStringLiteral("batang"), QStringLiteral("gulim"), QStringLiteral("dotum")};
+    const QString n = normalized(family);
+    return std::any_of(words.cbegin(), words.cend(), [&n](const QString& w) { return n.contains(w); });
+}
+
+double traitScore(const Traits& want, const Traits& have)
+{
+    double sum = 0, n = 0;
+    if (want.kind != Kind::Unknown && have.kind == Kind::Unknown) {
+        sum += 1.0; // Art der installierten Schrift unbekannt: halber Treffer
+        n += 2.0;
+    } else if (want.kind != Kind::Unknown) {
+        // Zierschriften sind oft Grotesk oder Antiqua mit Ausschmückung: halber Treffer
+        const bool near = (want.kind == Kind::Display) != (have.kind == Kind::Display)
+            && (want.kind == Kind::Sans || want.kind == Kind::Serif || have.kind == Kind::Sans || have.kind == Kind::Serif);
+        sum += 2.0 * (want.kind == have.kind ? 1.0 : near ? 0.4 : 0.0);
+        n += 2.0;
+    }
+    if (want.weight && have.weight) {
+        sum += 1.0 - std::min(1.0, std::abs(want.weight - have.weight) / 400.0);
+        n += 1.0;
+    }
+    if (want.width && have.width) {
+        sum += 1.0 - std::min(1.0, std::abs(want.width - have.width) / 4.0);
+        n += 1.0;
+    }
+    return n > 0 ? sum / n : -1.0;
+}
+
 } // namespace
 
 QString normalized(const QString& family)
@@ -203,6 +413,8 @@ QList<Candidate> suggest(const ImportedFont& font, int count)
     for (char32_t c : std::as_const(shapeChars))
         pdfShapes << raster(QTransform(1, 0, 0, -1, 0, 0).map(font.glyphs.value(c)));
     const QString key = normalized(font.family);
+    const Traits wanted = wantedTraits(font);
+    const QStringList substitutes = knownSubstitutes(key);
 
     QList<Candidate> out;
     for (const QString& family : QFontDatabase::families(QFontDatabase::Latin)) {
@@ -247,18 +459,28 @@ QList<Candidate> suggest(const ImportedFont& font, int count)
             }
             c.shape = sum / shapeChars.size();
         }
+        if (c.shape < 0)
+            c.traits = traitScore(wanted, traitsFromFont(raw, family));
         if (c.shape >= 0 && c.widths >= 0)
             c.score = 0.7 * c.shape + 0.3 * c.widths;
         else if (c.shape >= 0)
             c.score = c.shape;
+        else if (c.widths >= 0 && c.traits >= 0)
+            c.score = 0.5 * c.widths + 0.5 * c.traits;
         else if (c.widths >= 0)
             c.score = c.widths;
+        else if (c.traits >= 0)
+            c.score = 0.7 * c.traits; // nur nach Name und Klasse: höchstens 70 %, eine Vermutung
         else
             c.score = 0;
-        // Gleicher oder enthaltener Name: kleiner Vorzug
+        // Gleicher oder enthaltener Name: kleiner Vorzug; bewährte Ersatzschrift: deutlicher Vorzug
         const QString ck = normalized(family);
         if (!key.isEmpty() && (ck.contains(key) || key.contains(ck)))
             c.score = std::min(1.0, c.score + 0.05);
+        if (const qsizetype at = substitutes.indexOf(family); at >= 0)
+            c.score = std::min(1.0, c.score + 0.2 - 0.03 * double(at));
+        if (otherScript(family) && !otherScript(font.family))
+            c.score = std::max(0.0, c.score - 0.15);
         out << c;
     }
     std::sort(out.begin(), out.end(), [](const Candidate& a, const Candidate& b) { return a.score > b.score; });
@@ -354,10 +576,16 @@ void apply(ImportedFont& font, const Choice& choice)
             font.texts[i] = nullptr;
             continue;
         }
+        // Nur die Läufe in dieser Schrift: ein Text kann mehrere Schriften enthalten
         QList<TextParagraph> paragraphs = text->paragraphs();
+        QSet<QString> families;
+        for (const TextParagraph& p : std::as_const(paragraphs))
+            for (const TextRun& r : p.runs)
+                families.insert(r.format.family);
         for (TextParagraph& p : paragraphs)
             for (TextRun& r : p.runs)
-                r.format.family = choice.family;
+                if (families.size() == 1 || r.format.family == font.family)
+                    r.format.family = choice.family;
         text->setParagraphs(paragraphs);
         if (i < font.baselines.size())
             placeOnBaseline(*text, font.baselines[i], font.runWidths.value(i));

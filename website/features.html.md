@@ -17,11 +17,12 @@ Von der ersten Linie bis zum Druckbogen: Was TANGENTA kann, auf einen Blick.
 - Spirale und Millimeterpapier
 - Freihand, 2-Punkt-Linie, Bézier, Stift und B-Spline
 - 3-Punkt-Rechteck, -Ellipse und -Kurve
-- Künstlerische Medien und Kalligrafie
+- Künstlerische Medien: Pinsel, Sprühdose, Kalligrafie
 - Perfekte Formen: Grund-, Pfeil-, Flussdiagramm-, Banner- und Sternformen
 - Tabellen mit verbundenen Zellen
 - Bemassung und Winkelmasse
 - Verbindungslinien, die mitwandern
+- QR-Codes, jederzeit änderbar
 
 ### Formen
 
@@ -33,6 +34,9 @@ Von der ersten Linie bis zum Druckbogen: Was TANGENTA kann, auf einen Blick.
 - Umriss in Objekt umwandeln
 - Kurven verbinden
 - Formen-Andockfenster mit Vorschau
+- Smart-Füllung, auch zwischen offenen Linien
+- Formwerkzeug direkt auf Rechteck, Polygon und Stern
+- Ecken abrunden im Ecken-Andockfenster
 
 ### Füllung und Kontur
 
@@ -43,17 +47,20 @@ Von der ersten Linie bis zum Druckbogen: Was TANGENTA kann, auf einen Blick.
 - Interaktive Füllung direkt am Objekt
 - Konturstift mit Linienstilen und Pfeilspitzen
 - Pipette und Attribute übertragen
+- Mischmodi wie Multiplizieren
 
 ### Effekte
 
-- Überblendung entlang eines Pfads
+- Überblendung entlang eines Pfads, auch mit Verläufen
 - Kontur nach innen und aussen
 - Extrusion
 - Hülle mit Vorlagen
 - Perspektive
-- Schatten und Transparenz
+- Schatten, Schatten innen und Blockschatten
+- Transparenz mit Mischmodi
 - Linse mit Fischauge und weiteren Arten
 - Abschrägung und Unschärfe
+- 3D-Drehung von Extrusionen
 - SuperClip: Inhalt in einen Rahmen setzen
 
 ### Text
@@ -76,9 +83,19 @@ Von der ersten Linie bis zum Druckbogen: Was TANGENTA kann, auf einen Blick.
 - SuperTrace: Bitmaps in Vektoren verwandeln
 - Bildersuche in acht Archiven
 
+### Bitmap-Effekte
+
+- Über 60 Effekte in 13 Gruppen
+- Live auf jedem Objekt, als änderbarer Stapel
+- Weichzeichnen, Schärfen, künstlerische Effekte, 3D, Verzerren
+- Rahmen-Effekt, Seite aufrollen, Zylinder
+- Farbkorrekturen mit Pipette und Bereichen
+- Fotomosaik und Punktraster
+
 ### Dokument
 
-- Mehrere Seiten mit Masterseite
+- Mehrere Seiten mit Masterseite und Seiten-Andockfenster
+- Mehrseitenansicht, Seitengrösse mit der Maus ziehen
 - Ebenen und Objekt-Manager
 - Symbole und Klone
 - Hilfslinien, dynamische Hilfslinien, Gitter
@@ -101,7 +118,77 @@ Von der ersten Linie bis zum Druckbogen: Was TANGENTA kann, auf einen Blick.
 - KI-Assistent mit 18 Werkzeugen
 - Bildersuche und Websuche für die KI
 
-**01** / Arbeitsfläche
+### Oberfläche
+
+- In sieben Sprachen
+- Eigene Tastenkürzel für jeden Befehl
+- Andockfenster als Reiter oder untereinander
+- Zahlenfelder rechnen (297/2)
+- Schriftsuche nach einem Teil des Namens
+
+**01** / Im Detail
+
+## Was TANGENTA besonders macht.
+
+Neun Funktionen, die Sie kennen sollten, jede mit einem Video, das sie an einem echten Beispiel zeigt.
+
+### Smart-Füllung
+
+Klicken Sie in eine Fläche, die Linien und Formen umschliessen, und TANGENTA macht daraus ein eigenes Objekt, auch zwischen offenen Linien, die sich nur kreuzen. So entstehen Logos und Muster aus wenigen Hilfslinien.
+
+[Im Video ansehen (3:05) →](https://www.youtube.com/watch?v=jchlvRJj8hI)
+
+### Überblendung entlang eines Pfads
+
+Zwischen zwei Objekten entstehen beliebig viele Zwischenstufen, in Form, Farbe und Verlauf. Die Stufen folgen auf Wunsch einem Pfad, etwa einer Spirale, auch in umgekehrter Reihenfolge.
+
+[Im Video ansehen (3:42) →](https://www.youtube.com/watch?v=AO6bjf3GnCc)
+
+### Bitmap-Effekte live
+
+Über 60 Effekte in 13 Gruppen, von Weichzeichnen über Ölfarbe bis Seite aufrollen. Sie liegen als Stapel auf dem Objekt und bleiben jederzeit änderbar, abschaltbar und entfernbar.
+
+[Im Video ansehen (6:35) →](https://www.youtube.com/watch?v=zhL5F3JGeNI)
+
+### SuperClip
+
+Fotos, Muster und Grafiken in einen Rahmen setzen: in eine Form, einen Kreis oder sogar in Text. Der Inhalt bleibt verschiebbar und austauschbar.
+
+[Im Video ansehen (4:23) →](https://www.youtube.com/watch?v=2BEWZDCxU9A)
+
+### Hülle
+
+Text und Grafik in eine Form biegen, mit Vorlagen oder nach dem Umriss eines beliebigen Objekts, und jederzeit wieder anpassen.
+
+[Im Video ansehen (3:27) →](https://www.youtube.com/watch?v=mULVFW4GiXg)
+
+### Schneidelinie für Laser und Plotter
+
+Aus dem Umriss eines Bildes wird eine saubere Kontur mit Abstand, bereit für Laserschneider und Folienplotter.
+
+[Im Video ansehen (4:53) →](https://www.youtube.com/watch?v=NNYndGIMJc4)
+
+### Mehrere Seiten
+
+Seiten im Andockfenster anlegen, wechseln und verwalten, alle Seiten nebeneinander sehen und die Seitengrösse direkt mit der Maus ziehen.
+
+[Im Video ansehen (4:10) →](https://www.youtube.com/watch?v=snarzYb2rqY)
+
+### Bildersuche
+
+Freie Fotos und Symbole aus acht Archiven suchen und mit Urheber und Lizenz einfügen, direkt im Programm.
+
+[Im Video ansehen (4:37) →](https://www.youtube.com/watch?v=gYRQ35fvKL0)
+
+### KI-Assistent
+
+Logo, Text oder Foto per Auftrag: Der Assistent zeichnet in Ihrem Dokument und prüft sein Ergebnis selbst.
+
+[Im Video ansehen (4:53) →](https://www.youtube.com/watch?v=38FLp_RBsBg)
+
+[Alle Tutorials →](https://tangenta.ch/tutorials.html)
+
+**02** / Arbeitsfläche
 
 ## Andockfenster, wo Sie sie brauchen.
 
@@ -114,7 +201,7 @@ Objekt-Manager, Objekteigenschaften, Formen, Änderungen, Symbole, Linse, Hülle
 
 ![TANGENTA mit Objekt-Manager und Objekteigenschaften, der Titel des Plakats ist ausgewählt](https://tangenta.ch/img/06-andockfenster.png)
 
-**02** / Einstellungen
+**03** / Einstellungen
 
 ## Jede Einstellung am gewohnten Ort.
 
@@ -122,21 +209,21 @@ Der Dialog Optionen (Strg+J) ordnet Arbeitsbereich, Dokument und Global wie gewo
 
 ![Dialog Optionen mit der Seite „An Objekten ausrichten“](https://tangenta.ch/img/08-optionen.png)
 
-**03** / Dateiformate
+**04** / Dateiformate
 
 ## Rein und raus.
 
 ### Importieren
 
-SVG · PDF · EPS · PS · DXF · PNG · JPEG · TIFF · WebP · BMP · GIF · NEF · CR2 · CR3 · ARW · DNG
+CDR · CMX · AI · SVG · PDF · EPS · PS · DXF · PNG · JPEG · TIFF · WebP · BMP · GIF · NEF · CR2 · CR3 · ARW · DNG
 
 ### Exportieren
 
 PDF · SVG · EPS · DXF · PNG · JPEG · TIFF · WebP · PSD · HTML
 
-PDF, SVG und EPS werden als bearbeitbare Kurven und Texte eingelesen. Für EPS und PS nutzt TANGENTA Ghostscript.
+CDR, CMX, AI, PDF, SVG und EPS werden als bearbeitbare Kurven und Texte eingelesen. Für EPS und PS nutzt TANGENTA Ghostscript.
 
-**04** / Tastenkürzel
+**05** / Tastenkürzel
 
 ## Die Kürzel, die Sie kennen.
 

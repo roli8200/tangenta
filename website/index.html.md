@@ -12,11 +12,9 @@ TANGENTA bringt die Werkzeuge, die Sie kennen, als freie Software. Dazu kommt ei
 
 [Herunterladen](https://tangenta.ch/download.html) [Quellcode auf GitHub](https://github.com/roli8200/tangenta)
 
-Windows 10 / 11 · Debian 12 / 13 · Ubuntu 24.04 / 26.04
+Windows 10 / 11 · macOS 13+ · Debian 12 / 13 · Ubuntu 24.04 / 26.04
 
 Keine Lizenzgebühr. Kein Abo. GPLv3.
-
-![TANGENTA mit einem Konzertplakat in Bearbeitung](https://tangenta.ch/img/01-hauptfenster.png)
 
 **0 CHF** Lizenzkosten, auch in der Firma
 
@@ -44,7 +42,7 @@ Ein natives Programm in C++ und Qt 6. Es startet in Sekunden und reagiert ohne V
 
 ### Offen
 
-PDF, SVG, EPS, DXF und alle gängigen Bildformate rein und raus. Skripte in JavaScript.
+Öffnet CDR, AI, PDF, SVG, EPS und DXF, exportiert in alle gängigen Formate. Skripte in JavaScript.
 
 **02** / KI-Assistent
 
@@ -90,7 +88,7 @@ Verlauf, Muster, Textur, Maschenfüllung und die interaktive Füllung direkt am 
 
 ### Effekte
 
-Überblendung, Kontur, Extrusion, Hülle, Perspektive, Schatten, Linse, Abschrägung, SuperClip.
+Überblendung, Kontur, Extrusion, Hülle, Perspektive, Schatten, Linse, Abschrägung, SuperClip und über 60 Bitmap-Effekte.
 
 05
 
@@ -184,7 +182,23 @@ Freie Software für jeden Schulrechner und für zu Hause, ohne Lizenzfragen.
 
 Einladungen, Etiketten und Vereinslogos, kostenlos und ohne Abo.
 
-**09** / Download
+**09** / Tutorials
+
+## Zuschauen. Nachmachen.
+
+38 Videoanleitungen auf YouTube zeigen Schritt für Schritt, wie Logos, Flyer, Muster und Schriftzüge in TANGENTA entstehen. Gesprochen auf Deutsch, mit englischer Tonspur.
+
+### [KI in TANGENTA einrichten und nutzen – Logo, Text und Foto per Auftrag](https://www.youtube.com/watch?v=38FLp_RBsBg)
+
+### [Bitmap-Effekte im Überblick: 8 Effekte an einem Foto](https://www.youtube.com/watch?v=zhL5F3JGeNI)
+
+### [Vierfarbiges Ring-Monogramm: Smart-Füllung mit offenen Hilfslinien](https://www.youtube.com/watch?v=jchlvRJj8hI)
+
+### [Immobilien-Flyer komplett gestalten – Fotofelder, SuperClip und Typografie](https://www.youtube.com/watch?v=2BEWZDCxU9A)
+
+[Alle Tutorials ansehen →](https://tangenta.ch/tutorials.html)
+
+**10** / Download
 
 ## Loslegen.
 
@@ -192,20 +206,20 @@ Einladungen, Etiketten und Vereinslogos, kostenlos und ohne Abo.
 
 Setup mit Assistent oder MSI für die Verteilung im Netzwerk, still installierbar.
 
-[Setup herunterladen](https://github.com/roli8200/tangenta/releases/download/v0.91/TANGENTA-0.91-x64-setup.exe)
+[Setup herunterladen](https://github.com/roli8200/tangenta/releases/download/v0.92/TANGENTA-0.92-x64-setup.exe)
 
-[MSI für die Verteilung →](https://github.com/roli8200/tangenta/releases/download/v0.91/TANGENTA-0.91-x64.msi)
+[MSI für die Verteilung →](https://github.com/roli8200/tangenta/releases/download/v0.92/TANGENTA-0.92-x64.msi)
 
 ```
-TANGENTA-0.91-x64-setup.exe /quiet
-msiexec /i TANGENTA-0.91-x64.msi /qn
+TANGENTA-0.92-x64-setup.exe /quiet
+msiexec /i TANGENTA-0.92-x64.msi /qn
 ```
 
 ### macOS 13 oder neuer
 
 Ein Programm für Macs mit Apple-Chip und mit Intel-Prozessor, als Disk-Image.
 
-[Disk-Image herunterladen](https://github.com/roli8200/tangenta/releases/download/v0.91/TANGENTA-0.91-macos.dmg)
+[Disk-Image herunterladen](https://github.com/roli8200/tangenta/releases/download/v0.92/TANGENTA-0.92-macos.dmg)
 
 ```
 xattr -dr com.apple.quarantine /Applications/TANGENTA.app
@@ -215,49 +229,53 @@ xattr -dr com.apple.quarantine /Applications/TANGENTA.app
 
 Pakete für Debian 12, Debian 13, Ubuntu 24.04 und 26.04, mit eigenem Qt 6.10.
 
-[.deb herunterladen (Debian 13)](https://github.com/roli8200/tangenta/releases/download/v0.91/tangenta_0.91-1.debian13_amd64.deb)
+[.deb herunterladen (Debian 13)](https://github.com/roli8200/tangenta/releases/download/v0.92/tangenta_0.92-1.debian13_amd64.deb)
 
 Pakete je System:
 
-- [Debian 12](https://github.com/roli8200/tangenta/releases/download/v0.91/tangenta_0.91-1.debian12_amd64.deb)
-- [Debian 13](https://github.com/roli8200/tangenta/releases/download/v0.91/tangenta_0.91-1.debian13_amd64.deb)
-- [Ubuntu 24.04](https://github.com/roli8200/tangenta/releases/download/v0.91/tangenta_0.91-1.ubuntu24.04_amd64.deb)
-- [Ubuntu 26.04](https://github.com/roli8200/tangenta/releases/download/v0.91/tangenta_0.91-1.ubuntu26.04_amd64.deb)
+- [Debian 12](https://github.com/roli8200/tangenta/releases/download/v0.92/tangenta_0.92-1.debian12_amd64.deb)
+- [Debian 13](https://github.com/roli8200/tangenta/releases/download/v0.92/tangenta_0.92-1.debian13_amd64.deb)
+- [Ubuntu 24.04](https://github.com/roli8200/tangenta/releases/download/v0.92/tangenta_0.92-1.ubuntu24.04_amd64.deb)
+- [Ubuntu 26.04](https://github.com/roli8200/tangenta/releases/download/v0.92/tangenta_0.92-1.ubuntu26.04_amd64.deb)
 
 ```
-sudo apt install ./tangenta_0.91-1.debian13_amd64.deb
+sudo apt install ./tangenta_0.92-1.debian13_amd64.deb
 ```
 
 ### Andere Linux-Systeme
 
 Flatpak für Fedora, openSUSE, Arch, Mint und alle Systeme mit Flatpak. Die Laufzeit kommt von Flathub.
 
-[Flatpak herunterladen](https://github.com/roli8200/tangenta/releases/download/v0.91/TANGENTA-0.91-x86_64.flatpak)
+[Flatpak herunterladen](https://github.com/roli8200/tangenta/releases/download/v0.92/TANGENTA-0.92-x86_64.flatpak)
 
 ```
-flatpak install --user TANGENTA-0.91-x86_64.flatpak
+flatpak install --user TANGENTA-0.92-x86_64.flatpak
 flatpak run ch.tangenta.Tangenta
 ```
 
 ### GitHub
 
-[Alle Dateien und Prüfsummen →](https://github.com/roli8200/tangenta/releases/tag/v0.91)
+[Alle Dateien und Prüfsummen →](https://github.com/roli8200/tangenta/releases/tag/v0.92)
 
-[SHA256SUMS-0.91.txt](https://github.com/roli8200/tangenta/releases/download/v0.91/SHA256SUMS-0.91.txt)
+[SHA256SUMS-0.92.txt](https://github.com/roli8200/tangenta/releases/download/v0.92/SHA256SUMS-0.92.txt)
 
 ```
-sha256sum --ignore-missing -c SHA256SUMS-0.91.txt
+sha256sum --ignore-missing -c SHA256SUMS-0.92.txt
 ```
 
 [Alle Pakete, Systemanforderungen und stille Installation →](https://tangenta.ch/download.html)
 
-**10** / Fragen
+**11** / Fragen
 
 ## Gut zu wissen.
 
 **Öffnet TANGENTA .cdr-Dateien?**
 
-Noch nicht direkt. Speichern Sie als PDF, SVG oder EPS; diese Formate liest TANGENTA als bearbeitbare Kurven ein.
+Ja. TANGENTA öffnet CDR- und CMX-Dateien direkt, ebenso AI, PDF, SVG und EPS, jeweils als bearbeitbare Kurven.
+
+**Gibt es Anleitungen?**
+
+Ja, über 30 Videos auf YouTube, von den Grundlagen bis zum fertigen Flyer. Alle stehen auf der Seite Tutorials, gesprochen auf Deutsch und mit englischer Tonspur.
 
 **Was kostet der KI-Assistent?**
 
@@ -269,7 +287,7 @@ Nein. Ohne Häkchen bei „darf ändern“ liest er nur. Und was er in einer Ant
 
 **In welcher Sprache ist die Oberfläche?**
 
-Heute auf Deutsch. Die Rechtschreibprüfung kennt Deutsch (Schweiz und Deutschland), Englisch und Französisch.
+In sieben Sprachen: Deutsch, Englisch, Französisch, Italienisch, Spanisch, Portugiesisch (Brasilien) und vereinfachtes Chinesisch. TANGENTA folgt der Systemsprache; umstellen können Sie unter Ansicht › Sprache. Die Rechtschreibprüfung kennt Deutsch (Schweiz und Deutschland), Englisch und Französisch.
 
 **Läuft TANGENTA auf dem Mac?**
 

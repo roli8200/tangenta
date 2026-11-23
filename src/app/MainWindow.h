@@ -12,6 +12,8 @@ class QAction;
 class QComboBox;
 class QDockWidget;
 class QLabel;
+class QMdiArea;
+class QMdiSubWindow;
 class QMenu;
 class QTabBar;
 class QToolBar;
@@ -25,6 +27,7 @@ struct TableRange {
 };
 
 class Canvas;
+class DocumentWindow;
 class PagesDocker;
 class Ruler;
 class RulerCorner;
@@ -52,6 +55,13 @@ public:
 
 protected:
     void closeEvent(QCloseEvent* e) override;
+    // Kontextmenü der Leisten: Leisten ein/aus, dazu eigene Symbolleiste anlegen und Anpassen
+    QMenu* createPopupMenu() override;
+
+private:
+    void runCutoutAssistant();
+
+protected:
     void showEvent(QShowEvent* e) override;
 
 private:
@@ -71,7 +81,29 @@ private:
     bool saveAs();
     void newDocument();
     void open();
+    // MDI: jedes offene Dokument hat ein eigenes Fenster im Arbeitsbereich. Die Zeichenfläche
+    // (mit Linealen und Seitennavigation) wandert ins aktive Fenster, die übrigen zeigen ein
+    // Standbild ihrer letzten Ansicht. Fensterreihenfolge = Dokumentreihenfolge im Editor.
+    void showDocument(std::unique_ptr<Document> doc, const QString& path);
+    void onSubWindowActivated(QMdiSubWindow* sub);
+    void attachCanvas(DocumentWindow* window);
+    bool closeDocumentWindow(DocumentWindow* window);
+    bool closeAllDocuments();
+    void fillWindowMenu();
+    QMdiArea* m_mdi = nullptr;
+    QWidget* m_canvasArea = nullptr;
+    QList<DocumentWindow*> m_windows;
+    QMenu* m_windowMenu = nullptr;
+    QList<QAction*> m_windowCommands; // nullptr = Trennlinie
+    bool m_switching = false;
     void importFiles();
+    // Bilder und Vektorgrafik aus Dateien in das aktive Dokument
+    void importPaths(const QStringList& paths);
+    // Zwischenablage: eigenes Format plus SVG, PNG/Bitmap und Text für andere Programme
+    void copyToClipboard(bool cut);
+    // format leer = bestes vorhandenes Format (eigenes, Dateien, SVG, Bild, Text)
+    bool pasteFromClipboard(const QString& format = QString());
+    void pasteSpecial();
     void searchImages();
     void exportFile();
     bool exportGlyph(const QString& path);
@@ -147,6 +179,7 @@ private:
     QList<QAction*> m_fxActions;     // Bitmap-Effekte: Bild (destruktiv) oder beliebige Objekte (Effektstapel)
     void deleteSelectionOrGuide();
     void showGuideContextMenu(int index, const QPoint& globalPos);
+    void showBaselineContextMenu(int index, const QPoint& globalPos);
     // Kontextmenü auf Objekten
     void showObjectContextMenu(const QPoint& globalPos);
     // Oberflächengrösse geändert: Neustart anbieten
@@ -159,6 +192,7 @@ private:
     void applyOptions();
     void applyShortcuts();
     void autosave();
+    void autosaveDocument(Document& document, const QString& filePath);
     void openOptions();
     QToolButton* flyoutButton(QToolBar* bar, const QString& iconName, const QString& tooltip,
                               const QList<QAction*>& actions);
@@ -181,6 +215,7 @@ private:
     QToolBar* m_standardBar = nullptr;
     QToolBar* m_propertyBar = nullptr;
     QToolBar* m_toolbox = nullptr;
+    class CustomToolbars* m_customBars = nullptr;
     class QTimer* m_autosaveTimer = nullptr;
     class QObject* m_tooltipFilter = nullptr;
     QDockWidget* m_firstDocker = nullptr;
@@ -188,6 +223,7 @@ private:
     QAction* m_undo = nullptr;
     QAction* m_redo = nullptr;
     QAction* m_paste = nullptr;
+    QAction* m_pasteSpecial = nullptr;
     QHash<int, QAction*> m_toolActions;
     QMenu* m_toolCommands = nullptr; // Werkzeuge als Befehle (nicht in der Menüleiste), Tastaturbefehle frei belegbar
     QList<QAction*> m_selectionActions;

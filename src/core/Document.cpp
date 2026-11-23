@@ -1,5 +1,7 @@
 #include "Document.h"
 
+#include "BaselineGrid.h"
+
 #include "CloneObject.h"
 
 #include "Serialization.h"
@@ -244,6 +246,29 @@ void Document::updateTextFlow()
     for (const TextObject* t : texts)
         if (t->onPath())
             t->resolvePath([this](NodeId id) { return findAs<DrawObject>(id); });
+    // Grundlinienraster: Mengentextrahmen bekommen die Rasterlinien ihrer Seite (lokal zum Rahmen)
+    // (Beim Einlesen läuft das schon im Konstruktor; ein leerer Baum hat noch keine Masterseite)
+    const Page* master = m_root->childCount() > 0 ? node_cast<Page>(m_root->child(0)) : nullptr;
+    const QJsonObject options = master ? master->options() : QJsonObject();
+    const bool gridOn = master && BaselineGrid::alignsText(options);
+    const BaselineGrid grid = BaselineGrid::fromJson(options);
+    for (const TextObject* t : texts) {
+        QList<double> local;
+        const QTransform& m = t->transform();
+        // Nur ungedrehte, nicht gespiegelte Rahmen: sonst liegen die Zeilen nicht waagrecht
+        if (gridOn && t->kind() == TextObject::Kind::Paragraph && t->followsBaselineGrid() && !t->onPath()
+            && !t->hasEnvelope() && m.type() <= QTransform::TxScale && m.m11() > 0.0 && m.m22() > 0.0) {
+            const Page* page = pageOf(t->id());
+            const double height = (page ? page->size() : master->size()).height();
+            const double frameHeight = t->frameSize().height();
+            for (const double y : grid.lines(height)) {
+                const double ly = (y - m.dy()) / m.m22();
+                if (ly >= 0.0 && ly <= frameHeight + 1.0)
+                    local << ly;
+            }
+        }
+        t->setBaselineGridLines(local);
+    }
     TextObject::linkChains(std::move(texts));
     // Verbindungslinien folgen ihren Objekten
     for (const ConnectorObject* c : connectors)

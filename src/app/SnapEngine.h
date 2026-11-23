@@ -10,6 +10,8 @@
 #include <QSizeF>
 #include <QString>
 
+#include <optional>
+
 namespace vek {
 
 class Canvas;
@@ -34,6 +36,9 @@ public:
     // Verschiebt mehrere Quellpunkte gemeinsam um delta und korrigiert delta so, dass der
     // am nächsten liegende Quellpunkt einrastet. Liefert das korrigierte delta.
     QPointF snapDelta(const QList<QPointF>& sources, const QPointF& delta, SnapResult* result) const;
+    // Textgrundlinien (Quellpunkte auf Grundlinien) am Grundlinienraster: senkrechte Lage von delta so
+    // korrigiert, dass die nächste Grundlinie auf einer Rasterlinie liegt; leer = keine im Fangradius
+    std::optional<double> snapBaselineY(const QList<QPointF>& baselines, const QPointF& delta, SnapResult* result) const;
 
     static constexpr double ThresholdPx = 8.0;
 
@@ -64,6 +69,7 @@ private:
     QList<QPolygonF> m_outlines;
     QList<Line> m_xLines; // senkrechte Linien x = value
     QList<Line> m_yLines; // waagrechte Linien y = value
+    QList<double> m_baselineGrid; // Linien des Grundlinienrasters (auch in m_yLines)
     QList<Guide> m_slanted; // schräge Hilfslinien
     // Dynamische Hilfslinien: Ausgangspunkte und Winkel (Grad gegen den Uhrzeigersinn)
     QList<QPointF> m_anchors;

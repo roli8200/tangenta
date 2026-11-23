@@ -31,7 +31,7 @@
   <meta name="twitter:image" content="https://tangenta.ch/img/02-ki-assistent.png">
   <link rel="icon" href="../img/favicon.png">
   <link rel="apple-touch-icon" href="../img/tangenta-256.png">
-  <link rel="stylesheet" href="../styles.css">
+  <link rel="stylesheet" href="../styles.css?v=28d09d3be0">
   <script type="application/ld+json">
 {
  "@context": "https://schema.org",
@@ -68,10 +68,10 @@
 <body>
 <header class="nav">
   <a class="brand" href="../fr/index.html"><img src="../img/tangenta.svg" alt="" width="32" height="32"><span>TANGENTA</span></a>
-  <nav class="links"><a href="../fr/features.html">Fonctions</a><a href="../fr/ai.html" aria-current="page">Assistant IA</a><a href="../fr/download.html">Téléchargement</a><a href="https://github.com/roli8200/tangenta">GitHub</a></nav>
+  <nav class="links"><a href="../fr/features.html">Fonctions</a><a href="../fr/tutorials.html">Tutoriels</a><a href="../fr/ai.html" aria-current="page">Assistant IA</a><a href="../fr/download.html">Téléchargement</a><a href="https://github.com/roli8200/tangenta">GitHub</a></nav>
   <details class="lang"><summary aria-label="Langue">FR</summary><div class="lang-menu"><a href="../ai.html" hreflang="de" lang="de"><b>DE</b> Deutsch</a><a href="../en/ai.html" hreflang="en" lang="en"><b>EN</b> English</a><a href="../fr/ai.html" hreflang="fr" lang="fr" aria-current="true"><b>FR</b> Français</a><a href="../it/ai.html" hreflang="it" lang="it"><b>IT</b> Italiano</a></div></details>
   <a class="btn btn-primary btn-small" href="../fr/download.html">Télécharger</a>
-  <details class="menu"><summary aria-label="Menu"><span></span><span></span><span></span></summary><div class="menu-panel"><a href="../fr/features.html">Fonctions</a><a href="../fr/ai.html" aria-current="page">Assistant IA</a><a href="../fr/download.html">Téléchargement</a><a href="https://github.com/roli8200/tangenta">GitHub</a></div></details>
+  <details class="menu"><summary aria-label="Menu"><span></span><span></span><span></span></summary><div class="menu-panel"><a href="../fr/features.html">Fonctions</a><a href="../fr/tutorials.html">Tutoriels</a><a href="../fr/ai.html" aria-current="page">Assistant IA</a><a href="../fr/download.html">Téléchargement</a><a href="https://github.com/roli8200/tangenta">GitHub</a></div></details>
 </header>
 
 <main id="top">
@@ -108,7 +108,7 @@
     <div class="split-text">
       <p class="label"><b>04</b> / Sécurité</p>
       <h2>Vous gardez<br>le contrôle.</h2>
-      <ul class="ticks"><li>Sans la case « darf ändern » (peut modifier), il ne fait que lire</li><li>Un Ctrl+Z annule tout ce qu’il a modifié dans une réponse</li><li>Ne supprime que sur demande expresse</li><li>Ne lit pas les pages web de votre propre réseau (localhost, 10.x, 192.168.x)</li><li>Limites de tours, de jetons et de temps par réponse</li><li>Clés stockées en local dans votre compte, jamais dans les documents</li></ul>
+      <ul class="ticks"><li>Sans l’option « peut modifier », il ne fait que lire</li><li>Un Ctrl+Z annule tout ce qu’il a modifié dans une réponse</li><li>Ne supprime que sur demande expresse</li><li>Ne lit pas les pages web de votre propre réseau (localhost, 10.x, 192.168.x)</li><li>Limites de tours, de jetons et de temps par réponse</li><li>Clés stockées en local dans votre compte, jamais dans les documents</li></ul>
     </div>
     <div class="prompts">
       <h3>À essayer</h3>
@@ -119,8 +119,8 @@
   <section class="section narrow">
     <p class="label"><b>05</b> / Configuration</p>
     <h2>Prêt en cinq minutes.</h2>
-    <ol class="steps"><li>Ouvrir TANGENTA et choisir <b>Extras &gt; Optionen &gt; Global &gt; KI</b> (Ctrl+J).</li><li>Pour Claude via votre abonnement : installer <a href="https://claude.com/claude-code">Claude Code</a>, puis cliquer sur <b>Anmelden</b> (se connecter) dans la boîte de dialogue et confirmer avec votre compte Claude.</li><li>Pour un autre fournisseur : <b>Neu …</b> (nouveau), choisir le fournisseur et saisir la clé API.</li><li>Vérifier avec <b>Test</b> que l’accès répond.</li><li>Ouvrir <b>Extras &gt; KI-Assistent</b> (Ctrl+Alt+K) et commencer à écrire.</li></ol>
-    <p class="sub small">L’interface du programme est aujourd’hui en allemand ; vous pouvez écrire à l’assistant dans n’importe quelle langue. Pour la recherche web, saisissez votre propre serveur SearXNG ou une clé Brave Search sous <b>Global &gt; Websuche</b>.</p>
+    <ol class="steps"><li>Ouvrir TANGENTA et choisir <b>Outils &gt; Options &gt; Global &gt; IA</b> (Ctrl+J).</li><li>Pour Claude via votre abonnement : installer <a href="https://claude.com/claude-code">Claude Code</a>, puis cliquer sur <b>Se connecter</b> dans la boîte de dialogue et confirmer avec votre compte Claude.</li><li>Pour un autre fournisseur : <b>Nouveau …</b>, choisir le fournisseur et saisir la clé API.</li><li>Vérifier avec <b>Tester</b> que l’accès répond.</li><li>Ouvrir <b>Outils &gt; Assistant IA</b> (Ctrl+Alt+K) et commencer à écrire.</li></ol>
+    <p class="sub small">Vous pouvez écrire à l’assistant dans n’importe quelle langue. Pour la recherche web, saisissez votre propre serveur SearXNG ou une clé Brave Search sous <b>Global &gt; Recherche web</b>.</p>
   </section>
 
   <section class="final">
@@ -139,8 +139,8 @@
       <a class="brand" href="../fr/index.html"><img src="../img/tangenta.svg" alt="" width="28" height="28"><span>TANGENTA</span></a>
       <p>Dessin vectoriel libre pour Windows, macOS et Linux.</p>
     </div>
-    <div><h4>Programme</h4><a href="../fr/features.html">Fonctions</a><a href="../fr/ai.html">Assistant IA</a><a href="../fr/download.html">Téléchargement</a></div>
-    <div><h4>Projet</h4><a href="https://github.com/roli8200/tangenta">GitHub</a><a href="https://github.com/roli8200/tangenta/blob/main/BUILD.md">Compiler soi-même</a><a href="https://github.com/roli8200/tangenta/issues">Signaler un bug</a></div>
+    <div><h4>Programme</h4><a href="../fr/features.html">Fonctions</a><a href="../fr/tutorials.html">Tutoriels</a><a href="../fr/ai.html">Assistant IA</a><a href="../fr/download.html">Téléchargement</a></div>
+    <div><h4>Projet</h4><a href="https://github.com/roli8200/tangenta">GitHub</a><a href="https://www.youtube.com/channel/UCaCO4A6aae508OXRuN7OF1g">YouTube</a><a href="https://github.com/roli8200/tangenta/blob/main/BUILD.md">Compiler soi-même</a><a href="https://github.com/roli8200/tangenta/issues">Signaler un bug</a></div>
     <div><h4>Éditeur</h4><a href="https://intersoft-networks.ch">Intersoft Networks</a><a href="https://github.com/roli8200/tangenta/blob/main/LICENSE">Licence GPLv3</a></div>
   </div>
   <p class="fine">© 2026 Intersoft Networks · TANGENTA est un logiciel libre sous licence GPLv3. Photos de la recherche d’images : Wikimedia Commons, licences indiquées sur chaque vignette.</p>

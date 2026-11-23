@@ -41,7 +41,7 @@ struct Message {
     QJsonObject input;       // ToolUse: Eingabe
     QString callId;          // ToolUse/ToolResult: Zuordnung
     bool error = false;      // ToolResult: Werkzeug ist gescheitert
-    QList<QByteArray> images; // ToolResult: PNG-Bilder (z.B. Ansicht der Seite)
+    QList<QByteArray> images; // User/ToolResult: PNG-Bilder (z.B. Ansicht der Seite, Foto zum Optimieren)
 };
 
 struct Tool {

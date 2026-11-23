@@ -525,15 +525,15 @@ flowchart LR
 
 | Task | Command |
 |---|---|
-| Setup, silent | `TANGENTA-0.91-x64-setup.exe /quiet` |
-| Setup with progress bar, no questions | `TANGENTA-0.91-x64-setup.exe /passive` |
-| Target folder and desktop shortcut | `TANGENTA-0.91-x64-setup.exe /quiet InstallFolder="D:\Programs\TANGENTA" DesktopShortcut=1` |
-| Log file | `TANGENTA-0.91-x64-setup.exe /quiet /log C:\Temp\tangenta-setup.log` |
-| Uninstall | `TANGENTA-0.91-x64-setup.exe /uninstall /quiet` |
-| MSI, silent | `msiexec /i TANGENTA-0.91-x64.msi /qn` |
-| MSI with target folder | `msiexec /i TANGENTA-0.91-x64.msi /qn INSTALLFOLDER="D:\Programs\TANGENTA" DESKTOPSHORTCUT=1` |
-| MSI with log file | `msiexec /i TANGENTA-0.91-x64.msi /qn /l*v C:\Temp\tangenta.log` |
-| Remove MSI | `msiexec /x TANGENTA-0.91-x64.msi /qn` |
+| Setup, silent | `TANGENTA-0.92-x64-setup.exe /quiet` |
+| Setup with progress bar, no questions | `TANGENTA-0.92-x64-setup.exe /passive` |
+| Target folder and desktop shortcut | `TANGENTA-0.92-x64-setup.exe /quiet InstallFolder="D:\Programs\TANGENTA" DesktopShortcut=1` |
+| Log file | `TANGENTA-0.92-x64-setup.exe /quiet /log C:\Temp\tangenta-setup.log` |
+| Uninstall | `TANGENTA-0.92-x64-setup.exe /uninstall /quiet` |
+| MSI, silent | `msiexec /i TANGENTA-0.92-x64.msi /qn` |
+| MSI with target folder | `msiexec /i TANGENTA-0.92-x64.msi /qn INSTALLFOLDER="D:\Programs\TANGENTA" DESKTOPSHORTCUT=1` |
+| MSI with log file | `msiexec /i TANGENTA-0.92-x64.msi /qn /l*v C:\Temp\tangenta.log` |
+| Remove MSI | `msiexec /x TANGENTA-0.92-x64.msi /qn` |
 
 Both packages install for all users to `C:\Program Files\TANGENTA`. This requires administrator
 rights. They create a start menu entry and associate `.vek` files with TANGENTA. A newer version
@@ -551,7 +551,7 @@ make packages DEB_TARGETS=debian12 # just one
 ```
 
 The first run downloads Qt and the container images and takes about 30 minutes per system. Result in
-`build/packages`, for example `tangenta_0.91-1~debian12_amd64.deb`.
+`build/packages`, for example `tangenta_0.92-1~debian12_amd64.deb`.
 
 `packaging/linux/package-linux.sh` starts a fresh container for each system. Inside it runs
 `build-deb.sh`, which performs the following steps:
@@ -581,7 +581,7 @@ flowchart LR
 Install and remove:
 
 ```sh
-sudo apt install ./tangenta_0.91-1~debian12_amd64.deb
+sudo apt install ./tangenta_0.92-1~debian12_amd64.deb
 sudo apt remove tangenta
 ```
 

@@ -37,6 +37,7 @@
     <mediatype>application/x-tangenta</mediatype>
   </provides>
   <releases>
+    <release version="0.92" date="2026-11-23"/>
     <release version="0.91" date="2026-11-13"/>
     <release version="0.86" date="2026-11-02"/>
     <release version="0.85" date="2026-11-02"/>

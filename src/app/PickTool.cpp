@@ -2,6 +2,7 @@
 
 #include "Canvas.h"
 #include "Editor.h"
+#include "GroupObject.h"
 #include "TextObject.h"
 #include "Options.h"
 #include "TextTool.h"
@@ -236,6 +237,12 @@ void PickTool::mousePress(QMouseEvent* event, const QPointF& doc)
         m_canvas.update();
         return;
     }
+    if (event->button() == Qt::RightButton) {
+        if (const int line = m_canvas.baselineHandleAt(event->position()); line >= 0) {
+            emit m_canvas.baselineContextMenuRequested(line, event->globalPosition().toPoint());
+            return;
+        }
+    }
     if (event->button() == Qt::RightButton && m_canvas.guidesVisible()) {
         if (const int guide = m_canvas.guideAt(event->position()); guide >= 0 && !ed.objectAt(doc, m_canvas.pixelsToDoc(4.0))) {
             m_canvas.setSelectedGuide(guide);
@@ -305,6 +312,14 @@ void PickTool::mousePress(QMouseEvent* event, const QPointF& doc)
             m_guidePivotStart = guidePivot(g);
             return;
         }
+    }
+
+    if (const int line = m_canvas.baselineHandleAt(event->position()); line >= 0) {
+        m_baseline = line;
+        m_baselineStart = m_baselineCurrent = BaselineGrid::fromOptions();
+        m_baselineMoved = false;
+        m_drag = Drag::Baseline;
+        return;
     }
 
     // Untere Lasche eines ausgewählten Mengentextrahmens: verknüpfen
@@ -380,6 +395,7 @@ void PickTool::prepareSnapping()
     const Editor& ed = editor();
     m_snapEngine.emplace(m_canvas, ed.selection());
     m_snapSources.clear();
+    m_baselineSources.clear();
     for (const DrawObject* o : ed.selectedObjects()) {
         const QPainterPath path = o->snapPath();
         for (int i = 0; i < path.elementCount() && m_snapSources.size() < 400; ++i) {
@@ -391,6 +407,23 @@ void PickTool::prepareSnapping()
                 i += 2;
             }
         }
+    }
+    // Optionen > An Objekten ausrichten > Textbasislinie: Anfang und Ende jeder Grundlinie, auch in Gruppen
+    if (Options::instance().text(QStringLiteral("ws/snap/modes")).split(QLatin1Char(',')).contains(QLatin1String("baseline"))) {
+        std::function<void(const Node*)> addBaselines = [&](const Node* n) {
+            if (const auto* text = node_cast<TextObject>(n)) {
+                for (const QLineF& line : text->baselines())
+                    if (m_snapSources.size() < 400) {
+                        m_snapSources << line.p1() << line.p2();
+                        m_baselineSources << line.p1();
+                    }
+            } else if (node_cast<GroupObject>(n)) {
+                for (int i = 0; i < n->childCount(); ++i)
+                    addBaselines(n->child(i));
+            }
+        };
+        for (const DrawObject* o : ed.selectedObjects())
+            addBaselines(o);
     }
     const QRectF b = ed.selectionBounds();
     m_snapSources << b.center() << b.topLeft() << b.topRight() << b.bottomLeft() << b.bottomRight();
@@ -459,6 +492,14 @@ void PickTool::mouseMove(QMouseEvent* event, const QPointF& doc)
         m_guidePivot = doc;
         m_canvas.update();
         return;
+    case Drag::Baseline: {
+        if (!m_baselineMoved && std::abs(event->position().y() - m_pressScreen.y()) < kDragThreshold)
+            return;
+        m_baselineMoved = true;
+        dragBaseline(doc, event->modifiers());
+        m_canvas.setBaselinePreview(m_baselineCurrent);
+        return;
+    }
     default:
         break;
     }
@@ -471,6 +512,14 @@ void PickTool::mouseDoubleClick(QMouseEvent* event, const QPointF& doc)
 {
     if (event->button() != Qt::LeftButton)
         return;
+    // Doppelklick auf den Griff einer verschobenen Grundlinie: zurück an ihren Platz
+    if (const int line = m_canvas.baselineHandleAt(event->position()); line >= 0) {
+        m_drag = Drag::None;
+        const BaselineGrid grid = BaselineGrid::fromOptions();
+        if (grid.moved.contains(line))
+            Options::instance().apply(grid.withLineAt(line, grid.regular(line)).toOptions(), QObject::tr("Grundlinie zurücksetzen"));
+        return;
+    }
     if (const auto* code = node_cast<QrCodeObject>(editor().objectAt(doc, m_canvas.pixelsToDoc(3.0)));
         code && !editor().isLocked(code->id())) {
         m_drag = Drag::None;
@@ -616,6 +665,13 @@ void PickTool::mouseRelease(QMouseEvent* event, const QPointF& doc)
     case Drag::GuideAnchor:
         m_canvas.update();
         break;
+    case Drag::Baseline:
+        m_canvas.setBaselinePreview(std::nullopt);
+        if (m_baselineMoved) // Umschalt/Strg beim Loslassen zählen auch
+            dragBaseline(doc, event->modifiers());
+        if (m_baselineMoved && !(m_baselineCurrent == m_baselineStart))
+            Options::instance().apply(m_baselineCurrent.toOptions(), m_baselineLabel);
+        break;
     case Drag::Center:
     case Drag::None:
     case Drag::RightPending:
@@ -651,7 +707,14 @@ QTransform PickTool::computePreview(const QPointF& doc, Qt::KeyboardModifiers mo
             else
                 delta.setX(0);
         } else if (m_snapEngine) {
+            const QPointF raw = delta;
             delta = m_snapEngine->snapDelta(m_snapSources, delta, &m_snapResult);
+            // Sonst rastet womöglich Mitte oder Rand des Textrahmens an einer Rasterlinie ein
+            SnapResult base;
+            if (const std::optional<double> y = m_snapEngine->snapBaselineY(m_baselineSources, QPointF(delta.x(), raw.y()), &base)) {
+                delta.setY(*y);
+                m_snapResult = base;
+            }
         }
         return xform::translation(delta);
     }
@@ -745,6 +808,8 @@ void PickTool::cancelDrag()
 {
     if (m_drag == Drag::Guide || m_drag == Drag::GuideRotate || m_drag == Drag::GuideAnchor)
         m_canvas.setGuidePreview(std::nullopt);
+    if (m_drag == Drag::Baseline)
+        m_canvas.setBaselinePreview(std::nullopt);
     m_drag = Drag::None;
     m_handle = NoHandle;
     m_preview = QTransform();
@@ -779,6 +844,10 @@ void PickTool::updateHoverCursor(const QPointF& screen, const QPointF& doc)
             }
             return;
         }
+    }
+    if (m_canvas.baselineHandleAt(screen) >= 0) {
+        m_canvas.setCursor(Qt::SizeVerCursor);
+        return;
     }
     const DrawObject* hit = ed.objectAt(doc, m_canvas.pixelsToDoc(4.0));
     if (hit) {
@@ -857,11 +926,62 @@ bool PickTool::nudge(const QPointF& delta)
     return true;
 }
 
+void PickTool::dragBaseline(const QPointF& doc, Qt::KeyboardModifiers mods)
+{
+    const double height = editor().currentPage().size().height();
+    const double dy = doc.y() - m_pressDoc.y();
+    const double y = m_baselineStart.line(m_baseline) + dy;
+    const int count = m_baselineStart.count(height);
+    if (mods & Qt::ShiftModifier) {
+        m_baselineCurrent = m_baselineStart.shifted(dy);
+        m_baselineLabel = QObject::tr("Grundlinienraster verschieben");
+    } else if ((mods & Qt::ControlModifier) || (m_baseline > 0 && m_baseline < count - 1)) {
+        m_baselineCurrent = m_baselineStart.withLineAt(m_baseline, y);
+        m_baselineLabel = QObject::tr("Grundlinie verschieben");
+    } else {
+        m_baselineCurrent = m_baseline == 0 ? m_baselineStart.withFirstAt(y, height) : m_baselineStart.withLastAt(y, height);
+        m_baselineLabel = QObject::tr("Grundlinienraster dehnen");
+    }
+}
+
+QString PickTool::baselineTip() const
+{
+    const BaselineGrid& g = m_baselineCurrent;
+    if (m_baselineLabel == QObject::tr("Grundlinie verschieben")) {
+        const double offset = g.moved.value(m_baseline);
+        return QObject::tr("Linie %1: %2 mm (%3%4 mm)")
+            .arg(m_baseline + 1)
+            .arg(g.line(m_baseline), 0, 'f', 1)
+            .arg(offset >= 0 ? QStringLiteral("+") : QString())
+            .arg(offset, 0, 'f', 1);
+    }
+    return QObject::tr("Oben %1 mm · Abstand %2 mm · Unten %3 mm")
+        .arg(g.top, 0, 'f', 1)
+        .arg(g.step, 0, 'f', 2)
+        .arg(g.bottom, 0, 'f', 1);
+}
+
 void PickTool::paintOverlay(QPainter& p)
 {
     const Editor& ed = editor();
     const QTransform view = m_canvas.viewTransform();
     p.save();
+
+    // Grundlinienraster ziehen: Masse neben der Maus
+    if (m_drag == Drag::Baseline && m_baselineMoved) {
+        QFont f = m_canvas.font();
+        f.setPointSizeF(f.pointSizeF() * 0.9);
+        p.setFont(f);
+        const QString tip = baselineTip();
+        const QPointF at = m_canvas.toScreen(m_currentDoc) + QPointF(14, -10);
+        QRectF box = QFontMetricsF(f).boundingRect(tip).adjusted(-4, -2, 4, 2);
+        box.moveTopLeft(QPointF(std::min(at.x(), m_canvas.width() - box.width() - 4), at.y() - box.height()));
+        p.setPen(Qt::NoPen);
+        p.setBrush(QColor(255, 255, 225));
+        p.drawRect(box);
+        p.setPen(QColor(0x10, 0x30, 0x90));
+        p.drawText(box, Qt::AlignCenter, tip);
+    }
 
     // Fadenkreuz über die ganze Zeichenfläche (Optionen > Hilfsmittel 'Auswahl')
     if (Options::instance().flag(QStringLiteral("ws/tools/pick/crosshair")) && !std::isnan(m_hover.x())) {

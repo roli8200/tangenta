@@ -30,6 +30,9 @@
 #include "ColorPalette.h"
 
 #include <QButtonGroup>
+#include <QScrollArea>
+#include <QScrollBar>
+#include <QWheelEvent>
 #include <QComboBox>
 #include <QDoubleSpinBox>
 #include <QHash>
@@ -98,17 +101,72 @@ double normalizedCcw(double clockwise)
 
 } // namespace
 
+namespace {
+
+// Hält die Felder der Leiste. Passen sie nicht in die Fensterbreite, lassen sie sich seitlich
+// verschieben (Rollbalken, Mausrad), statt das Hauptfenster über den Bildschirm hinaus zu
+// verbreitern: die Mindestbreite der Leiste ist sonst die Summe aller Felder.
+class BarScroller final : public QScrollArea {
+public:
+    explicit BarScroller(QWidget* parent) : QScrollArea(parent)
+    {
+        setFrameShape(QFrame::NoFrame);
+        setWidgetResizable(true);
+        setVerticalScrollBarPolicy(Qt::ScrollBarAlwaysOff);
+        setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+        setSizePolicy(QSizePolicy::Expanding, QSizePolicy::Fixed);
+        viewport()->setAutoFillBackground(false);
+    }
+    QSize sizeHint() const override { return {widget() ? widget()->sizeHint().width() : 100, barHeight()}; }
+    QSize minimumSizeHint() const override { return {80, barHeight()}; }
+
+protected:
+    void resizeEvent(QResizeEvent* e) override
+    {
+        QScrollArea::resizeEvent(e);
+        // Rollbalken erscheint oder verschwindet: Höhe anpassen, damit nichts abgeschnitten wird
+        const bool overflow = widget() && widget()->minimumSizeHint().width() > width();
+        if (overflow != m_overflow) {
+            m_overflow = overflow;
+            updateGeometry();
+        }
+    }
+    void wheelEvent(QWheelEvent* e) override
+    {
+        QScrollBar* bar = horizontalScrollBar();
+        const int delta = e->angleDelta().y() != 0 ? e->angleDelta().y() : e->angleDelta().x();
+        bar->setValue(bar->value() - delta);
+        e->accept();
+    }
+
+private:
+    int barHeight() const
+    {
+        if (!widget())
+            return 0;
+        const int content = std::max(widget()->minimumSizeHint().height(), widget()->minimumHeight());
+        return content + (m_overflow ? horizontalScrollBar()->sizeHint().height() : 0);
+    }
+    bool m_overflow = false;
+};
+
+} // namespace
+
 PropertyBar::PropertyBar(Editor& editor, Canvas& canvas, QWidget* parent)
     : QToolBar(tr("Eigenschaftsleiste"), parent), m_editor(editor), m_canvas(canvas)
 {
     setObjectName(QStringLiteral("propertyBar"));
     setMovable(false);
     setIconSize(QSize(20, 20));
-    m_frame = new QWidget(this);
+    auto* scroller = new BarScroller(this);
+    m_frame = new QWidget(scroller);
+    m_frame->setAutoFillBackground(false);
     auto* frameLayout = new QHBoxLayout(m_frame);
     frameLayout->setContentsMargins(0, 0, 0, 0);
     frameLayout->setSpacing(0);
-    addWidget(m_frame);
+    scroller->setWidget(m_frame);
+    m_scroller = scroller;
+    addWidget(scroller);
 
     // Neu aufbauen nur, wenn sich die Zusammensetzung der Leiste ändert; sonst nur die Werte
     // auffrischen. Der Aufbau kostet ein Vielfaches und fiele sonst bei jedem Klick an.
@@ -254,6 +312,7 @@ void PropertyBar::rebuild()
     m_host->show();
     // Die Leiste behält ihre grösste Höhe, sonst springt die Zeichenfläche bei jedem Wechsel
     m_frame->setMinimumHeight(std::max(m_frame->minimumHeight(), m_host->sizeHint().height()));
+    m_scroller->updateGeometry();
     refresh();
 }
 
@@ -2195,7 +2254,10 @@ void PropertyBar::buildTextSection()
     size->setToolTip(tr("Schriftgrösse in Punkt"));
     size->setEditable(true);
     size->setInsertPolicy(QComboBox::NoInsert);
-    size->setFixedWidth(72);
+    // Breite aus der Schrift (Oberflächengrösse, Systemskalierung): "1234.5 pt" plus Pfeil
+    size->setSizeAdjustPolicy(QComboBox::AdjustToMinimumContentsLengthWithIcon);
+    size->setMinimumContentsLength(8);
+    size->setSizePolicy(QSizePolicy::Fixed, QSizePolicy::Fixed);
     for (int pt : {6, 7, 8, 9, 10, 11, 12, 14, 16, 18, 20, 24, 28, 32, 36, 40, 48, 60, 72, 96, 120, 150, 200})
         size->addItem(QStringLiteral("%1 pt").arg(pt), double(pt));
     m_row->addWidget(size);
@@ -2261,6 +2323,17 @@ void PropertyBar::buildTextSection()
             m_editor.setTextHyphenation(on);
         }
     });
+    QToolButton* gridAlign = addButton(QStringLiteral("baseline-grid"), tr("Am Grundlinienraster ausrichten"), {});
+    gridAlign->setCheckable(true);
+    connect(gridAlign, &QToolButton::clicked, this, [this](bool on) {
+        TextTool& tool = m_canvas.textTool();
+        if (tool.editing()) {
+            tool.setFollowsBaselineGrid(on);
+            m_canvas.setFocus();
+        } else {
+            m_editor.setTextBaselineGrid(on);
+        }
+    });
 
     m_refreshers.append([=, this] {
         const CharFormat f = format();
@@ -2285,14 +2358,20 @@ void PropertyBar::buildTextSection()
             align = texts.first()->paragraphs().first().align;
         bool paragraphText = tool.editing() && tool.editingKind() == TextObject::Kind::Paragraph;
         bool hyphenOn = tool.editing() && tool.hyphenate();
+        bool gridOn = tool.editing() && tool.followsBaselineGrid();
         for (const TextObject* t : texts) {
             if (!tool.editing() && t->kind() == TextObject::Kind::Paragraph) {
                 paragraphText = true;
                 hyphenOn = hyphenOn || t->hyphenate();
+                gridOn = gridOn || t->followsBaselineGrid();
             }
         }
         hyphen->setEnabled(paragraphText);
         hyphen->setChecked(paragraphText && hyphenOn);
+        // Nur wirksam, wenn das Dokument Mengentext am Raster ausrichtet
+        const bool gridActive = Options::instance().flag(QStringLiteral("doc/grid/baseline/text"));
+        gridAlign->setEnabled(paragraphText && gridActive);
+        gridAlign->setChecked(paragraphText && gridOn);
         const QSignalBlocker block(alignGroup);
         for (QAbstractButton* b : alignGroup->buttons())
             b->setEnabled(hasParagraph);

@@ -96,6 +96,12 @@ bool exportEps(const Canvas& canvas, const QString& path, const ExportOptions& o
 QByteArray areaDxf(const Canvas& canvas, const ExportOptions& options, QList<std::pair<QString, QImage>>* images = nullptr,
                    const QString& imageBaseName = QString());
 bool exportDxf(const Canvas& canvas, const QString& path, const ExportOptions& options, QString* error = nullptr);
+// CDR in Version 16 (X6, Standard) oder 13 (X3): Kurven mit Füllung (einfarbig, Verlauf) und Kontur,
+// je Objekt eine Gruppe, Ebenen wie im Dokument. Ganze Seite: alle Seiten; Auswahl oder Ausschnitt:
+// nur diese. Durchsicht, Mischmodi und Bilder fehlen noch.
+QByteArray areaCdr(const Canvas& canvas, const ExportOptions& options, QString* error = nullptr, bool version13 = false);
+bool exportCdr(const Canvas& canvas, const QString& path, const ExportOptions& options, QString* error = nullptr,
+               bool version13 = false);
 // Umriss der Auswahl als eine Fläche in mm (Konturen als Flächen, Überlappungen vereinigt) – für
 // den Export als Schriftzeichen
 QPainterPath selectionOutline(const Canvas& canvas, const ExportOptions& options);

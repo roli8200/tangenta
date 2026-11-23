@@ -1,6 +1,7 @@
 #include "Output.h"
 
 #include "Canvas.h"
+#include "CdrExport.h"
 #include "DrawObject.h"
 #include "CurveObject.h"
 #include "Document.h"
@@ -1332,6 +1333,111 @@ bool exportDxf(const Canvas& canvas, const QString& path, const ExportOptions& o
             setError(error, QObject::tr("%1 konnte nicht gespeichert werden.").arg(name));
             return false;
         }
+    return true;
+}
+
+QByteArray areaCdr(const Canvas& canvas, const ExportOptions& options, QString* error, bool version13)
+{
+    // Ganze Seiten: alle Seiten des Dokuments; Auswahl oder Ausschnitt: nur diese Seite
+    const Document& document = canvas.editor().document();
+    const bool allPages = options.only.isEmpty() && options.area.isEmpty();
+    QList<int> pages;
+    if (allPages)
+        for (int i = 0; i < document.pageCount(); ++i)
+            pages << i;
+    else
+        pages << options.page;
+    const QRectF firstArea = exportArea(canvas, options);
+    const double ptPerMm = 72.0 / 25.4;
+    const QTransform toMm = QTransform::fromScale(1.0 / ptPerMm, 1.0 / ptPerMm);
+    cdr::Writer w(firstArea.size(), version13 ? cdr::Writer::Version::X3 : cdr::Writer::Version::X6);
+    for (int pageIndex : std::as_const(pages)) {
+        ExportOptions pageOptions = options;
+        pageOptions.page = pageIndex;
+        const QRectF area = allPages ? QRectF(QPointF(0, 0), firstArea.size()) : firstArea;
+        const QSizeF size(area.width() * ptPerMm, area.height() * ptPerMm);
+        w.beginPage();
+        // Ebenen der Hauptseite und der Seite; jedes Objekt wird eine Gruppe aus dem, was es zeichnet
+        for (const Page* page : {&document.masterPage(), &document.page(pageIndex)}) {
+            for (int l = 0; l < page->childCount(); ++l) {
+                const auto* layer = node_cast<Layer>(page->child(l));
+                if (!layer || !layer->visible() || !layer->printable())
+                    continue;
+                w.beginLayer(layer->name());
+                for (int i = 0; i < layer->childCount(); ++i) {
+                    const NodeId id = layer->child(i)->id();
+                    if (!options.only.isEmpty() && !options.only.contains(id))
+                        continue;
+                    ExportOptions part = pageOptions;
+                    part.only = {id};
+                    VectorRecorder recorder(size, 72.0);
+                    {
+                        QPainter p(&recorder);
+                        renderArea(canvas, p, part, area, ptPerMm, false);
+                    }
+                    w.beginGroup();
+                    for (const RecordedItem& item : recorder.items()) {
+                        if (item.kind != RecordedItem::Kind::Path || item.opacity <= 0.0)
+                            continue;
+                        std::optional<QBrush> fill;
+                        if (item.fill && item.fill->style() != Qt::NoBrush) {
+                            QBrush b = *item.fill;
+                            if (!b.gradient() && b.style() != Qt::SolidPattern)
+                                b = QBrush(b.color()); // Muster: Grundfarbe
+                            b.setTransform(b.transform() * toMm);
+                            fill = b;
+                        }
+                        std::optional<QPen> stroke;
+                        if (item.stroke && item.stroke->style() != Qt::NoPen) {
+                            QPen pen = *item.stroke;
+                            pen.setWidthF(pen.isCosmetic() ? 0.0 : pen.widthF() / ptPerMm);
+                            stroke = pen;
+                        }
+                        QPainterPath path = toMm.map(item.path);
+                        if (item.clip) {
+                            const QPainterPath clip = toMm.map(*item.clip);
+                            if (stroke && stroke->widthF() > 0) {
+                                // Beschnittene Kontur als Fläche
+                                QPainterPathStroker stroker(*stroke);
+                                QPainterPath outline = stroker.createStroke(path);
+                                outline.setFillRule(Qt::WindingFill);
+                                w.addPath(outline.intersected(clip), QBrush(stroke->color()), std::nullopt);
+                                stroke.reset();
+                            }
+                            path = path.intersected(clip);
+                        }
+                        w.addPath(path, fill, stroke);
+                    }
+                    w.endGroup();
+                }
+            }
+        }
+    }
+    // Vorschau der ersten Seite
+    ExportOptions previewOptions = options;
+    previewOptions.page = pages.first();
+    const double previewScale = 96.0 / std::max(firstArea.width(), firstArea.height());
+    QImage preview(std::max(1, int(firstArea.width() * previewScale)), std::max(1, int(firstArea.height() * previewScale)), QImage::Format_ARGB32_Premultiplied);
+    preview.fill(Qt::white);
+    {
+        QPainter p(&preview);
+        p.setRenderHint(QPainter::Antialiasing);
+        renderArea(canvas, p, previewOptions, firstArea, previewScale, true);
+    }
+    w.setPreview(preview);
+    return w.finish(error);
+}
+
+bool exportCdr(const Canvas& canvas, const QString& path, const ExportOptions& options, QString* error, bool version13)
+{
+    const QByteArray data = areaCdr(canvas, options, error, version13);
+    if (data.isEmpty())
+        return false;
+    QFile f(path);
+    if (!f.open(QIODevice::WriteOnly) || f.write(data) < 0) {
+        setError(error, f.errorString());
+        return false;
+    }
     return true;
 }
 

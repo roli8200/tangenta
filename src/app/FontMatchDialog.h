@@ -13,9 +13,9 @@ class QPushButton;
 
 namespace vek {
 
-// Schriftersetzung nach dem PDF-Import (wie "Schriftersetzung"): für jede nicht
-// installierte Schrift die Vorschau aus den eingebetteten Umrissen, die ähnlichsten installierten
-// Schriften mit Übereinstimmung in Prozent, "Als Kurven" (genau wie im PDF) und Links zu
+// Schriftersetzung nach dem Import (PDF, CDR …): für jede nicht installierte Schrift die Vorschau
+// aus den eingebetteten Umrissen (falls vorhanden), die ähnlichsten installierten Schriften mit
+// Übereinstimmung in Prozent, "Als Kurven" (bei eingebetteten Umrissen) und Links zu
 // Google Fonts bzw. freien Gegenstücken. "Schriften neu einlesen" erkennt frisch installierte.
 class FontMatchDialog : public QDialog {
     Q_OBJECT

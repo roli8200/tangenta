@@ -85,6 +85,89 @@ if(KIND STREQUAL "cdr")
             "            spanProps.insert(\"fo:color\", m_ps.getRGBColorString(j.m_style.m_fillStyle.color1));
 ${outline}")
     endif()
+
+    # Effekte, eigene Stufe mit eigener Marke: ältere Build-Ordner haben die Grundanpassungen schon
+    # (PATCH_LEVEL in cdr.cmake erzwingt den erneuten Aufruf, dann kommen nur die neuen Stufen dazu)
+    file(READ ${f} text)
+    string(FIND "${text}" "TANGENTA-FX" done)
+    if(done EQUAL -1)
+        # Effekte. Transparenz (0x1f40): libcdr las nur eine Zahl, ab X6 meist 0 = Objekt unsichtbar.
+        # Der ganze Datensatz mit Verlauf, Anfassern und Mischmodus geht als tangenta:transparency-*
+        # an den Import.
+        set(p ${SOURCE}/src/lib/CDRParser.cpp)
+        set(c ${SOURCE}/src/lib/CDRContentCollector.cpp)
+        set(ch ${SOURCE}/src/lib/CDRContentCollector.h)
+        replace_region(${p} "void libcdr::CDRParser::readOpacity(" "void libcdr::CDRParser::readBmpf(" transparency-read.inc)
+        file(READ ${PATCHES}/transparency-types.inc trtypes)
+        file(READ ${PATCHES}/mesh-types.inc meshtypes)
+        replace_line(${SOURCE}/src/lib/CDRCollector.h "class CDRCollector\n" "${trtypes}${meshtypes}class CDRCollector\n")
+        replace_line(${SOURCE}/src/lib/CDRCollector.h "  virtual void collectFillOpacity(double opacity) = 0;\n"
+            "  virtual void collectFillOpacity(double opacity) = 0;\n  virtual void collectTangentaTransparency(const TangentaTransparency &) {}\n  virtual void collectTangentaMesh(const TangentaMesh &) {}\n  virtual void collectTangentaClipList(unsigned level) { collectVect(level); }\n  virtual void collectTangentaClip(unsigned) {}\n")
+        replace_line(${ch} "  void collectFillOpacity(double opacity) override;\n"
+            "  void collectFillOpacity(double opacity) override;\n  void collectTangentaTransparency(const TangentaTransparency &t) override { m_tangentaTransparency = t; }\n  void collectTangentaMesh(const TangentaMesh &m) override { m_tangentaMesh = m; }\n  void collectTangentaClipList(unsigned level) override;\n  void collectTangentaClip(unsigned id) override;\n  void _tangentaStoreClip();\n  void _tangentaPushObject(const CDROutputElementList &outputElement);\n")
+        replace_line(${ch} "  double m_fillOpacity;\n"
+            "  double m_fillOpacity;\n  TangentaTransparency m_tangentaTransparency;\n  TangentaMesh m_tangentaMesh;\n  unsigned m_tangentaClipLevel = 0;\n  unsigned m_tangentaClipId = 0;\n  std::stack<CDROutputElementList> m_tangentaClipStack;\n  std::queue<CDROutputElementList> m_tangentaClipQueue;\n  std::map<unsigned, std::vector<CDROutputElementList>> m_tangentaClips;\n")
+        replace_line(${c} "#include \"CDRContentCollector.h\"\n" "#include \"CDRContentCollector.h\"\n\n#include <cstdlib>\n")
+        replace_line(${c} "  m_fillOpacity = 1.0;\n" "  m_fillOpacity = 1.0;\n  m_tangentaTransparency = TangentaTransparency();\n  m_tangentaMesh = TangentaMesh();\n")
+        file(READ ${PATCHES}/mesh-output.inc meshout)
+        file(READ ${PATCHES}/transparency-output.inc trout)
+        replace_line(${c} "  if (m_fillOpacity < 1.0)\n    propList.insert(\"draw:opacity\", m_fillOpacity, librevenge::RVNG_PERCENT);\n"
+            "  if (m_fillOpacity < 1.0)\n    propList.insert(\"draw:opacity\", m_fillOpacity, librevenge::RVNG_PERCENT);\n${meshout}${trout}")
+        # Bilder bekamen keinen eigenen Stil; ohne ihn fehlen Transparenz und Mischmodus
+        replace_line(${c} "    outputElement.addGraphicObject(propList);\n"
+            "    // TANGENTA: eigener Stil für das Bild (Transparenz, Mischmodus); sonst gälte der Stil des\n    // vorher gezeichneten Objekts\n    librevenge::RVNGPropertyList imageStyle;\n    _fillProperties(imageStyle);\n    outputElement.addStyle(imageStyle);\n    outputElement.addGraphicObject(propList);\n")
+        # Farbverläufe: konisch kam linear heraus, radial mit cy = cx, mehrfarbig radial als linear.
+        # Die Geometrie geht als tangenta:gradient-* an den Import.
+        file(READ ${PATCHES}/gradient-output.inc gradout)
+        replace_line(${c} "      case 2: // Gradient\n" "${gradout}")
+        # PowerClip: Die Inhalte stehen in einer clpt-Gruppe, die libcdr als Vektormuster verwarf;
+        # der Rahmen verweist mit 0x1f45 auf sie
+        replace_line(${p} "      else if (listType == CDR_FOURCC_vect || listType == CDR_FOURCC_clpt)\n        m_collector->collectVect(level);"
+            "      else if (listType == CDR_FOURCC_vect)\n        m_collector->collectVect(level);\n      else if (listType == CDR_FOURCC_clpt) // TANGENTA: Inhalte von PowerClips\n        m_collector->collectTangentaClipList(level);")
+        file(READ ${PATCHES}/mesh-read.inc meshread)
+        replace_line(${p} "    else if (argTypes[i] == 0x1f40)\n      readOpacity(input, length);"
+            "${meshread}    else if (argTypes[i] == 0x1f40)\n      readOpacity(input, length);\n    else if (argTypes[i] == 0x1f45) // TANGENTA: PowerClip-Rahmen, Nummer der Inhalte\n      m_collector->collectTangentaClip(readU32(input));")
+        replace_line(${p} "      else if (chunkType == 0x14) // Polygon\n        readPolygonCoords(input);"
+            "      else if (chunkType == 0x14) // Polygon\n        readPolygonCoords(input);\n      else if (chunkType == 0x20) // TANGENTA-FX: Umriss eines Objekts mit Maschenfüllung\n        readLineAndCurve(input);")
+        file(READ ${PATCHES}/powerclip-collect.inc clip)
+        replace_line(${c} "void libcdr::CDRContentCollector::collectVect(unsigned level)\n" "${clip}void libcdr::CDRContentCollector::collectVect(unsigned level)\n")
+        replace_line(${c} "  if (!outputElement.empty())\n  {\n    if (m_reverseOrder)\n      m_outputElementsStack->push(outputElement);\n    else\n      m_outputElementsQueue->push(outputElement);\n  }\n  m_currentTransforms.clear();"
+            "  if (!outputElement.empty())\n    _tangentaPushObject(outputElement); // TANGENTA: PowerClip\n  m_tangentaClipId = 0;\n  m_currentTransforms.clear();")
+        replace_line(${c} "  if (level <= m_currentVectLevel)\n  {\n    m_currentVectLevel = 0;"
+            "  if (m_tangentaClipLevel && m_spnd && m_groupLevels.empty()) // TANGENTA: PowerClip-Inhalte ablegen\n    _tangentaStoreClip();\n  if (level <= m_tangentaClipLevel)\n    m_tangentaClipLevel = 0;\n  if (level <= m_currentVectLevel)\n  {\n    m_currentVectLevel = 0;")
+    endif()
+
+    # Zeichen horizontal verschieben (JSON character.h_shift, Hundertstel der Schriftgrösse); damit
+    # stehen z. B. die Tageszahlen eines Kalenders als ein Text in ihren Spalten
+    file(READ ${f} text)
+    string(FIND "${text}" "TANGENTA-SHIFT" done)
+    if(done EQUAL -1)
+        replace_line(${SOURCE}/src/lib/CDRTypes.h "  int m_fontItalic = -1;\n  CDRStyle()"
+            "  int m_fontItalic = -1;\n  double m_hShift = 0.0;\n  bool m_hasHShift = false;\n  CDRStyle()")
+        replace_line(${SOURCE}/src/lib/CDRTypes.h "      m_fontItalic = override.m_fontItalic;"
+            "      m_fontItalic = override.m_fontItalic;\n    if (override.m_hasHShift)\n    {\n      m_hShift = override.m_hShift;\n      m_hasHShift = true;\n    }")
+        replace_line(${f} "      style.m_fontItalic = italic ? 1 : 0;\n"
+            "      style.m_fontItalic = italic ? 1 : 0;\n    const QJsonValue shift = value(\"character.h_shift\"); // TANGENTA-SHIFT\n    if (shift.isString() || shift.isDouble())\n    {\n      style.m_hShift = shift.isString() ? shift.toString().toDouble() : shift.toDouble();\n      style.m_hasHShift = true;\n    }\n")
+        replace_line(${SOURCE}/src/lib/CDRContentCollector.cpp "            spanProps.insert(\"fo:font-style\", \"italic\");\n"
+            "            spanProps.insert(\"fo:font-style\", \"italic\");\n          if (j.m_style.m_hShift != 0.0)\n            spanProps.insert(\"tangenta:h-shift\", j.m_style.m_hShift / 100.0);\n")
+    endif()
+
+    # Dasselbe in den Versionen 7 bis X5: Zeichenstil-Feld "Offset X", gleiche Einheit wie h_shift
+    file(READ ${f} text)
+    string(FIND "${text}" "TANGENTA-SHIFT2" done)
+    if(done EQUAL -1)
+        replace_line(${f} "        if (fl2&0x10) // Offset X\n          input->seek(4, librevenge::RVNG_SEEK_CUR);"
+            "        if (fl2&0x10) // Offset X (TANGENTA-SHIFT2: Hundertstel der Schriftgrösse)\n        {\n          style.m_hShift = (double)(int)readU32(input);\n          style.m_hasHShift = true;\n        }")
+    endif()
+
+    # Der letzte Lauf eines Textes bekam den Zeichenstil des vorletzten (Schrift, Farbe, Verschiebung)
+    set(s ${SOURCE}/src/lib/CDRStylesCollector.cpp)
+    file(READ ${s} text)
+    string(FIND "${text}" "TANGENTA-LASTRUN" done)
+    if(done EQUAL -1)
+        replace_line(${s} "  }\n  librevenge::RVNGString text;\n  if (!tmpTextData.empty())\n"
+            "  }\n  // TANGENTA-LASTRUN: Stil des letzten Laufs, nicht den des vorletzten\n  tmpCharStyle = defaultCharStyle;\n  {\n    auto last = styleOverrides.find(tmpCharDescription & 0xfe);\n    if (last != styleOverrides.end())\n      tmpCharStyle.overrideStyle(last->second);\n  }\n  librevenge::RVNGString text;\n  if (!tmpTextData.empty())\n")
+    endif()
 elseif(KIND STREQUAL "revenge")
     set(f ${SOURCE}/src/lib/RVNGBinaryData.cpp)
     file(READ ${f} text)

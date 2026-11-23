@@ -1,10 +1,12 @@
 #pragma once
 
+#include "BaselineGrid.h"
 #include "Editor.h"
 #include "SnapEngine.h"
 #include "Tool.h"
 
 #include <QHash>
+#include <QVariant>
 #include <QWidget>
 
 #include <array>
@@ -27,6 +29,7 @@ struct TextFrameGeometry {
     QTransform transform;
     QSizeF size;
     bool visible = true; // liegt auf der angezeigten Seite oder der Masterseite
+    QList<double> grid;  // Grundlinienraster lokal zum Rahmen (mm), leer = keins
 };
 
 class ArtisticMediaTool;
@@ -82,6 +85,9 @@ public:
     void notifyToolState() { emit toolStateChanged(); }
 
     double zoom() const { return m_zoom; }
+    // Zoom und Lage zum Merken je Dokumentfenster; ungültig = Seite einpassen
+    QVariant viewState() const { return QVariantList{m_zoom, m_origin}; }
+    void setViewState(const QVariant& state);
     QTransform viewTransform() const;
     QPointF toDoc(const QPointF& screen) const;
     QPointF toScreen(const QPointF& doc) const;
@@ -105,6 +111,11 @@ public:
     int guideAt(const QPointF& screen) const;
     // Sichtbares Stück einer Hilfslinie in Bildschirmkoordinaten, inset px vom Rand entfernt
     bool guideSegment(const Guide& guide, double inset, QPointF* a, QPointF* b) const;
+
+    // Grundlinienraster: Griffe links und rechts der Seite (Auswahlwerkzeug), Vorschau beim Ziehen
+    bool baselineGridShown() const;
+    int baselineHandleAt(const QPointF& screen) const;
+    void setBaselinePreview(std::optional<BaselineGrid> grid);
 
     // Farbe aus der Palette zuerst dem Werkzeug anbieten (z.B. Farbstopp der interaktiven Füllung)
     bool offerPaletteColor(const std::optional<Color>& color, bool fill);
@@ -171,6 +182,8 @@ signals:
     void contextMenuRequested(const QPoint& globalPos);
     // Rechtsklick auf eine Hilfslinie (Index in Editor::guides(), schon ausgewählt)
     void guideContextMenuRequested(int index, const QPoint& globalPos);
+    // Rechtsklick auf den Griff einer Grundlinie (Index im Grundlinienraster)
+    void baselineContextMenuRequested(int index, const QPoint& globalPos);
     // Mehrseitenansicht: Rechtsklick auf den Namen einer Seite (schon aktuell und markiert)
     void pageContextMenuRequested(int index, const QPoint& globalPos);
     // Doppelklick mit dem Auswahlwerkzeug auf ein Objekt mit eigenem Dialog (QR-Code)
@@ -308,6 +321,10 @@ private:
     QList<NodeId> m_renderFilter;
     void paintGuides(QPainter& p) const;
     void paintGrid(QPainter& p, const QRectF& pageRect) const;
+    void paintBaselineGrid(QPainter& p, const QRectF& pageRect) const;
+    void paintBaselineHandles(QPainter& p, const QRectF& pageRect) const;
+    // Lage der Griffe des Grundlinienrasters: rechte Kante der linken, linke Kante der rechten Griffe
+    std::pair<double, double> baselineHandleColumns(const QRectF& pageRect) const;
     Tool* tool() const { return m_tools[static_cast<std::size_t>(m_toolId)].get(); }
     double pixelsPerMm100() const;
     double physicalPixelsPerMm() const;
@@ -344,6 +361,7 @@ private:
     bool m_fitPending = true;
     bool m_guidesVisible = true;
     std::optional<Guide> m_guidePreview;
+    std::optional<BaselineGrid> m_baselinePreview;
     QList<NodeId> m_hidden;
     // Beim Rendern ausserhalb der Zeichenfläche: Bereich des Geräts statt rect()
     mutable std::optional<QRectF> m_renderArea;

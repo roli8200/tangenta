@@ -27,12 +27,19 @@ int frameOrder(int frame)
 
 } // namespace
 
-TextFlow::TextFlow(const QTextDocument& doc, const QList<QSizeF>& frames, bool wrap)
+TextFlow::TextFlow(const QTextDocument& doc, const QList<QSizeF>& frames, bool wrap, const QList<QList<double>>& grids)
 {
     const double u = TextObject::kUnitsPerMm;
     if (wrap) {
         for (const QSizeF& f : frames)
             m_frameSizes.emplace_back(std::max(1.0, f.width() * u), f.height() * u);
+        for (int i = 0; i < frames.size(); ++i) {
+            std::vector<double> lines;
+            for (const double y : grids.value(i))
+                lines.push_back(y * u);
+            std::sort(lines.begin(), lines.end());
+            m_grids.push_back(std::move(lines));
+        }
     }
     if (m_frameSizes.empty())
         m_frameSizes.emplace_back(kUnbounded, kUnbounded);
@@ -113,8 +120,17 @@ TextFlow::TextFlow(const QTextDocument& doc, const QList<QSizeF>& frames, bool w
                     while (frame < frameCount()) {
                         const QSizeF& size = m_frameSizes[std::size_t(frame)];
                         line.setLineWidth(std::max(1.0, size.width() - indent));
-                        if (y + line.height() <= size.height() + kFitTolerance) {
+                        // Grundlinienraster: Zeile auf die nächste Linie unter ihrer Grundlinie
+                        double top = y;
+                        if (std::size_t(frame) < m_grids.size()) {
+                            const std::vector<double>& grid = m_grids[std::size_t(frame)];
+                            const auto it = std::lower_bound(grid.begin(), grid.end(), y + line.ascent() - kFitTolerance);
+                            if (it != grid.end())
+                                top = *it - line.ascent();
+                        }
+                        if (top + line.height() <= size.height() + kFitTolerance) {
                             placed = frame;
+                            y = top;
                             break;
                         }
                         ++frame;

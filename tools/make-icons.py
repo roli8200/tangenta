@@ -508,6 +508,12 @@ ICONS = {
     'hyphenation': f'<path d="M3 15.5c0-2.6 1.4-4 3.4-4 1.9 0 3.1 1.3 3.1 3.6v4.4M9.5 15.6c-.5-.5-1.6-.7-2.7-.7-1.8 0-3 .9-3 2.3 0 1.2.9 2.1 2.4 2.1 1.4 0 2.6-.9 3.3-2" fill="none" stroke="{INK}" stroke-width="1.3"/>'
                    f'<path d="M11 14.5h3" stroke="#1f5fae" stroke-width="1.8"/>'
                    f'<path d="M15.5 8.5v11M15.5 15c.4-2 1.6-3.2 3.1-3.2 1.7 0 2.9 1.5 2.9 3.8s-1.2 3.9-2.9 3.9c-1.5 0-2.7-1.2-3.1-3.2" fill="none" stroke="{INK}" stroke-width="1.3"/>',
+    'bitmap-ai': f'<rect x="3" y="5" width="15" height="12" fill="#ffffff" {S}/>'
+                 f'<path d="M4.5 15.5l3.5-4.5 2.5 3 2-2 3 3.5z" fill="#1f5fae"/><circle cx="8" cy="8.5" r="1.3" fill="#e2740c"/>'
+                 f'<path d="M18.5 12.5l1 2.6 2.6 1-2.6 1-1 2.6-1-2.6-2.6-1 2.6-1z" fill="#e2740c" stroke="#ffffff" stroke-width="0.6"/>'
+                 f'<path d="M20.5 3.5l.5 1.3 1.3.5-1.3.5-.5 1.3-.5-1.3-1.3-.5 1.3-.5z" fill="#e2740c"/>',
+    'baseline-grid': f'<path d="M2.5 8.5h19M2.5 14h19M2.5 19.5h19" fill="none" stroke="#1f5fae" stroke-width="1" stroke-dasharray="1.5 1"/>'
+                     f'<path d="M4 5.5h13M4 11h16M4 16.5h10" fill="none" stroke="{INK}" stroke-width="2.6"/>',
     'doc-import': f'<path d="M5 3.5h9l4.5 4.5v12.5H5z" fill="url(#paper)" {S}/>'
                   f'<path d="M7.5 17l3-4 2 2.5 1.5-1.5 2.5 3z" fill="#1f5fae"/><circle cx="9.5" cy="10" r="1.3" fill="#e2740c"/>'
                   f'<path d="M15 12.5l5.5 0M18 10l2.5 2.5-2.5 2.5" fill="none" stroke="#1f5fae" stroke-width="1.6"/>',
@@ -593,6 +599,15 @@ ICONS = {
     'color-palettes': f'<rect x="3.5" y="3.5" width="8" height="8" fill="#e53935" {S}/><rect x="12.5" y="3.5" width="8" height="8" fill="#fdd835" {S}/>'
                       f'<rect x="3.5" y="12.5" width="8" height="8" fill="#43a047" {S}/><rect x="12.5" y="12.5" width="8" height="8" fill="#1e88e5" {S}/>',
 }
+
+
+# Menüsymbole (eigene Datei, gleicher Stil)
+import sys as _sys
+_sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from menu_icons import ICONS as _MENU_ICONS  # noqa: E402
+for _name in _MENU_ICONS:
+    assert _name not in ICONS, _name
+ICONS.update(_MENU_ICONS)
 
 
 def main():

@@ -61,12 +61,19 @@ NodeId topEditableLayer(const Page& page)
 Editor::Editor(QObject* parent)
     : QObject(parent)
 {
+    m_slots.emplace_back();
     setDocument(std::make_unique<Document>(), QString());
 }
 
 Editor::~Editor() = default;
 
 void Editor::setDocument(std::unique_ptr<Document> doc, const QString& filePath)
+{
+    m_slots[std::size_t(m_active)].view = QVariant();
+    install(std::move(doc), filePath);
+}
+
+void Editor::install(std::unique_ptr<Document> doc, const QString& filePath)
 {
     if (m_doc)
         m_doc->disconnect(this);
@@ -81,6 +88,53 @@ void Editor::setDocument(std::unique_ptr<Document> doc, const QString& filePath)
     emit documentReplaced();
     emit currentPageChanged(m_currentPage);
     emit selectionChanged();
+}
+
+void Editor::parkActive()
+{
+    DocumentSlot& slot = m_slots[std::size_t(m_active)];
+    m_doc->disconnect(this);
+    slot.filePath = m_filePath;
+    slot.page = m_currentPage;
+    slot.selection = m_selection;
+    slot.doc = std::move(m_doc);
+}
+
+void Editor::addDocument(std::unique_ptr<Document> doc, const QString& filePath)
+{
+    parkActive();
+    m_slots.emplace_back();
+    m_active = int(m_slots.size()) - 1;
+    install(std::move(doc), filePath);
+}
+
+void Editor::activateDocument(int index)
+{
+    if (index == m_active || index < 0 || index >= documentCount())
+        return;
+    parkActive();
+    m_active = index;
+    DocumentSlot& slot = m_slots[std::size_t(index)];
+    const int page = slot.page;
+    const QList<NodeId> selection = slot.selection;
+    install(std::move(slot.doc), slot.filePath);
+    if (page > 0 && page < m_doc->pageCount())
+        setCurrentPageIndex(page);
+    setSelection(selection);
+}
+
+void Editor::closeActiveDocument()
+{
+    if (documentCount() == 1) {
+        setDocument(std::make_unique<Document>(), QString());
+        return;
+    }
+    // Das ruhende Nachbardokument wird aktiv, erst danach fällt das alte weg
+    const int closing = m_active;
+    activateDocument(closing > 0 ? closing - 1 : 1);
+    m_slots.erase(m_slots.begin() + closing);
+    if (m_active > closing)
+        --m_active;
 }
 
 void Editor::onDocumentChanged()
@@ -629,23 +683,29 @@ void Editor::setObjectProperty(const QString& id, const QVariant& value, const Q
     tx.commit();
 }
 
-namespace {
+const QString& Editor::clipboardMime()
+{
+    static const QString mime = QStringLiteral("application/x-vektoreditor-objects");
+    return mime;
+}
 
-const QString kClipboardMime = QStringLiteral("application/x-vektoreditor-objects");
-
-} // namespace
-
-void Editor::copySelection()
+QMimeData* Editor::selectionMimeData() const
 {
     const QList<NodeId> ids = topLevelSelection(true);
     if (ids.isEmpty())
-        return;
+        return nullptr;
     QJsonArray objects;
     for (NodeId id : ids)
         objects.append(serial::toJson(*m_doc->find(id), serial::Ids::Drop));
     auto* mime = new QMimeData;
-    mime->setData(kClipboardMime, QJsonDocument(objects).toJson(QJsonDocument::Compact));
-    QGuiApplication::clipboard()->setMimeData(mime);
+    mime->setData(clipboardMime(), QJsonDocument(objects).toJson(QJsonDocument::Compact));
+    return mime;
+}
+
+void Editor::copySelection()
+{
+    if (QMimeData* mime = selectionMimeData())
+        QGuiApplication::clipboard()->setMimeData(mime);
 }
 
 void Editor::cutSelection()
@@ -657,16 +717,19 @@ void Editor::cutSelection()
 bool Editor::canPaste()
 {
     const QMimeData* mime = QGuiApplication::clipboard()->mimeData();
-    return mime && mime->hasFormat(kClipboardMime);
+    if (!mime)
+        return false;
+    return mime->hasFormat(clipboardMime()) || mime->hasImage() || mime->hasFormat(QStringLiteral("image/png"))
+        || mime->hasFormat(QStringLiteral("image/svg+xml")) || mime->hasUrls() || !mime->text().trimmed().isEmpty();
 }
 
 void Editor::paste()
 {
     const QMimeData* mime = QGuiApplication::clipboard()->mimeData();
     const NodeId layer = activeLayer();
-    if (!mime || !mime->hasFormat(kClipboardMime) || layer == InvalidNodeId)
+    if (!mime || !mime->hasFormat(clipboardMime()) || layer == InvalidNodeId)
         return;
-    const QJsonArray objects = QJsonDocument::fromJson(mime->data(kClipboardMime)).array();
+    const QJsonArray objects = QJsonDocument::fromJson(mime->data(clipboardMime())).array();
     QList<NodeId> pasted;
     Transaction tx(*m_doc, tr("Einfügen"));
     for (const QJsonValue& v : objects) {
@@ -2938,6 +3001,28 @@ void Editor::setTextHyphenation(bool on)
     for (const TextObject* t : selectedTexts()) {
         if (!isLocked(t->id()) && t->kind() == TextObject::Kind::Paragraph && t->hyphenate() != on)
             tx.modify<TextObject>(t->id(), [on](TextObject& o) { o.setHyphenate(on); });
+    }
+    if (!tx.isEmpty())
+        tx.commit();
+}
+
+void Editor::setTextBaselineGrid(bool on)
+{
+    QList<NodeId> frames;
+    for (const TextObject* t : selectedTexts()) {
+        const QList<NodeId> chain = t->chain();
+        frames << (chain.isEmpty() ? QList<NodeId>{t->id()} : chain);
+    }
+    setTextBaselineGrid(frames, on);
+}
+
+void Editor::setTextBaselineGrid(const QList<NodeId>& frames, bool on)
+{
+    Transaction tx(*m_doc, tr("Am Grundlinienraster ausrichten"));
+    for (NodeId id : frames) {
+        const auto* t = m_doc->findAs<TextObject>(id);
+        if (t && !isLocked(id) && t->kind() == TextObject::Kind::Paragraph && t->followsBaselineGrid() != on)
+            tx.modify<TextObject>(id, [on](TextObject& o) { o.setFollowsBaselineGrid(on); });
     }
     if (!tx.isEmpty())
         tx.commit();

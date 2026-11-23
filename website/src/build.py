@@ -7,6 +7,7 @@ Vorlage hier, Texte je Sprache in i18n/<sprache>.py. Deutsch liegt im Wurzelordn
 Sprachen in en/, fr/ und it/. Alle Sprachen haben dieselben Seiten mit denselben Dateinamen, damit
 der Sprachwechsel immer auf die gleiche Seite führt.
 """
+import hashlib
 import html
 import importlib.util
 import json
@@ -15,22 +16,33 @@ import re
 from html.parser import HTMLParser
 from urllib.parse import urljoin
 
+from tutorials import VIDEOS
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 SITE = os.path.dirname(HERE)
 LANGS = ['de', 'en', 'fr', 'it']
-PAGES = ['index', 'features', 'ai', 'download']
+PAGES = ['index', 'features', 'tutorials', 'ai', 'download']
 DOMAIN = 'https://tangenta.ch'
 GITHUB = 'https://github.com/roli8200/tangenta'
 RELEASES = GITHUB + '/releases/latest'
 # Direkte Links auf die Dateien der aktuellen Version (GitHub ersetzt ~ im Namen durch .)
 ASSETS = GITHUB + '/releases/download/v{}/'
-VERSION = '0.91'
+VERSION = '0.92'
 DEBS = ['debian12', 'debian13', 'ubuntu24.04', 'ubuntu26.04']
 DEB_NAMES = {'debian12': 'Debian 12', 'debian13': 'Debian 13', 'ubuntu24.04': 'Ubuntu 24.04', 'ubuntu26.04': 'Ubuntu 26.04'}
 PUBLISHER = {'@type': 'Organization', 'name': 'Intersoft Networks', 'url': 'https://intersoft-networks.ch'}
 # Vorschaubild je Seite (Open Graph, Twitter, JSON-LD)
-OG_IMAGE = {'index': '01-hauptfenster.png', 'features': '06-andockfenster.png', 'ai': '02-ki-assistent.png',
-            'download': '01-hauptfenster.png'}
+OG_IMAGE = {'index': '01-hauptfenster.png', 'features': '06-andockfenster.png', 'tutorials': '01-hauptfenster.png',
+            'ai': '02-ki-assistent.png', 'download': '01-hauptfenster.png'}
+# Stand der Gestaltung im Link: Browser halten styles.css 7 Tage, eine Änderung soll sofort gelten
+CSS_VERSION = hashlib.sha256(open(os.path.join(SITE, 'styles.css'), 'rb').read()).hexdigest()[:10]
+SYSTEMS = 'Windows 10, Windows 11, macOS 13 or later, Debian 12, Debian 13, Ubuntu 24.04, Ubuntu 26.04'
+# Tutorials: Rubriken in dieser Reihenfolge; Videos und Vorschaubilder erzeugt web_tutorials.py (YouTube-Werkzeuge)
+CHANNEL = 'https://www.youtube.com/channel/UCaCO4A6aae508OXRuN7OF1g'
+CATEGORIES = ['basics', 'program', 'logos', 'patterns', 'lettering', 'photos', 'flyers']
+HOME_VIDEOS = ['33', '39', '40', '10']
+INTRO_VIDEO = '02'  # Player oben auf der Startseite
+EMBEDDED = {'31'}  # auf der Tutorials-Seite direkt abspielbar eingebettet
 
 
 def load(lang):
@@ -81,13 +93,20 @@ def json_ld(t, lang, page, title, description):
             '@type': 'SoftwareApplication', '@id': DOMAIN + '/#software', 'name': 'TANGENTA',
             'description': t['meta']['index'][1], 'applicationCategory': 'DesignApplication',
             'applicationSubCategory': 'Vector graphics editor',
-            'operatingSystem': 'Windows 10, Windows 11, Debian 12, Debian 13, Ubuntu 24.04, Ubuntu 26.04',
+            'operatingSystem': SYSTEMS,
             'softwareVersion': VERSION, 'license': 'https://www.gnu.org/licenses/gpl-3.0.html',
             'isAccessibleForFree': True, 'downloadUrl': GITHUB + f'/releases/tag/v{VERSION}', 'codeRepository': GITHUB,
             'screenshot': [f'{DOMAIN}/img/{n}' for n in ('01-hauptfenster.png', '02-ki-assistent.png', '03-supertrace.png')],
             'image': f'{DOMAIN}/img/tangenta-256.png', 'inLanguage': LANGS, 'url': page_url(lang, 'index'),
             'offers': {'@type': 'Offer', 'price': '0', 'priceCurrency': 'CHF'},
             'publisher': {'@id': PUBLISHER['url'] + '/#organization'}})
+    if page == 'tutorials':
+        graph.append({'@type': 'ItemList', 'name': title, 'itemListElement': [
+            {'@type': 'ListItem', 'position': i + 1, 'item': {
+                '@type': 'VideoObject', 'name': video_title(v, lang), 'description': video_title(v, lang),
+                'thumbnailUrl': f'{DOMAIN}/img/tutorials/{video_thumb(v, lang)}', 'uploadDate': v['date'],
+                'duration': 'PT{}M{}S'.format(*v['duration'].split(':')), 'url': video_url(v), 'inLanguage': 'de'}}
+            for i, v in enumerate(VIDEOS)]})
     data = json.dumps({'@context': 'https://schema.org', '@graph': graph}, ensure_ascii=False, indent=1)
     return '<script type="application/ld+json">\n' + data.replace('</', '<\\/') + '\n</script>'
 
@@ -125,7 +144,7 @@ def head(t, lang, page, title, description):
   <meta name="twitter:image" content="{image}">
   <link rel="icon" href="{p}img/favicon.png">
   <link rel="apple-touch-icon" href="{p}img/tangenta-256.png">
-  <link rel="stylesheet" href="{p}styles.css">
+  <link rel="stylesheet" href="{p}styles.css?v={CSS_VERSION}">
   {json_ld(t, lang, page, title, description)}
 </head>
 <body>
@@ -134,7 +153,7 @@ def head(t, lang, page, title, description):
 
 def nav(t, lang, page):
     n = t['nav']
-    links = [('features', n['features']), ('ai', n['ai']), ('download', n['download'])]
+    links = [('features', n['features']), ('tutorials', n['tutorials']), ('ai', n['ai']), ('download', n['download'])]
     items = ''.join(f'<a href="{rel(lang, lang, k)}"{" aria-current=\"page\"" if k == page else ""}>{v}</a>' for k, v in links)
     items += f'<a href="{GITHUB}">GitHub</a>'
     langs = ''.join(f'<a href="{rel(lang, l, page)}" hreflang="{l}" lang="{l}"{" aria-current=\"true\"" if l == lang else ""}>'
@@ -158,8 +177,8 @@ def footer(t, lang):
       <a class="brand" href="{r('index')}"><img src="{prefix(lang)}img/tangenta.svg" alt="" width="28" height="28"><span>TANGENTA</span></a>
       <p>{f['claim']}</p>
     </div>
-    <div><h4>{f['program']}</h4><a href="{r('features')}">{t['nav']['features']}</a><a href="{r('ai')}">{t['nav']['ai']}</a><a href="{r('download')}">{t['nav']['download']}</a></div>
-    <div><h4>{f['project']}</h4><a href="{GITHUB}">GitHub</a><a href="{GITHUB}/blob/main/BUILD.md">{f['build']}</a><a href="{GITHUB}/issues">{f['issues']}</a></div>
+    <div><h4>{f['program']}</h4><a href="{r('features')}">{t['nav']['features']}</a><a href="{r('tutorials')}">{t['nav']['tutorials']}</a><a href="{r('ai')}">{t['nav']['ai']}</a><a href="{r('download')}">{t['nav']['download']}</a></div>
+    <div><h4>{f['project']}</h4><a href="{GITHUB}">GitHub</a><a href="{CHANNEL}">YouTube</a><a href="{GITHUB}/blob/main/BUILD.md">{f['build']}</a><a href="{GITHUB}/issues">{f['issues']}</a></div>
     <div><h4>{f['publisher']}</h4><a href="https://intersoft-networks.ch">Intersoft Networks</a><a href="{GITHUB}/blob/main/LICENSE">{f['license']}</a></div>
   </div>
   <p class="fine">© 2026 Intersoft Networks · {f['fine']}</p>
@@ -185,6 +204,40 @@ def ticks(items):
 
 def faq(items):
     return ''.join(f'<details><summary>{q}</summary><p>{a}</p></details>' for q, a in items)
+
+
+def video_title(v, lang):
+    return v['de'] if lang == 'de' else v['en']
+
+
+def video_thumb(v, lang):
+    return f"{v['nr']}-{'de' if lang == 'de' else 'en'}.webp"
+
+
+def video_url(v):
+    return f"https://www.youtube.com/watch?v={v['id']}"
+
+
+def video_link(lang, v):
+    """Vorschaubild mit Dauer als Link; für Bildschirmleser und Markdown zählt nur der Titel-Link."""
+    return (f'<a class="thumb" href="{video_url(v)}" tabindex="-1" aria-hidden="true">'
+            f'<img src="{prefix(lang)}img/tutorials/{video_thumb(v, lang)}" alt="" width="480" height="270" loading="lazy">'
+            f'<span class="dur">{v["duration"]}</span></a>')
+
+
+def video_card(lang, v):
+    return f'<article class="video">{video_link(lang, v)}<h3><a href="{video_url(v)}">{esc(video_title(v, lang))}</a></h3></article>'
+
+
+def video(nr):
+    return next((v for v in VIDEOS if v['nr'] == nr), None)
+
+
+def youtube_player(v, lang, lazy=True):
+    """Klassisch eingebetteter YouTube-Player, startet erst auf Klick im Player."""
+    return (f'<div class="embed"><iframe src="https://www.youtube.com/embed/{v['id']}" title="{esc(video_title(v, lang))}"'
+            f'{' loading="lazy"' if lazy else ''} allow="accelerometer; clipboard-write; encrypted-media; gyroscope; '
+            f'picture-in-picture; web-share" referrerpolicy="strict-origin-when-cross-origin" allowfullscreen></iframe></div>')
 
 
 def asset(name):
@@ -263,12 +316,9 @@ def home(t, lang):
       <a class="btn btn-primary" href="{r('download')}">{hero['cta']}</a>
       <a class="btn btn-ghost" href="{GITHUB}">{hero['cta2']}</a>
     </div>
-    <p class="platforms">Windows 10 / 11 · Debian 12 / 13 · Ubuntu 24.04 / 26.04</p>
+    <p class="platforms">Windows 10 / 11 · macOS 13+ · Debian 12 / 13 · Ubuntu 24.04 / 26.04</p>
     <p class="note">{hero['note']}</p>
-    <figure class="window">
-      <div class="window-bar"><i></i><i></i><i></i><span>{hero['window']}</span></div>
-      <img src="{prefix(lang)}img/01-hauptfenster.png" alt="{esc(hero['alt'])}" loading="eager">
-    </figure>
+    <div class="hero-video">{youtube_player(video(INTRO_VIDEO), lang, lazy=False) if video(INTRO_VIDEO) else ''}</div>
   </section>
 
   <div class="ticker" aria-hidden="true"><div class="ticker-track">{ticker}</div></div>
@@ -342,15 +392,23 @@ def home(t, lang):
     <div class="cols4">{who}</div>
   </section>
 
+  <section class="section">
+    {label('09', h['tutorials']['label'])}
+    <h2>{h['tutorials']['h2']}</h2>
+    <p class="sub">{h['tutorials']['sub'].format(n=len(VIDEOS))}</p>
+    <div class="videos">{''.join(video_card(lang, v) for v in map(video, HOME_VIDEOS) if v)}</div>
+    <p class="center"><a class="more" href="{r('tutorials')}">{h['tutorials']['more']} →</a></p>
+  </section>
+
   <section id="download" class="section">
-    {label('09', t['nav']['download'])}
+    {label('10', t['nav']['download'])}
     <h2>{h['download_h2']}</h2>
     {downloads_cards(t, lang)}
     <p class="center"><a class="more" href="{r('download')}">{h['download_more']} →</a></p>
   </section>
 
   <section id="faq" class="section narrow">
-    {label('10', h['faq']['label'])}
+    {label('11', h['faq']['label'])}
     <h2>{h['faq']['h2']}</h2>
     {faq(h['faq']['items'])}
   </section>
@@ -388,6 +446,11 @@ def features(t, lang):
     keys = ''.join(f'<tr><td>{k}</td><td>{v}</td></tr>' for k, v in f['shortcuts']['rows'])
     fmt_in = ''.join(f'<span>{x}</span>' for x in f['formats']['import'])
     fmt_out = ''.join(f'<span>{x}</span>' for x in f['formats']['export'])
+    detail = ''
+    for title, text, nr in f['detail']['cards']:
+        v = video(nr)
+        watch = f'<a class="more" href="{video_url(v)}">{f["detail"]["watch"]} ({v["duration"]}) →</a>' if v else ''
+        detail += f'<article class="card feature">{video_link(lang, v) if v else ""}<h3>{title}</h3><p>{text}</p>{watch}</article>'
     return f'''<main id="top">
   {page_hero(f['hero'])}
 
@@ -395,9 +458,17 @@ def features(t, lang):
     <div class="grid3">{groups}</div>
   </section>
 
+  <section class="section">
+    {label('01', f['detail']['label'])}
+    <h2>{f['detail']['h2']}</h2>
+    <p class="sub">{f['detail']['sub']}</p>
+    <div class="grid3">{detail}</div>
+    <p class="center"><a class="more" href="{rel(lang, lang, 'tutorials')}">{f['detail']['more']} →</a></p>
+  </section>
+
   <section class="section split">
     <div class="split-text">
-      {label('01', f['docks']['label'])}
+      {label('02', f['docks']['label'])}
       <h2>{f['docks']['h2']}</h2>
       <p class="sub">{f['docks']['sub']}</p>
       {ticks(f['docks']['ticks'])}
@@ -407,7 +478,7 @@ def features(t, lang):
 
   <section class="section split reverse">
     <div class="split-text">
-      {label('02', f['options']['label'])}
+      {label('03', f['options']['label'])}
       <h2>{f['options']['h2']}</h2>
       <p class="sub">{f['options']['sub']}</p>
     </div>
@@ -415,7 +486,7 @@ def features(t, lang):
   </section>
 
   <section class="section">
-    {label('03', f['formats']['label'])}
+    {label('04', f['formats']['label'])}
     <h2>{f['formats']['h2']}</h2>
     <div class="downloads">
       <article class="card"><h3>{f['formats']['import_h']}</h3><div class="chips plain">{fmt_in}</div></article>
@@ -425,12 +496,44 @@ def features(t, lang):
   </section>
 
   <section class="section narrow">
-    {label('04', f['shortcuts']['label'])}
+    {label('05', f['shortcuts']['label'])}
     <h2>{f['shortcuts']['h2']}</h2>
     <p class="sub">{f['shortcuts']['sub']}</p>
     <table class="table"><thead><tr><th>{f['shortcuts']['th'][0]}</th><th>{f['shortcuts']['th'][1]}</th></tr></thead><tbody>{keys}</tbody></table>
   </section>
 
+  {final(t, lang)}
+</main>
+'''
+
+
+def tutorials_page(t, lang):
+    tu = t['tutorials']
+    cats = [c for c in CATEGORIES if any(v['cat'] == c for v in VIDEOS)]
+    jump = ' '.join(f'<a href="#{c}">{tu["cats"][c][0]}</a>' for c in cats)
+    sections = ''
+    for i, c in enumerate(cats):
+        name, h2, sub = tu['cats'][c]
+        # Eingebettete Videos gross und direkt abspielbar, die übrigen als Kacheln
+        players = ''.join(f'''
+    {youtube_player(v, lang)}
+    <h3 class="embed-title"><a href="{video_url(v)}">{esc(video_title(v, lang))}</a> <span>{v['duration']}</span></h3>'''
+                          for v in VIDEOS if v['cat'] == c and v['nr'] in EMBEDDED)
+        cards = ''.join(video_card(lang, v) for v in VIDEOS if v['cat'] == c and v['nr'] not in EMBEDDED)
+        sections += f'''
+  <section id="{c}" class="section">
+    {label(f'{i + 1:02d}', name)}
+    <h2>{h2}</h2>
+    <p class="sub">{sub}</p>{players}
+    {f'<div class="videos">{cards}</div>' if cards else ''}
+  </section>
+'''
+    hero = dict(tu['hero'], lead=tu['hero']['lead'].format(n=len(VIDEOS)))
+    return f'''<main id="top">
+  {page_hero(hero)}
+  <nav class="jump" aria-label="{tu['jump']}">{jump}</nav>
+  <p class="audio-note">{tu['audio']} <a class="more" href="{CHANNEL}">{tu['channel']} →</a></p>
+{sections}
   {final(t, lang)}
 </main>
 '''
@@ -601,7 +704,7 @@ class Markdown(HTMLParser):
 
     def handle_starttag(self, tag, attrs):
         a = dict(attrs)
-        if self.skip or a.get('aria-hidden') == 'true' or a.get('class') == 'window-bar':
+        if self.skip or a.get('aria-hidden') == 'true' or a.get('class') == 'window-bar' or tag in ('script', 'style'):
             if tag not in ('img', 'br', 'i'):
                 self.skip += 1
             return
@@ -722,7 +825,7 @@ def llms_txt(texts):
     lines = ['# TANGENTA', '', f'> {de["meta"]["index"][1]}', '',
              f'TANGENTA ist freie Software (GPLv3) von Intersoft Networks (https://intersoft-networks.ch, '
              f'IT-Dienstleister in Frauenfeld), Version {VERSION}, '
-             'für Windows 10/11, Debian 12/13 und Ubuntu 24.04/26.04. Quellcode und Downloads: '
+             'für Windows 10/11, macOS 13 und neuer, Debian 12/13 und Ubuntu 24.04/26.04. Quellcode und Downloads: '
              f'{GITHUB}. Die Seiten gibt es auf Deutsch, Englisch, Französisch und Italienisch; '
              'jede Seite liegt zusätzlich als Markdown unter ihrer Adresse mit angehängtem .md.', '']
     for l in LANGS:
@@ -733,7 +836,8 @@ def llms_txt(texts):
     lines += ['## Optional', '',
               f'- [Quellcode auf GitHub]({GITHUB}): Programm, Tests und Bauanleitung',
               f'- [Bauanleitung]({GITHUB}/blob/main/BUILD.md): eigene Build-Umgebung für Windows und Linux',
-              f'- [Neueste Version]({RELEASES}): Setup, MSI, .deb-Pakete und Flatpak', '']
+              f'- [Neueste Version]({RELEASES}): Setup, MSI, Disk-Image für macOS, .deb-Pakete und Flatpak',
+              f'- [Tutorial-Videos auf YouTube]({CHANNEL}): {len(VIDEOS)} Anleitungen, gesprochen auf Deutsch, mit englischer Tonspur', '']
     return '\n'.join(lines)
 
 
@@ -773,7 +877,7 @@ def main():
         t = texts[l]
         out = SITE if l == 'de' else os.path.join(SITE, l)
         os.makedirs(out, exist_ok=True)
-        bodies = {'index': home, 'features': features, 'ai': ai_page, 'download': download_page}
+        bodies = {'index': home, 'features': features, 'tutorials': tutorials_page, 'ai': ai_page, 'download': download_page}
         for page in PAGES:
             title, description = t['meta'][page]
             body = bodies[page](t, l)

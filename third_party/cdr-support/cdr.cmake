@@ -20,7 +20,7 @@ FetchContent_Declare(vek_libcdr
     URL https://dev-www.libreoffice.org/src/libcdr/libcdr-0.1.9.tar.xz
     URL_HASH SHA256=f7bb6abdd7f226820f288a93dd8d07759833c0250d9e202af90f9b312c4665a3
     DOWNLOAD_EXTRACT_TIMESTAMP TRUE
-    PATCH_COMMAND ${CMAKE_COMMAND} -DSOURCE=<SOURCE_DIR> -DKIND=cdr -P ${CDR_SUPPORT}/patches/patch.cmake
+    PATCH_COMMAND ${CMAKE_COMMAND} -DSOURCE=<SOURCE_DIR> -DKIND=cdr -DPATCH_LEVEL=5 -P ${CDR_SUPPORT}/patches/patch.cmake
     SOURCE_SUBDIR nicht-mit-cmake-bauen)
 FetchContent_MakeAvailable(vek_lcms2 vek_librevenge vek_libcdr)
 

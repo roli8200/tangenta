@@ -21,6 +21,16 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://tangenta.ch/tutorials.html</loc>
+    <xhtml:link rel="alternate" hreflang="de" href="https://tangenta.ch/tutorials.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://tangenta.ch/en/tutorials.html"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://tangenta.ch/fr/tutorials.html"/>
+    <xhtml:link rel="alternate" hreflang="it" href="https://tangenta.ch/it/tutorials.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://tangenta.ch/tutorials.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://tangenta.ch/ai.html</loc>
     <xhtml:link rel="alternate" hreflang="de" href="https://tangenta.ch/ai.html"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://tangenta.ch/en/ai.html"/>
@@ -57,6 +67,16 @@
     <xhtml:link rel="alternate" hreflang="fr" href="https://tangenta.ch/fr/features.html"/>
     <xhtml:link rel="alternate" hreflang="it" href="https://tangenta.ch/it/features.html"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://tangenta.ch/features.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://tangenta.ch/en/tutorials.html</loc>
+    <xhtml:link rel="alternate" hreflang="de" href="https://tangenta.ch/tutorials.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://tangenta.ch/en/tutorials.html"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://tangenta.ch/fr/tutorials.html"/>
+    <xhtml:link rel="alternate" hreflang="it" href="https://tangenta.ch/it/tutorials.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://tangenta.ch/tutorials.html"/>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>
@@ -101,6 +121,16 @@
     <priority>0.8</priority>
   </url>
   <url>
+    <loc>https://tangenta.ch/fr/tutorials.html</loc>
+    <xhtml:link rel="alternate" hreflang="de" href="https://tangenta.ch/tutorials.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://tangenta.ch/en/tutorials.html"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://tangenta.ch/fr/tutorials.html"/>
+    <xhtml:link rel="alternate" hreflang="it" href="https://tangenta.ch/it/tutorials.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://tangenta.ch/tutorials.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
     <loc>https://tangenta.ch/fr/ai.html</loc>
     <xhtml:link rel="alternate" hreflang="de" href="https://tangenta.ch/ai.html"/>
     <xhtml:link rel="alternate" hreflang="en" href="https://tangenta.ch/en/ai.html"/>
@@ -137,6 +167,16 @@
     <xhtml:link rel="alternate" hreflang="fr" href="https://tangenta.ch/fr/features.html"/>
     <xhtml:link rel="alternate" hreflang="it" href="https://tangenta.ch/it/features.html"/>
     <xhtml:link rel="alternate" hreflang="x-default" href="https://tangenta.ch/features.html"/>
+    <changefreq>monthly</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>https://tangenta.ch/it/tutorials.html</loc>
+    <xhtml:link rel="alternate" hreflang="de" href="https://tangenta.ch/tutorials.html"/>
+    <xhtml:link rel="alternate" hreflang="en" href="https://tangenta.ch/en/tutorials.html"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://tangenta.ch/fr/tutorials.html"/>
+    <xhtml:link rel="alternate" hreflang="it" href="https://tangenta.ch/it/tutorials.html"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://tangenta.ch/tutorials.html"/>
     <changefreq>monthly</changefreq>
     <priority>0.8</priority>
   </url>

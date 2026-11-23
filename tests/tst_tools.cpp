@@ -1,6 +1,7 @@
 // Bedienung der Werkzeuge mit echten Mausereignissen auf der Zeichenfläche.
 // Mit VEK_SCREENSHOT_DIR=<Ordner> legen die Tests Bildschirmfotos der Zwischenstände ab.
 
+#include "BaselineGrid.h"
 #include "CorrectionDialogs.h"
 #include "Canvas.h"
 #include "BitmapEffect.h"
@@ -28,6 +29,15 @@
 #include "BitmapFilters.h"
 #include "Language.h"
 #include "MainWindow.h"
+#include "CustomToolbars.h"
+#include "TangentaStyle.h"
+#include "Splash.h"
+#include <QMenuBar>
+#include <QStyleFactory>
+#include "CutoutAssistant.h"
+#include "Cutout.h"
+#include <QDialogButtonBox>
+#include <QDropEvent>
 #include "PickTool.h"
 #include "PolygonObject.h"
 #include "RectangleObject.h"
@@ -47,6 +57,11 @@
 #include "TableObject.h"
 #include "MeshTool.h"
 #include <QTemporaryDir>
+#include <QScrollArea>
+#include <QMimeData>
+#include <QClipboard>
+#include <QMdiSubWindow>
+#include <QMdiArea>
 #include "Output.h"
 #include "AlignDialog.h"
 #include "BlendObject.h"
@@ -71,6 +86,8 @@
 #include "PdfSettingsDialog.h"
 #include "Ai.h"
 #include "AiChat.h"
+#include "AiImageDialog.h"
+#include "Matting.h"
 #include "AiPanel.h"
 #include "AiTools.h"
 #include "McpServer.h"
@@ -446,6 +463,205 @@ private slots:
         screenshot(QStringLiteral("14-hilfslinie-gedreht"));
         m_editor->document().undo();
         QVERIFY(m_editor->guides().first().isVertical());
+    }
+
+    // Grundlinienraster: oben/Abstand/unten in mm, Griffe neben der Seite ziehen (dehnen, einzelne
+    // Linie, ganzes Raster), Doppelklick setzt zurück, ältere Dateien mit Abstand in pt
+    void baselineGridDragging()
+    {
+        Options& o = Options::instance();
+        o.attach(m_editor.get());
+        o.apply({{QStringLiteral("doc/grid/baseline/show"), true}, {QStringLiteral("doc/grid/baseline/top"), 20.0},
+                 {QStringLiteral("doc/grid/baseline/step"), 10.0}, {QStringLiteral("doc/grid/baseline/bottom"), 17.0}});
+        BaselineGrid g = BaselineGrid::fromOptions();
+        // A4: 20, 30, …, 280 (297 - 17 = 280)
+        QCOMPARE(g.count(297.0), 27);
+        QCOMPARE(g.lines(297.0).last(), 280.0);
+
+        const QRectF page = m_canvas->viewTransform().mapRect(QRectF(0, 0, 210, 297));
+        auto handle = [&](double y) { return QPoint(int(page.left()) - 5, int(std::round(m_canvas->toScreen(QPointF(0, y)).y()))); };
+        QCOMPARE(m_canvas->baselineHandleAt(handle(20.0)), 0);
+        QCOMPARE(m_canvas->baselineHandleAt(handle(50.0)), 3);
+        QCOMPARE(m_canvas->baselineHandleAt(QPointF(page.center().x(), handle(50.0).y())), -1); // auf der Seite: frei
+
+        // Letzte Linie nach oben: Raster staucht, oberste bleibt, Anzahl bleibt
+        drag(handle(280.0), handle(254.0), {}, QStringLiteral("grundlinien-dehnen"));
+        QCOMPARE(m_editor->document().undoText(), QStringLiteral("Grundlinienraster dehnen"));
+        g = BaselineGrid::fromOptions();
+        QCOMPARE(g.top, 20.0);
+        QVERIFY2(qAbs(g.step - 9.0) < 0.05, qPrintable(QString::number(g.step)));
+        QCOMPARE(g.count(297.0), 27);
+        QVERIFY(qAbs(g.lines(297.0).last() - 254.0) < 1.0);
+
+        // Linie dazwischen: nur sie
+        const double before = g.line(5);
+        drag(handle(before), handle(before + 6.0));
+        QCOMPARE(m_editor->document().undoText(), QStringLiteral("Grundlinie verschieben"));
+        g = BaselineGrid::fromOptions();
+        QVERIFY(g.moved.contains(5));
+        QVERIFY2(qAbs(g.line(5) - before - 6.0) < 0.6, qPrintable(QString::number(g.line(5))));
+        QCOMPARE(g.line(4), BaselineGrid::fromOptions().regular(4));
+        screenshot(QStringLiteral("grundlinie-verschoben"));
+
+        // Umschalt: ganzes Raster; die verschobene Linie wandert mit
+        const double top = g.top;
+        drag(handle(g.line(2)), handle(g.line(2) + 5.0), Qt::ShiftModifier);
+        QCOMPARE(m_editor->document().undoText(), QStringLiteral("Grundlinienraster verschieben"));
+        g = BaselineGrid::fromOptions();
+        QVERIFY2(qAbs(g.top - top - 5.0) < 0.6, qPrintable(QString::number(g.top)));
+        QVERIFY(g.moved.contains(5));
+
+        // Doppelklick auf den Griff: Linie zurück
+        QTest::mouseDClick(m_canvas.get(), Qt::LeftButton, {}, handle(g.line(5)));
+        QCOMPARE(m_editor->document().undoText(), QStringLiteral("Grundlinie zurücksetzen"));
+        QVERIFY(BaselineGrid::fromOptions().moved.isEmpty());
+
+        // Einrasten an der Grundlinie
+        o.set(QStringLiteral("doc/grid/baseline/snap"), true);
+        {
+            SnapEngine snap(*m_canvas, {});
+            const double y = BaselineGrid::fromOptions().line(3);
+            const SnapResult r = snap.snap(QPointF(100, y + 0.3));
+            QVERIFY(r.snapped());
+            QVERIFY(qAbs(r.point.y() - y) < 1e-9);
+        }
+
+        // Text rastet mit seiner Grundlinie ein (Einrastart «Textbasislinie»)
+        {
+            auto text = std::make_unique<TextObject>(TextObject::Kind::Artistic);
+            text->setPlainText(QStringLiteral("Titel"), CharFormat(QStringLiteral("Arial"), 36));
+            text->applyTransform(xform::translation(QPointF(40, 100)));
+            const NodeId id = m_editor->addObject(std::move(text), QStringLiteral("T"));
+            m_editor->setSelection({id});
+            const auto* t = m_editor->document().findAs<TextObject>(id);
+            const QList<QLineF> base = t->baselines();
+            QCOMPARE(base.size(), 1);
+            const BaselineGrid grid = BaselineGrid::fromOptions();
+            int target = 0;
+            while (grid.line(target) < base.first().y1() + 4.0)
+                ++target;
+            // Mitte des Textes so ziehen, dass die Grundlinie knapp neben der Linie landet; die Grundlinie
+            // geht vor, auch wenn Mitte oder Rand des Rahmens näher an einer Linie lägen
+            for (const double miss : {0.4, -1.1, 1.6, -2.2}) {
+                const auto* moved = m_editor->document().findAs<TextObject>(id);
+                const double before = moved->baselines().first().y1();
+                const QPointF from = moved->boundingRect().center();
+                const QPointF to = from + QPointF(3.0, grid.line(target) - before + miss);
+                drag(screen(from), screen(to));
+                const double y = m_editor->document().findAs<TextObject>(id)->baselines().first().y1();
+                QVERIFY2(qAbs(y - grid.line(target)) < 1e-6,
+                         qPrintable(QStringLiteral("%1 vs %2 (daneben %3)").arg(y).arg(grid.line(target)).arg(miss)));
+                ++target;
+            }
+        }
+
+        // Ältere Datei: nur der Abstand in pt
+        QJsonObject old = m_editor->document().masterPage().options();
+        old.remove(QStringLiteral("doc/grid/baseline/step"));
+        old.insert(QStringLiteral("doc/grid/baseline/spacing"), 36.0);
+        {
+            Transaction tx(m_editor->document(), QStringLiteral("alt"));
+            tx.modify<Page>(m_editor->document().masterPage().id(), [&old](Page& pg) { pg.setOptions(old); });
+            tx.commit();
+        }
+        QVERIFY(qAbs(o.number(QStringLiteral("doc/grid/baseline/step")) - 12.7) < 1e-9);
+        o.attach(nullptr);
+    }
+
+    // Grundlinienraster wirkt auf Mengentext: Zeilen liegen auf den Linien, auch beim Bearbeiten,
+    // verkettet im Folgerahmen und nach dem Verschieben; je Rahmen abschaltbar
+    void baselineGridAlignsParagraphText()
+    {
+        Options& o = Options::instance();
+        o.attach(m_editor.get());
+        o.apply({{QStringLiteral("doc/grid/baseline/show"), true}, {QStringLiteral("doc/grid/baseline/top"), 20.0},
+                 {QStringLiteral("doc/grid/baseline/step"), 7.0}, {QStringLiteral("doc/grid/baseline/bottom"), 15.0}});
+        const BaselineGrid grid = BaselineGrid::fromOptions();
+        auto offGrid = [&grid](const QList<QLineF>& lines) {
+            QStringList bad;
+            for (const QLineF& l : lines) {
+                const double k = (l.y1() - grid.top) / grid.step;
+                if (qAbs(k - std::round(k)) > 0.002)
+                    bad << QString::number(l.y1(), 'f', 3);
+            }
+            return bad.join(QLatin1Char(' '));
+        };
+        const QString story = QStringLiteral(
+            "Am Samstag beginnt das Sommerfest um 14 Uhr mit dem Kinderprogramm auf der Wiese. Ab 17 Uhr spielt "
+            "die Musikgesellschaft, danach gibt es Grilladen und Salate. Um 21 Uhr zeigen wir den Film im Freien, "
+            "bei Regen in der Turnhalle. Der Eintritt ist frei, Kollekte am Ausgang.");
+        auto text = std::make_unique<TextObject>(TextObject::Kind::Paragraph, QSizeF(80, 45));
+        text->setPlainText(story, CharFormat(QStringLiteral("Arial"), 12));
+        text->applyTransform(xform::translation(QPointF(25, 63.4)));
+        Style black;
+        black.fill = Fill::solid(Color(0, 0, 0));
+        black.stroke.reset();
+        text->setStyle(black);
+        const NodeId id = m_editor->addObject(std::move(text), QStringLiteral("T"));
+        auto next = std::make_unique<TextObject>(TextObject::Kind::Paragraph, QSizeF(80, 60));
+        next->applyTransform(xform::translation(QPointF(115, 151.8)));
+        const NodeId follower = m_editor->addObject(std::move(next), QStringLiteral("T2"));
+        {
+            Transaction tx(m_editor->document(), QStringLiteral("Verknüpfen"));
+            tx.modify<TextObject>(id, [follower](TextObject& t) { t.setNextFrame(follower); });
+            tx.commit();
+        }
+        const auto* t = m_editor->document().findAs<TextObject>(id);
+        QVERIFY(t->baselines().size() >= 4);
+        QVERIFY2(offGrid(t->baselines()).isEmpty(), qPrintable(offGrid(t->baselines())));
+        // Folgerahmen: seine Zeilen liegen ebenfalls auf den Linien (Seitenkoordinaten)
+        const auto* f = m_editor->document().findAs<TextObject>(follower);
+        QVERIFY(!f->pieces().isEmpty());
+        QVERIFY(!f->baselineGridLines().isEmpty());
+        const double firstLocal = f->baselineGridLines().first();
+        QVERIFY2(offGrid({QLineF(0, firstLocal + 151.8, 1, firstLocal + 151.8)}).isEmpty(), qPrintable(QString::number(firstLocal)));
+        QVERIFY(firstLocal >= 0.0 && firstLocal < grid.step);
+        m_editor->setSelection({id});
+        screenshot(QStringLiteral("grundlinien-mengentext"));
+
+        // Bearbeiten: Arbeitskopie setzt dieselben Zeilen, nach dem Tippen weiter auf dem Raster
+        TextTool& tool = m_canvas->textTool();
+        m_canvas->setTool(ToolId::Text);
+        tool.beginEditing(id);
+        QVERIFY(tool.editing() && tool.followsBaselineGrid());
+        tool.typeText(QStringLiteral(" Bitte Becher mitbringen."));
+        screenshot(QStringLiteral("grundlinien-mengentext-bearbeiten"));
+        tool.finishEditing();
+        t = m_editor->document().findAs<TextObject>(id);
+        QVERIFY(t->plainText().contains(QStringLiteral("Becher")));
+        QVERIFY2(offGrid(t->baselines()).isEmpty(), qPrintable(offGrid(t->baselines())));
+
+        // Verschieben um einen Bruchteil: die Zeilen rasten neu ein
+        {
+            Transaction tx(m_editor->document(), QStringLiteral("Schieben"));
+            tx.modify<TextObject>(id, [](TextObject& o2) { o2.applyTransform(xform::translation(QPointF(0, 2.35))); });
+            tx.commit();
+        }
+        t = m_editor->document().findAs<TextObject>(id);
+        QVERIFY2(offGrid(t->baselines()).isEmpty(), qPrintable(offGrid(t->baselines())));
+
+        // Leiste: ausschalten wirkt auf die ganze Kette
+        m_canvas->setTool(ToolId::Pick);
+        m_editor->setSelection({id});
+        m_editor->setTextBaselineGrid(false);
+        QCOMPARE(m_editor->document().undoText(), QStringLiteral("Am Grundlinienraster ausrichten"));
+        QVERIFY(!m_editor->document().findAs<TextObject>(id)->followsBaselineGrid());
+        QVERIFY(!m_editor->document().findAs<TextObject>(follower)->followsBaselineGrid());
+        QVERIFY(!offGrid(m_editor->document().findAs<TextObject>(id)->baselines()).isEmpty());
+        m_editor->document().undo();
+        QVERIFY(offGrid(m_editor->document().findAs<TextObject>(id)->baselines()).isEmpty());
+
+        // Raster ausblenden: das Layout bleibt (beim Einblenden wurde «Mengentext am Gitter» festgehalten)
+        QVERIFY(m_editor->document().masterPage().options().value(QStringLiteral("doc/grid/baseline/text")).toBool());
+        o.set(QStringLiteral("doc/grid/baseline/show"), false);
+        QVERIFY(offGrid(m_editor->document().findAs<TextObject>(id)->baselines()).isEmpty());
+        o.set(QStringLiteral("doc/grid/baseline/show"), true);
+
+        // Option aus: natürlicher Abstand trotz sichtbarem Raster (bleibt ausdrücklich gespeichert)
+        o.set(QStringLiteral("doc/grid/baseline/text"), false);
+        QCOMPARE(m_editor->document().masterPage().options().value(QStringLiteral("doc/grid/baseline/text")).toBool(true), false);
+        QVERIFY(!offGrid(m_editor->document().findAs<TextObject>(id)->baselines()).isEmpty());
+        o.attach(nullptr);
     }
 
     void guideRotatesAroundFreePivot()
@@ -2226,6 +2442,353 @@ private slots:
         QLocale::setDefault(previous);
     }
 
+    // Hilfe-Menü und Startbild
+    void helpMenuAndSplash()
+    {
+        MainWindow window;
+        QAction* about = window.findChild<QAction*>(QStringLiteral("about"));
+        QVERIFY(about);
+        QVERIFY(!about->icon().isNull());
+        const QPixmap one = splash::render(1.0, QStringLiteral("Wird gestartet"));
+        QCOMPARE(one.size(), splash::size());
+        const QPixmap two = splash::render(2.0);
+        QCOMPARE(two.size(), splash::size() * 2);
+        // nicht leer: Name hell auf dunklem Grund
+        const QImage img = one.toImage();
+        int bright = 0;
+        for (int x = 156; x < 440; ++x)
+            for (int y = 70; y < 110; ++y)
+                bright += qGray(img.pixel(x, y)) > 200;
+        QVERIFY(bright > 300);
+        if (qEnvironmentVariableIsSet("VEK_SPLASH_SHOT"))
+            one.save(qEnvironmentVariable("VEK_SPLASH_SHOT"));
+    }
+
+    // Programmstil: Griff an verschiebbaren Leisten, eingerücktes Dokumentsymbol, flache Fensterknöpfe.
+    // VEK_STYLE_SHOT=datei.png legt ein Bild des Fensters ab.
+    void tangentaStyle()
+    {
+        QCoreApplication::setOrganizationName(QStringLiteral("VektoreditorTest"));
+        const QString key = QStringLiteral("toolbars/custom");
+        QSettings().remove(key);
+        const QString previous = QApplication::style()->name();
+        QApplication::setStyle(new TangentaStyle);
+        auto cleanup = qScopeGuard([key, previous] {
+            QSettings().remove(key);
+            QApplication::setStyle(QStyleFactory::create(previous));
+        });
+        MainWindow window;
+        window.resize(1100, 700);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        auto* bars = window.findChild<CustomToolbars*>();
+        QVERIFY(bars);
+        CustomToolBar* bar = bars->create(QStringLiteral("Meine Leiste"));
+        QTest::qWait(100);
+        QCOMPARE(bar->style()->pixelMetric(QStyle::PM_ToolBarHandleExtent, nullptr, bar), 9);
+
+        QMenuBar* menu = window.menuBar();
+        QWidget* left = menu->cornerWidget(Qt::TopLeftCorner);
+        QWidget* right = menu->cornerWidget(Qt::TopRightCorner);
+        QVERIFY(left && left->isVisible());
+        QVERIFY(right && right->isVisible());
+        QCOMPARE(left->width(), TangentaStyle::MenuBarIconWidth);
+        QCOMPARE(right->sizeHint().width(), 3 * 28 + 2);
+        // Das Symbol beginnt dort, wo die Symbole der Standardleiste beginnen
+        QToolBar* standard = nullptr;
+        for (QToolBar* tb : window.findChildren<QToolBar*>())
+            if (tb->isVisible() && !tb->isFloating() && window.toolBarArea(tb) == Qt::TopToolBarArea
+                && (!standard || tb->geometry().top() < standard->geometry().top()))
+                standard = tb;
+        QVERIFY(standard);
+        QToolButton* first = nullptr;
+        for (QToolButton* b : standard->findChildren<QToolButton*>())
+            if (b->isVisible() && b->parentWidget() == standard && (!first || b->x() < first->x()))
+                first = b;
+        QVERIFY(first);
+        const int iconX = first->mapTo(&window, QPoint(0, 0)).x() + (first->width() - first->iconSize().width()) / 2;
+        const int labelX = left->mapTo(&window, QPoint(0, 0)).x() + TangentaStyle::DocumentIconInset;
+        qInfo("Symbol Menüleiste x=%d, Standardleiste x=%d", labelX, iconX);
+        QVERIFY(qAbs(labelX - iconX) <= 2);
+        if (qEnvironmentVariableIsSet("VEK_STYLE_SHOT"))
+        {
+            window.grab().save(qEnvironmentVariable("VEK_STYLE_SHOT"));
+            bar->grab().save(qEnvironmentVariable("VEK_STYLE_SHOT") + QStringLiteral("-bar.png"));
+        }
+    }
+
+    // Jeder Menüeintrag hat ein Symbol (Untermenüs eingeschlossen; dynamische Listen wie zuletzt
+    // geöffnete Dateien, Fensterliste und Sprachen ausgenommen). VEK_MENU_DUMP=datei schreibt die
+    // Einträge ohne Symbol als Liste "Pfad<TAB>Text".
+    void cutoutAssistantDialog()
+    {
+        QCoreApplication::setOrganizationName(QStringLiteral("VektoreditorTest"));
+        QSettings().remove(QStringLiteral("cutoutAssistant"));
+        // Orange Scheibe vor Himmel
+        QImage photo(480, 360, QImage::Format_RGB32);
+        for (int y = 0; y < 360; ++y)
+            for (int x = 0; x < 480; ++x)
+                photo.setPixel(x, y, qRgb(90 + x / 8, 140 + y / 10, 230));
+        {
+            QPainter p(&photo);
+            p.setRenderHint(QPainter::Antialiasing);
+            p.setPen(Qt::NoPen);
+            p.setBrush(QColor(230, 120, 30));
+            p.drawEllipse(QPointF(240, 180), 100, 100);
+        }
+        CutoutAssistant dialog(photo);
+        dialog.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&dialog));
+        auto* ok = dialog.findChild<QDialogButtonBox*>()->button(QDialogButtonBox::Ok);
+        QVERIFY(!ok->isEnabled()); // ohne Füllung kein Ergebnis
+
+        // Marker rund um die Kante, dann innen füllen
+        dialog.setTool(CutoutAssistant::Tool::Marker);
+        dialog.setBrushSize(16);
+        QList<QPointF> ring;
+        for (int i = 0; i <= 120; ++i)
+            ring << QPointF(240 + 100 * std::cos(i * 2 * M_PI / 120), 180 + 100 * std::sin(i * 2 * M_PI / 120));
+        dialog.stroke(ring);
+        dialog.setTool(CutoutAssistant::Tool::Fill);
+        dialog.fillAt(QPoint(240, 180));
+        QVERIFY(ok->isEnabled());
+        const QImage tri = dialog.trimapImage();
+        QCOMPARE(qGray(tri.pixel(240, 180)), int(cutout::Foreground));
+        QCOMPARE(qGray(tri.pixel(340, 180)), int(cutout::Unknown));
+        QCOMPARE(qGray(tri.pixel(10, 10)), int(cutout::Background));
+
+        dialog.preview(true);
+        QVERIFY(!dialog.alpha().isNull());
+        QCOMPARE(qGray(dialog.alpha().pixel(240, 180)), 255);
+        QVERIFY(qGray(dialog.alpha().pixel(335, 180)) > 230); // innen am Rand: Motiv
+        QVERIFY(qGray(dialog.alpha().pixel(346, 180)) < 25);  // aussen im Band: Himmel
+        dialog.grab().save(QDir::tempPath() + QStringLiteral("/cutout-assistant.png"));
+
+        // Detail entfernen: ein Stück der Scheibe weg
+        dialog.setTool(CutoutAssistant::Tool::Remove);
+        dialog.setBrushSize(30);
+        dialog.stroke({QPointF(240, 100), QPointF(240, 130)});
+        dialog.preview(true);
+        QCOMPARE(qGray(dialog.alpha().pixel(240, 115)), 0);
+        dialog.undo();
+        // Rückgängig holt das schon berechnete Ergebnis zurück, ohne neu zu rechnen
+        QVERIFY(!dialog.working());
+        QCOMPARE(qGray(dialog.alpha().pixel(240, 115)), 255);
+        QCOMPARE(qGray(dialog.trimapImage().pixel(240, 115)), int(cutout::Foreground));
+        dialog.redo();
+        QCOMPARE(qGray(dialog.trimapImage().pixel(240, 115)), int(cutout::Background));
+        dialog.undo();
+
+        const QImage result = dialog.result();
+        QCOMPARE(result.size(), photo.size());
+        QVERIFY(result.hasAlphaChannel());
+        QCOMPARE(qAlpha(result.pixel(10, 10)), 0);
+        QCOMPARE(qAlpha(result.pixel(240, 180)), 255);
+        QCOMPARE(qAlpha(result.pixel(240, 115)), 255); // Entfernen wurde rückgängig gemacht
+        QVERIFY(!dialog.keepOriginal());
+
+        // Leck: offene Markierung füllt fast alles
+        dialog.reset();
+        dialog.setTool(CutoutAssistant::Tool::Fill);
+        dialog.fillAt(QPoint(10, 10));
+        QVERIFY(dialog.findChildren<QLabel*>().size() > 0);
+        QSettings().remove(QStringLiteral("cutoutAssistant"));
+    }
+
+    void customToolbars()
+    {
+        QCoreApplication::setOrganizationName(QStringLiteral("VektoreditorTest"));
+        const QString key = QStringLiteral("toolbars/custom");
+        QSettings().remove(key);
+        auto cleanup = qScopeGuard([key] { QSettings().remove(key); });
+        auto drop = [](QWidget* target, QMimeData* mime, const QPoint& pos) {
+            QDragEnterEvent enter(pos, Qt::CopyAction | Qt::MoveAction | Qt::LinkAction, mime, Qt::LeftButton, Qt::NoModifier);
+            QCoreApplication::sendEvent(target, &enter);
+            QDropEvent dropEvent(QPointF(pos), Qt::CopyAction | Qt::MoveAction | Qt::LinkAction, mime, Qt::LeftButton,
+                                 Qt::NoModifier);
+            QCoreApplication::sendEvent(target, &dropEvent);
+            const Qt::DropAction result = dropEvent.isAccepted() ? dropEvent.dropAction() : Qt::IgnoreAction;
+            delete mime;
+            return result;
+        };
+        QStringList expected;
+        {
+            MainWindow window;
+            window.show();
+            QVERIFY(QTest::qWaitForWindowExposed(&window));
+            auto* bars = window.findChild<CustomToolbars*>();
+            QVERIFY(bars);
+            QCOMPARE(bars->bars().size(), 0);
+            QList<CustomToolbars::Command> file;
+            for (const CustomToolbars::Command& c : bars->commands())
+                if (c.path.startsWith(QStringLiteral("Datei/")))
+                    file << c;
+            QVERIFY(file.size() > 4);
+
+            // Neue Leiste: leer, mit Platz zum Ablegen
+            CustomToolBar* bar = bars->create(QStringLiteral("Meine Leiste"));
+            QTest::qWait(50);
+            QVERIFY(bar->isVisible());
+            QVERIFY(bar->width() >= 150);
+
+            // Aus Optionen > Befehle ziehen (Daten der Befehlsliste)
+            OptionsDialog options(*m_editor, &window, &window);
+            QVERIFY(options.selectPage(QStringLiteral("Arbeitsbereich/Anpassung/Befehle")));
+            auto* list = options.findChild<QListWidget*>(QStringLiteral("commandList"));
+            QVERIFY(list && list->count() > 0);
+            QVERIFY(list->dragEnabled());
+            auto* fromList = list->model()->mimeData({list->model()->index(0, 0)});
+            QVERIFY(fromList);
+            QAction* first = CustomToolbars::actionFrom(fromList);
+            QVERIFY(first);
+            QCOMPARE(drop(bar, fromList, QPoint(10, bar->height() / 2)), Qt::CopyAction);
+            QCOMPARE(bar->actions(), QList<QAction*>{first});
+
+            // Hinten anfügen, dann einen Befehl vorne einfügen
+            QAction* a = file[1].action == first ? file[2].action : file[1].action;
+            QAction* b = file[3].action == first ? file[4].action : file[3].action;
+            QTest::qWait(20);
+            drop(bar, CustomToolbars::mimeFor(a), QPoint(bar->width() - 5, bar->height() / 2));
+            QTest::qWait(20);
+            const QPoint beforeFirst = bar->itemWidget(0)->geometry().topLeft() + QPoint(2, 2);
+            drop(bar, CustomToolbars::mimeFor(b), beforeFirst);
+            QCOMPARE(bar->actions(), (QList<QAction*>{b, first, a}));
+            // Derselbe Befehl kommt nicht doppelt in die Leiste
+            QTest::qWait(20);
+            drop(bar, CustomToolbars::mimeFor(a), bar->itemWidget(0)->geometry().topLeft() + QPoint(2, 2));
+            QCOMPARE(bar->actions(), (QList<QAction*>{a, b, first}));
+
+            // In der Leiste umordnen: hinten nach vorn
+            QTest::qWait(20);
+            QCOMPARE(drop(bar, CustomToolbars::mimeFor(first, bar->id(), 2), bar->itemWidget(0)->geometry().topLeft() + QPoint(2, 2)),
+                     Qt::LinkAction);
+            QCOMPARE(bar->actions(), (QList<QAction*>{first, a, b}));
+            bar->insertSeparatorAt(1);
+            QCOMPARE(bar->itemCount(), 4);
+            QVERIFY(bar->actions()[1]->isSeparator());
+
+            // In eine zweite Leiste ziehen: dort eingefügt, die Quelle entfernt den Befehl selbst
+            CustomToolBar* second = bars->create(QStringLiteral("Zweite"));
+            QTest::qWait(50);
+            QCOMPARE(drop(second, CustomToolbars::mimeFor(b, bar->id(), 3), QPoint(10, second->height() / 2)), Qt::MoveAction);
+            QCOMPARE(second->actions(), QList<QAction*>{b});
+            bar->removeAt(3);
+            QCOMPARE(bar->itemCount(), 3);
+            QCOMPARE(bars->barsContaining(first), QStringList{QStringLiteral("Meine Leiste")});
+
+            // Fremde Daten werden nicht angenommen
+            auto* foreign = new QMimeData;
+            foreign->setText(QStringLiteral("Hallo"));
+            QCOMPARE(drop(bar, foreign, QPoint(5, 5)), Qt::IgnoreAction);
+            QCOMPARE(bar->itemCount(), 3);
+
+            // Optionen offen: nicht modal, übriges Hauptfenster gesperrt, Leisten im Anpassen-Modus
+            bool checked = false;
+            QTimer::singleShot(100, &options, [&] {
+                checked = !options.isModal() && options.isVisible() && bars->customizing()
+                          && !window.menuBar()->isEnabled() && bar->isEnabled();
+                options.reject();
+            });
+            options.exec();
+            QVERIFY(checked);
+            QVERIFY(!bars->customizing());
+            QVERIFY(window.menuBar()->isEnabled());
+
+            bars->rename(second, QStringLiteral("Zweite Leiste"));
+            for (CustomToolBar* b2 : bars->bars()) {
+                QStringList items;
+                for (QAction* x : b2->actions())
+                    items << (x->isSeparator() ? QStringLiteral("-") : bars->commandFor(x).path);
+                expected << b2->windowTitle() + QLatin1Char(':') + items.join(QLatin1Char('|'));
+            }
+            window.grab().save(QDir::tempPath() + QStringLiteral("/custom-toolbars.png"));
+        }
+        // Neustart: Leisten mit Inhalt wieder da
+        {
+            MainWindow window;
+            auto* bars = window.findChild<CustomToolbars*>();
+            QStringList loaded;
+            for (CustomToolBar* b2 : bars->bars()) {
+                QStringList items;
+                for (QAction* x : b2->actions())
+                    items << (x->isSeparator() ? QStringLiteral("-") : bars->commandFor(x).path);
+                loaded << b2->windowTitle() + QLatin1Char(':') + items.join(QLatin1Char('|'));
+            }
+            QCOMPARE(loaded, expected);
+            // Gefunden auch über die Position, wenn der Pfad (Sprache) nicht passt
+            const CustomToolbars::Command c = bars->commandFor(bars->bars().first()->actions().first());
+            QCOMPARE(bars->resolve(QStringLiteral("Fichier/Inconnu"), c.index), c.action);
+            bars->remove(bars->bars().last());
+            QCOMPARE(bars->bars().size(), 1);
+        }
+        {
+            MainWindow window;
+            QCOMPARE(window.findChild<CustomToolbars*>()->bars().size(), 1);
+        }
+    }
+
+    void everyMenuEntryHasIcon_data()
+    {
+        QTest::addColumn<QString>("language");
+        QTest::newRow("de") << QString();
+        QTest::newRow("en") << QStringLiteral("en");
+        QTest::newRow("fr") << QStringLiteral("fr");
+    }
+
+    void everyMenuEntryHasIcon()
+    {
+        // Die Zuordnung vergleicht übersetzte Texte: in jeder Sprache prüfen
+        QFETCH(QString, language);
+        QTranslator translator;
+        if (!language.isEmpty()) {
+            QVERIFY(translator.load(QStringLiteral(":/i18n/tangenta_") + language));
+            QCoreApplication::installTranslator(&translator);
+        }
+        auto restore = qScopeGuard([&translator] { QCoreApplication::removeTranslator(&translator); });
+        MainWindow window;
+        QStringList missing;
+        std::function<void(QMenu*, const QString&)> walk = [&](QMenu* menu, const QString& path) {
+            emit menu->aboutToShow(); // Menüs, die sich beim Öffnen füllen
+            for (QAction* a : menu->actions()) {
+                if (a->isSeparator() || a->property("dynamicEntry").toBool())
+                    continue;
+                const QString text = a->text().remove(QLatin1Char('&'));
+                if (QMenu* sub = a->menu()) {
+                    if (!sub->property("dynamicMenu").toBool())
+                        walk(sub, path + QLatin1Char('/') + text);
+                    if (a->icon().isNull() && sub->icon().isNull())
+                        missing << path + QLatin1Char('\t') + text + QStringLiteral(" >");
+                    continue;
+                }
+                if (a->icon().isNull())
+                    missing << path + QLatin1Char('\t') + text;
+            }
+        };
+        for (QAction* top : window.menuBar()->actions())
+            if (QMenu* m = top->menu())
+                walk(m, top->text().remove(QLatin1Char('&')));
+        // Bildschirmfotos einiger Menüs (Symbole im Zusammenhang ansehen)
+        if (const QString dir = qEnvironmentVariable("VEK_SCREENSHOT_DIR"); !dir.isEmpty() && language.isEmpty()) {
+            int n = 0;
+            for (QAction* top : window.menuBar()->actions()) {
+                QMenu* m = top->menu();
+                if (!m)
+                    continue;
+                m->popup(QPoint(0, 0));
+                QCoreApplication::processEvents();
+                m->grab().save(QStringLiteral("%1/menu-%2.png").arg(dir).arg(++n, 2, 10, QLatin1Char('0')));
+                m->hide();
+            }
+        }
+        if (const QString dump = qEnvironmentVariable("VEK_MENU_DUMP"); !dump.isEmpty()) {
+            QFile f(dump);
+            if (f.open(QIODevice::WriteOnly | QIODevice::Text))
+                f.write(missing.join(QLatin1Char('\n')).toUtf8());
+        }
+        QVERIFY2(missing.isEmpty() || qEnvironmentVariableIsSet("VEK_MENU_DUMP"),
+                 qPrintable(QStringLiteral("%1 Einträge ohne Symbol, z.B. %2").arg(missing.size()).arg(missing.value(0))));
+    }
+
     // Fehler aus den Videos 34 bis 40
     void enterAppliesInEveryNumberField()
     {
@@ -2251,6 +2814,249 @@ private slots:
         QTest::keyClick(spin, Qt::Key_Return); // Wert steht: jetzt wie OK
         QVERIFY(!dialog.isVisible());
         QCOMPARE(dialog.QDialog::result(), int(QDialog::Accepted));
+    }
+
+    // MDI: jedes Dokument ein eigenes Fenster, Fenster > Liste, Wechsel behält Seite und Auswahl
+    void multipleDocumentWindows()
+    {
+        QCoreApplication::setOrganizationName(QStringLiteral("VektoreditorTest"));
+        QTemporaryDir dir;
+        MainWindow window;
+        window.resize(1200, 800);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        Editor& ed = window.canvas()->editor();
+        auto* mdi = window.findChild<QMdiArea*>();
+        QVERIFY(mdi);
+        QCOMPARE(mdi->subWindowList().size(), 1);
+
+        // Ein leeres, unberührtes Dokument wird beim Öffnen ersetzt
+        const QString file = dir.filePath(QStringLiteral("zwei.vek"));
+        {
+            Document other;
+            QVERIFY(io::save(other, file));
+        }
+        QVERIFY(window.openFile(file));
+        QCOMPARE(mdi->subWindowList().size(), 1);
+        QCOMPARE(ed.documentCount(), 1);
+
+        // Mit Inhalt öffnet ein weiteres Dokument ein weiteres Fenster
+        const NodeId first = ed.addObject(std::make_unique<RectangleObject>(QSizeF(20, 10)), QStringLiteral("R"));
+        ed.setSelection({first});
+        const QString file2 = dir.filePath(QStringLiteral("drei.vek"));
+        {
+            Document third;
+            QVERIFY(io::save(third, file2));
+        }
+        QVERIFY(window.openFile(file2));
+        QCOMPARE(mdi->subWindowList().size(), 2);
+        QCOMPARE(ed.documentCount(), 2);
+        QCOMPARE(ed.activeDocumentIndex(), 1);
+        QCOMPARE(ed.filePath(), file2);
+        QVERIFY(!ed.document().find(first));
+        // Die Zeichenfläche liegt im aktiven Fenster
+        QCOMPARE(mdi->activeSubWindow(), mdi->subWindowList().at(1));
+        QVERIFY(mdi->subWindowList().at(1)->isAncestorOf(window.canvas()));
+
+        // Zurück: Dokument, Auswahl und Fensterinhalt wechseln mit
+        mdi->setActiveSubWindow(mdi->subWindowList().at(0));
+        QCOMPARE(ed.activeDocumentIndex(), 0);
+        QCOMPARE(ed.filePath(), file);
+        QVERIFY(ed.document().find(first));
+        QCOMPARE(ed.selection(), QList<NodeId>{first});
+        QVERIFY(mdi->subWindowList().at(0)->isAncestorOf(window.canvas()));
+
+        // Schon offene Datei: nur nach vorne holen
+        QVERIFY(window.openFile(file2));
+        QCOMPARE(mdi->subWindowList().size(), 2);
+        QCOMPARE(ed.activeDocumentIndex(), 1);
+
+        // Fenster-Menü listet beide Dokumente, das aktive mit Häkchen
+        QMenu* windowMenu = nullptr;
+        for (QAction* a : window.menuBar()->actions())
+            if (a->menu() && a->text().remove(QLatin1Char('&')) == QStringLiteral("Fenster"))
+                windowMenu = a->menu();
+        QVERIFY(windowMenu);
+        emit windowMenu->aboutToShow();
+        QStringList listed;
+        for (QAction* a : windowMenu->actions())
+            if (a->isCheckable() && a->text().startsWith(QLatin1Char('&')))
+                listed << a->text() + (a->isChecked() ? QStringLiteral(" *") : QString());
+        QCOMPARE(listed.size(), 2);
+        QVERIFY2(listed.at(1).endsWith(QStringLiteral(" *")), qPrintable(listed.join(QLatin1Char('|'))));
+
+        // Überlappend und nebeneinander
+        mdi->cascadeSubWindows();
+        mdi->tileSubWindows();
+        QVERIFY(!mdi->subWindowList().at(0)->isMaximized());
+        shot(window, QStringLiteral("98-mdi-nebeneinander"));
+
+        // Schliessen des unveränderten Fensters: das andere wird aktiv
+        ed.document().setClean();
+        mdi->subWindowList().at(1)->close();
+        QTRY_COMPARE(mdi->subWindowList().size(), 1);
+        QCOMPARE(ed.documentCount(), 1);
+        QCOMPARE(ed.filePath(), file);
+        QVERIFY(ed.document().find(first));
+        QVERIFY(mdi->subWindowList().at(0)->isAncestorOf(window.canvas()));
+        ed.document().setClean();
+    }
+
+    // Zwischenablage: Bild aus einem anderen Programm, SVG, Text; Kopieren liefert SVG/PNG/Text
+    void clipboardForeignFormats()
+    {
+        QCoreApplication::setOrganizationName(QStringLiteral("VektoreditorTest"));
+        MainWindow window;
+        window.resize(1200, 800);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        Editor& ed = window.canvas()->editor();
+        QClipboard* clipboard = QApplication::clipboard();
+        auto pasteAction = [&window]() -> QAction* {
+            for (QAction* a : window.findChildren<QAction*>())
+                if (a->shortcut() == QKeySequence(QKeySequence::Paste))
+                    return a;
+            return nullptr;
+        };
+        QAction* paste = pasteAction();
+        QVERIFY(paste);
+        auto countObjects = [&ed] {
+            int n = 0;
+            const Page& page = ed.currentPage();
+            for (int l = 0; l < page.childCount(); ++l)
+                n += page.child(l)->childCount();
+            return n;
+        };
+
+        // Bildschirmfoto als Bitmap (wie PicPick): wird eingefügt und auf die Seite verkleinert
+        QImage shot(3000, 1000, QImage::Format_RGB32);
+        shot.fill(Qt::darkCyan);
+        clipboard->setImage(shot);
+        QTRY_VERIFY(Editor::canPaste());
+        window.findChild<QAction*>(); // Aktionen aktualisieren sich über dataChanged
+        paste->trigger();
+        QCOMPARE(countObjects(), 1);
+        QCOMPARE(ed.selection().size(), 1);
+        const auto* image = ed.document().findAs<ImageObject>(ed.selection().first());
+        QVERIFY(image);
+        QVERIFY(image->boundingRect().width() <= ed.currentPage().size().width() + 0.01);
+        // Ein Rückgängig-Schritt für Einfügen und Verkleinern
+        ed.document().undo();
+        QCOMPARE(countObjects(), 0);
+
+        // SVG
+        auto* svgMime = new QMimeData;
+        svgMime->setData(QStringLiteral("image/svg+xml"),
+                         "<svg xmlns='http://www.w3.org/2000/svg' width='40mm' height='20mm' viewBox='0 0 40 20'>"
+                         "<rect x='0' y='0' width='40' height='20' fill='#ff0000'/></svg>");
+        clipboard->setMimeData(svgMime);
+        paste->trigger();
+        QCOMPARE(countObjects(), 1);
+
+        // Text wird Grafiktext
+        clipboard->setText(QStringLiteral("Hallo Zwischenablage"));
+        paste->trigger();
+        QCOMPARE(countObjects(), 2);
+        const auto* text = ed.document().findAs<TextObject>(ed.selection().value(0));
+        QVERIFY(text);
+        QCOMPARE(text->plainText(), QStringLiteral("Hallo Zwischenablage"));
+
+        // Kopieren: eigenes Format plus SVG, PNG, Bitmap und Text für andere Programme
+        QAction* copy = nullptr;
+        for (QAction* a : window.findChildren<QAction*>())
+            if (a->shortcut() == QKeySequence(QKeySequence::Copy))
+                copy = a;
+        QVERIFY(copy);
+        copy->trigger();
+        const QMimeData* copied = clipboard->mimeData();
+        QVERIFY(copied->hasFormat(Editor::clipboardMime()));
+        QVERIFY(copied->hasFormat(QStringLiteral("image/svg+xml")));
+        QVERIFY(copied->hasFormat(QStringLiteral("image/png")));
+        QVERIFY(copied->hasImage());
+        QCOMPARE(copied->text(), QStringLiteral("Hallo Zwischenablage"));
+        // und wieder einfügen: eigenes Format hat Vorrang
+        paste->trigger();
+        QCOMPARE(countObjects(), 3);
+        QVERIFY(ed.document().findAs<TextObject>(ed.selection().value(0)));
+
+        // Datei in der Zwischenablage (Explorer: Kopieren)
+        QTemporaryDir dir;
+        const QString png = dir.filePath(QStringLiteral("bild.png"));
+        QVERIFY(shot.scaled(200, 100).save(png));
+        auto* files = new QMimeData;
+        files->setUrls({QUrl::fromLocalFile(png)});
+        clipboard->setMimeData(files);
+        paste->trigger();
+        QCOMPARE(countObjects(), 4);
+        QVERIFY(ed.document().findAs<ImageObject>(ed.selection().value(0)));
+        ed.document().setClean();
+    }
+
+    // Die Eigenschaftsleiste darf das Fenster nicht über den Bildschirm hinaus verbreitern
+    void propertyBarNeverWidensWindow()
+    {
+        QCoreApplication::setOrganizationName(QStringLiteral("VektoreditorTest"));
+        MainWindow window;
+        window.resize(1000, 700);
+        window.show();
+        QVERIFY(QTest::qWaitForWindowExposed(&window));
+        // Leiste kann in den Test-Optionen ausgeblendet sein
+        auto* bar = window.findChild<PropertyBar*>();
+        QVERIFY(bar);
+        bar->show();
+        Editor& ed = window.canvas()->editor();
+        auto t = std::make_unique<TextObject>(TextObject::Kind::Artistic);
+        t->setPlainText(QStringLiteral("Text"), CharFormat(QStringLiteral("Arial"), 24));
+        const NodeId text = ed.addObject(std::move(t), QStringLiteral("T"));
+        const NodeId rect = ed.addObject(std::make_unique<RectangleObject>(QSizeF(20, 10)), QStringLiteral("R"));
+        QImage pixels(40, 40, QImage::Format_RGB32);
+        pixels.fill(Qt::red);
+        const NodeId image = ed.importImage(pixels);
+        int widest = 0, tallest = 0;
+        QString culprit;
+        for (const QList<NodeId>& selection : QList<QList<NodeId>>{{}, {text}, {rect}, {image}, {text, rect}}) {
+            ed.setSelection(selection);
+            for (int tool = 0; tool < int(ToolId::Count); ++tool) {
+                window.canvas()->setTool(ToolId(tool));
+                QCoreApplication::processEvents();
+                const QSize min = window.minimumSizeHint().expandedTo(window.minimumSize());
+                if (min.width() > widest || min.height() > tallest)
+                    culprit = QStringLiteral("Werkzeug %1, Auswahl %2: %3 x %4").arg(tool).arg(selection.size()).arg(min.width()).arg(min.height());
+                widest = std::max(widest, min.width());
+                tallest = std::max(tallest, min.height());
+            }
+        }
+        window.canvas()->setTool(ToolId::Pick);
+        // Alle Andockfenster offen (gestapelt bzw. als Reiter)
+        for (QDockWidget* dock : window.findChildren<QDockWidget*>()) {
+            dock->show();
+            QCoreApplication::processEvents();
+            const QSize min = window.minimumSizeHint().expandedTo(window.minimumSize());
+            if (min.width() > widest || min.height() > tallest)
+                culprit = QStringLiteral("Andockfenster %1: %2 x %3").arg(dock->windowTitle()).arg(min.width()).arg(min.height());
+            widest = std::max(widest, min.width());
+            tallest = std::max(tallest, min.height());
+        }
+        // Auch auf kleinen Bildschirmen (offscreen 800 x 600) bleibt das Fenster im Bildschirm
+        const QRect avail = window.screen()->availableGeometry();
+        qInfo() << "Mindestgrösse höchstens" << widest << tallest << "Bildschirm" << avail.size();
+        QVERIFY2(widest <= std::max(avail.width(), 1000) && tallest <= std::max(avail.height(), 700), qPrintable(culprit));
+        QVERIFY(window.frameGeometry().width() <= std::max(avail.width(), 1000));
+        // Schriftgrösse: Feld breit genug für "1234.5 pt" (neuer Text: die Werkzeuge oben können
+        // die Auswahl verändert haben)
+        auto t2 = std::make_unique<TextObject>(TextObject::Kind::Artistic);
+        t2->setPlainText(QStringLiteral("Text"), CharFormat(QStringLiteral("Arial"), 24));
+        ed.setSelection({ed.addObject(std::move(t2), QStringLiteral("T2"))});
+        QCoreApplication::processEvents();
+        QComboBox* size = nullptr;
+        QCoreApplication::processEvents();
+        for (QComboBox* box : window.findChildren<QComboBox*>())
+            if (box->isVisibleTo(&window) && box->toolTip() == QStringLiteral("Schriftgrösse in Punkt"))
+                size = box;
+        QVERIFY(size);
+        const int needed = size->fontMetrics().horizontalAdvance(QStringLiteral("1234.5 pt"));
+        QVERIFY2(size->lineEdit()->width() >= needed, qPrintable(QStringLiteral("%1 < %2").arg(size->lineEdit()->width()).arg(needed)));
+        ed.document().setClean();
     }
 
     void videoFixes34to40()
@@ -4748,6 +5554,56 @@ private slots:
         }
     }
 
+    // Ohne Schriftdaten (CDR): Art, Gewicht und Breite aus Name bzw. Google-Fonts-Verzeichnis gegen die
+    // OS/2-Tabelle der installierten Schriften; höchstens 70 %, weil nur vermutet
+    void fontMatchWithoutFontData()
+    {
+        const QString sans = QStringLiteral("Arial"), serif = QStringLiteral("Times New Roman");
+        if (!QFontDatabase::hasFamily(sans) || !QFontDatabase::hasFamily(serif))
+            QSKIP("Arial und Times New Roman nötig");
+        auto scoreOf = [](const QList<fontmatch::Candidate>& c, const QString& family) {
+            for (const fontmatch::Candidate& x : c)
+                if (x.family == family)
+                    return x.score;
+            return -1.0;
+        };
+        auto top = [](const QList<fontmatch::Candidate>& c) {
+            QStringList names;
+            for (int i = 0; i < std::min<qsizetype>(5, c.size()); ++i)
+                names << QStringLiteral("%1 %2%").arg(c[i].family).arg(int(std::lround(c[i].score * 100)));
+            return names.join(QStringLiteral(", "));
+        };
+        auto suggest = [](const QString& name, bool bold = false) {
+            ImportedFont f;
+            f.family = f.baseName = name;
+            f.bold = bold;
+            return fontmatch::suggest(f, 1000);
+        };
+        const QList<fontmatch::Candidate> garamond = suggest(QStringLiteral("Garamond Premier Pro"));
+        qInfo("Garamond Premier Pro: %s", qPrintable(top(garamond)));
+        QVERIFY(garamond.first().traits >= 0 && garamond.first().widths < 0);
+        QVERIFY2(scoreOf(garamond, serif) > scoreOf(garamond, sans), qPrintable(top(garamond)));
+        // Ohne bekanntes Gegenstück nur eine Vermutung: höchstens 70 %
+        const QList<fontmatch::Candidate> minion = suggest(QStringLiteral("Minion Pro"));
+        qInfo("Minion Pro: %s", qPrintable(top(minion)));
+        QVERIFY2(minion.first().score <= 0.701 && scoreOf(minion, serif) > scoreOf(minion, sans), qPrintable(top(minion)));
+
+        const QList<fontmatch::Candidate> helvetica = suggest(QStringLiteral("Helvetica Neue"));
+        qInfo("Helvetica Neue: %s", qPrintable(top(helvetica)));
+        QVERIFY2(scoreOf(helvetica, sans) > scoreOf(helvetica, serif), qPrintable(top(helvetica)));
+        QVERIFY2(helvetica.first().family == sans, qPrintable(top(helvetica))); // bewährte Ersatzschrift zuerst
+
+        // Gewicht aus dem Namen: Black passt zu Arial Black besser als zu Arial
+        const QList<fontmatch::Candidate> black = suggest(QStringLiteral("Helvetica Black"));
+        if (QFontDatabase::hasFamily(QStringLiteral("Arial Black")))
+            QVERIFY2(scoreOf(black, QStringLiteral("Arial Black")) > scoreOf(black, sans), qPrintable(top(black)));
+
+        // Art aus dem Namen: Courier ist dicktengleich
+        const QList<fontmatch::Candidate> courier = suggest(QStringLiteral("Courier Std"));
+        if (QFontDatabase::hasFamily(QStringLiteral("Courier New")))
+            QVERIFY2(scoreOf(courier, QStringLiteral("Courier New")) > scoreOf(courier, sans), qPrintable(top(courier)));
+    }
+
     void impositionDialogBookletPdf()
     {
         // 16 A5-Seiten mit grosser Seitennummer
@@ -5063,6 +5919,97 @@ private slots:
         QVERIFY(red);
         QCOMPARE(dxf::nearestAci(QColor(255, 0, 0)), 1);
         QCOMPARE(dxf::aciColor(5), QColor(0, 0, 255));
+    }
+
+    // CDR schreiben und mit dem Import zurücklesen: gleiche Seitenzahl, gleiches Bild (auch die
+    // Stapelreihenfolge), keine Markennamen aus der Vorlage
+    void cdrRoundTrip_data()
+    {
+        QTest::addColumn<bool>("version13");
+        QTest::newRow("X6") << false;
+        QTest::newRow("X3") << true;
+    }
+
+    void cdrRoundTrip()
+    {
+        QFETCH(bool, version13);
+        auto rect = std::make_unique<RectangleObject>(QSizeF(60, 40));
+        rect->setTransform(QTransform::fromTranslate(20, 30));
+        Style rs;
+        rs.fill = Fill::solid(Color(220, 0, 0));
+        rs.stroke = Color(0, 0, 255);
+        rs.strokeWidth = 2.0;
+        rect->setStyle(rs);
+        m_editor->addObject(std::move(rect), QStringLiteral("R"));
+        auto ell = std::make_unique<EllipseObject>(QSizeF(50, 50));
+        ell->setTransform(QTransform::fromTranslate(60, 50));
+        Style es;
+        es.fill = Fill::gradient(Fill::Type::Linear, Color(255, 255, 0), Color(0, 128, 0));
+        es.stroke.reset();
+        ell->setStyle(es);
+        m_editor->addObject(std::move(ell), QStringLiteral("E"));
+        auto disc = std::make_unique<EllipseObject>(QSizeF(60, 60));
+        disc->setTransform(QTransform::fromTranslate(30, 150));
+        Style ds;
+        ds.fill = Fill::gradient(Fill::Type::Radial, Color(255, 255, 255), Color(0, 0, 160));
+        ds.stroke.reset();
+        disc->setStyle(ds);
+        m_editor->addObject(std::move(disc), QStringLiteral("D"));
+        auto text = std::make_unique<TextObject>(TextObject::Kind::Artistic);
+        text->setPlainText(QStringLiteral("Tangenta"), CharFormat{QStringLiteral("Arial"), 36.0});
+        text->setTransform(QTransform::fromTranslate(110, 160));
+        Style ts;
+        ts.fill = Fill::solid(Color(0, 0, 0));
+        ts.stroke.reset();
+        text->setStyle(ts);
+        m_editor->addObject(std::move(text), QStringLiteral("T"));
+        output::ExportOptions o;
+        o.dpi = 30;
+        const QImage before = output::renderImage(*m_canvas, o);
+        QString error;
+        const QByteArray data = output::areaCdr(*m_canvas, o, &error, version13);
+        QVERIFY2(!data.isEmpty(), qPrintable(error));
+        if (const QString keep = qEnvironmentVariable("VEK_CDR_OUT"); !keep.isEmpty()) {
+            QFile f(keep + (version13 ? QStringLiteral("-x3.cdr") : QStringLiteral("-x6.cdr")));
+            QVERIFY(f.open(QIODevice::WriteOnly) && f.write(data) == data.size());
+        }
+        QVERIFY(version13 ? data.startsWith("RIFF") && data.mid(8, 4) == "CDRD" : data.startsWith("PK"));
+        QVERIFY(cdr::isSupported(data));
+        // Markenname der Vorlage darf nicht vorkommen (klein, ASCII und UTF-16)
+        const QByteArray word = QByteArray::fromHex("636f72656c");
+        const QByteArray lower = data.toLower();
+        QByteArray wide;
+        for (char ch : word)
+            wide.append(ch).append(char(0));
+        QVERIFY(!lower.contains(word) && !lower.contains(wide));
+        // X6 ist gepackt: die Vorlage selbst prüfen
+        for (const char* name : {":/cdr/x3-template.riff", ":/cdr/x6-template.riff"}) {
+            QFile f{QString::fromLatin1(name)};
+            QVERIFY(f.open(QIODevice::ReadOnly));
+            const QByteArray tpl = f.readAll().toLower();
+            QVERIFY2(!tpl.contains(word) && !tpl.contains(wide), name);
+        }
+        std::vector<svg::Import> pages = cdr::read(data, &error);
+        QVERIFY2(pages.size() == 1 && pages.front().group, qPrintable(error));
+        QVERIFY(std::abs(pages.front().size.width() - 210) < 0.1 && std::abs(pages.front().size.height() - 297) < 0.1);
+        m_editor->setDocument(std::make_unique<Document>(), QString());
+        m_editor->setPageSize(pages.front().size, true);
+        m_editor->importGroup(std::move(pages.front().group), false, QStringLiteral("CDR"));
+        const QImage after = output::renderImage(*m_canvas, o);
+        QCOMPARE(after.size(), before.size());
+        // Mittlere Abweichung je Kanal und Bildpunkt; Kanten und Verläufe weichen etwas ab
+        double sum = 0;
+        for (int y = 0; y < before.height(); ++y)
+            for (int x = 0; x < before.width(); ++x) {
+                const QRgb a = before.pixel(x, y), b = after.pixel(x, y);
+                sum += std::abs(qRed(a) - qRed(b)) + std::abs(qGreen(a) - qGreen(b)) + std::abs(qBlue(a) - qBlue(b));
+            }
+        const double mean = sum / (3.0 * before.width() * before.height());
+        QVERIFY2(mean < 2.0, qPrintable(QString::number(mean)));
+        // Ellipse liegt über dem Rechteck: Überschneidung bei (70, 60) mm ist nicht rot
+        const QPoint overlap(int(70 / 25.4 * 30), int(60 / 25.4 * 30));
+        QVERIFY(qRed(after.pixel(overlap)) > 100 && qGreen(after.pixel(overlap)) > 100);
+        QCOMPARE(after.pixel(overlap), before.pixel(overlap));
     }
 
     void epsAiPdfRoundTrip()
@@ -6538,7 +7485,8 @@ private slots:
     }
 
     // Echte Zeichnungen (nur lokal, VEK_CDR_DIR): jede Datei öffnet sich mit Objekten; mit
-    // VEK_SCREENSHOT_DIR wird die erste Seite als Bild abgelegt (Auflösung VEK_CDR_DPI, sonst 50 dpi)
+    // VEK_SCREENSHOT_DIR wird die erste Seite als Bild abgelegt (Auflösung VEK_CDR_DPI, sonst 50 dpi;
+    // andere Seite mit VEK_CDR_PAGE, gezählt ab 1; VEK_CDR_FONTS=1 zeigt die Vorschläge für fehlende Schriften)
     void cdrImportLocalFiles()
     {
         const QString dir = qEnvironmentVariable("VEK_CDR_DIR");
@@ -6566,11 +7514,23 @@ private slots:
             }
             qInfo().noquote() << info.fileName() << pages.size() << "Seite(n)," << objects << "Objekte," << pages.front().fonts.size()
                               << "Schriften," << timer.elapsed() << "ms," << pages.front().size.width() << "x" << pages.front().size.height() << "mm";
+            // VEK_CDR_FONTS=1: Vorschläge der Schriftersetzung für fehlende Schriften
+            if (qEnvironmentVariableIsSet("VEK_CDR_FONTS"))
+                for (const ImportedFont& f : pages.front().fonts) {
+                    if (!f.installed.isEmpty() || f.texts.isEmpty())
+                        continue;
+                    QStringList names;
+                    for (const fontmatch::Candidate& c : fontmatch::suggest(f, 4))
+                        names << QStringLiteral("%1 %2%").arg(c.family).arg(int(std::lround(c.score * 100)));
+                    qInfo().noquote() << "  fehlt" << f.family << (f.bold ? "fett" : "") << "Texte" << f.texts.size() << "->"
+                                      << names.join(QStringLiteral(", "));
+                }
             if (shots.isEmpty())
                 continue;
+            const size_t index = std::clamp<size_t>(size_t(std::max(1, qEnvironmentVariableIntValue("VEK_CDR_PAGE"))), 1, pages.size()) - 1;
             m_editor->setDocument(std::make_unique<Document>(), QString());
-            m_editor->setPageSize(pages.front().size, true);
-            m_editor->importGroup(std::move(pages.front().group), false, QStringLiteral("CDR"));
+            m_editor->setPageSize(pages[index].size, true);
+            m_editor->importGroup(std::move(pages[index].group), false, QStringLiteral("CDR"));
             output::ExportOptions o;
             o.dpi = qEnvironmentVariableIsSet("VEK_CDR_DPI") ? qEnvironmentVariableIntValue("VEK_CDR_DPI") : 50;
             output::renderImage(*m_canvas, o).save(shots + QStringLiteral("/cdr-") + info.completeBaseName() + QStringLiteral(".png"));
@@ -7134,6 +8094,291 @@ private slots:
     }
 
     // KI-Zugänge: Anfragen wie die Anbieter sie erwarten, Stream-Ereignisse, Claude Code, Optionen
+    // Bild mit KI optimieren: Antwort lesen (auch eingebettet), gesperrte Bereiche, Stärke, Bild in der
+    // Benutzer-Nachricht an Anthropic und OpenAI, Dialog rechnet mit den Werten auf dem Original
+    void aiImageOptimize()
+    {
+        using namespace ai;
+        QCoreApplication::setOrganizationName(QStringLiteral("VektoreditorTest"));
+        aiopt::Settings all;
+        const QString reply = QStringLiteral(
+            "Gern:\n```json\n{\"temperature\": -12, \"tint\": 4, \"saturation\": 250, \"brightness\": 8.6, \"contrast\": 10,"
+            " \"highlights\": -20, \"shadows\": 15, \"midtones\": 5, \"stretch\": true, \"comment\": \"Kühler, Schatten offen.\"}\n```");
+        aiopt::Suggestion sg = aiopt::parse(reply, all);
+        QVERIFY(sg.ok);
+        QCOMPARE(sg.basic.temperature, -12);
+        QCOMPARE(sg.basic.saturation, 100); // begrenzt
+        QCOMPARE(sg.basic.brightness, 9);
+        QVERIFY(sg.stretch);
+        QCOMPARE(sg.comment, QStringLiteral("Kühler, Schatten offen."));
+        aiopt::Settings locked;
+        locked.color = false;
+        locked.tone = false;
+        sg = aiopt::parse(reply, locked);
+        QCOMPARE(sg.basic.temperature, 0);
+        QCOMPARE(sg.basic.contrast, 0);
+        QVERIFY(!sg.stretch);
+        QCOMPARE(sg.basic.saturation, 100);
+        QVERIFY(!aiopt::parse(QStringLiteral("Das Bild ist schön."), all).ok);
+        QCOMPARE(aiopt::scaled(sg.basic, 50).saturation, 50);
+
+        // Frage nennt Ziel, gesperrte Regler, Wunsch und Statistik
+        QImage photo(200, 120, QImage::Format_RGB32);
+        for (int y = 0; y < photo.height(); ++y)
+            for (int x = 0; x < photo.width(); ++x)
+                photo.setPixel(x, y, qRgb(60 + x / 4, 70 + y / 4, 90)); // flau, bläulich
+        locked.wish = QStringLiteral("Himmel blauer");
+        const QString q = aiopt::question(locked, photo, QStringLiteral("Deutsch"));
+        QVERIFY(q.contains(QStringLiteral("temperature, tint")));
+        QVERIFY(q.contains(QStringLiteral("Himmel blauer")));
+        QVERIFY(q.contains(QStringLiteral("luminance p1/p50/p99")));
+        QVERIFY(q.contains(QStringLiteral("Deutsch")));
+
+        // Bild in der Benutzer-Nachricht
+        Message m;
+        m.text = QStringLiteral("Optimise");
+        m.images = {QByteArray("PNG")};
+        const Account claudeAcc{QStringLiteral("c"), QStringLiteral("claude"), QString(), QString(), QStringLiteral("k"), QString()};
+        std::unique_ptr<Provider> claude(Provider::create(claudeAcc));
+        QJsonArray content = claude->requestBody(aiopt::systemPrompt(), {m}, {}).value(QStringLiteral("messages")).toArray()[0]
+                                 .toObject().value(QStringLiteral("content")).toArray();
+        QCOMPARE(content.size(), 2);
+        QCOMPARE(content[1].toObject().value(QStringLiteral("type")).toString(), QStringLiteral("image"));
+        const Account gptAcc{QStringLiteral("o"), QStringLiteral("openai"), QString(), QString(), QStringLiteral("k"), QString()};
+        std::unique_ptr<Provider> gpt(Provider::create(gptAcc));
+        const QJsonArray messages = gpt->requestBody(aiopt::systemPrompt(), {m}, {}).value(QStringLiteral("messages")).toArray();
+        content = messages[1].toObject().value(QStringLiteral("content")).toArray();
+        QCOMPARE(content[1].toObject().value(QStringLiteral("image_url")).toObject().value(QStringLiteral("url")).toString(),
+                 QStringLiteral("data:image/png;base64,") + QString::fromLatin1(QByteArray("PNG").toBase64()));
+
+        // Dialog: Vorschlag in die Regler, Stärke 0 = Original, sonst verändert
+        // Nur Claude Code: Auswahl gesperrt, „Einrichten …“ meldet sich; nach dem Anlegen frei
+        saveAccounts({{QStringLiteral("cc"), QStringLiteral("claude_code"), QString(), QString(), QString(), QStringLiteral("sonnet")}});
+        {
+            AiImageDialog none(photo);
+            auto* account = none.findChild<QComboBox*>(QStringLiteral("account"));
+            auto* setup = none.findChild<QPushButton*>(QStringLiteral("accountSetup"));
+            QVERIFY(account && setup);
+            QVERIFY(!account->isEnabled());
+            QSignalSpy requested(&none, &AiImageDialog::accountSetupRequested);
+            setup->click();
+            QCOMPARE(requested.size(), 1);
+            saveAccounts({gptAcc});
+            none.reloadAccounts();
+            QVERIFY(account->isEnabled());
+            QCOMPARE(account->count(), 1);
+        }
+        // KI bearbeitet das Bild: Auftrag, Gemini-Format, Varianten, Übertragen oder Ersetzen, Stärke
+        {
+            aiopt::EditSettings es;
+            es.tasks = aiopt::CastTask | aiopt::SkyTask;
+            es.wish = QStringLiteral("Boot kräftiger");
+            const QString prompt = aiopt::editPrompt(es);
+            QVERIFY(prompt.contains(QStringLiteral("white balance")) && prompt.contains(QStringLiteral("sky")));
+            QVERIFY(prompt.contains(QStringLiteral("Boot kräftiger")) && prompt.contains(QStringLiteral("same framing")));
+            QVERIFY(!prompt.contains(QStringLiteral("sharpen")));
+            QVERIFY(!aiopt::changesContent(es.tasks));
+            QVERIFY(aiopt::changesContent(aiopt::SharpenTask));
+            QCOMPARE(aiopt::imageModels(QStringLiteral("openai")).first(), QStringLiteral("gpt-image-2"));
+            QVERIFY(aiopt::imageModels(QStringLiteral("claude")).isEmpty());
+            QCOMPARE(aiopt::geminiEndpoint(QStringLiteral("https://generativelanguage.googleapis.com/v1beta/openai/"),
+                                           QStringLiteral("gemini-2.5-flash-image")),
+                     QStringLiteral("https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-image:generateContent"));
+            const QJsonObject req = QJsonDocument::fromJson(aiopt::geminiRequest(QStringLiteral("p"), "PNG")).object();
+            const QJsonArray parts = req[QStringLiteral("contents")].toArray()[0].toObject()[QStringLiteral("parts")].toArray();
+            QCOMPARE(parts[1].toObject()[QStringLiteral("inline_data")].toObject()[QStringLiteral("data")].toString(),
+                     QString::fromLatin1(QByteArray("PNG").toBase64()));
+            QByteArray png;
+            QBuffer pngBuffer(&png);
+            pngBuffer.open(QIODevice::WriteOnly);
+            photo.save(&pngBuffer, "PNG");
+            const QByteArray reply = QJsonDocument(QJsonObject{{QStringLiteral("candidates"), QJsonArray{QJsonObject{
+                {QStringLiteral("content"), QJsonObject{{QStringLiteral("parts"), QJsonArray{
+                    QJsonObject{{QStringLiteral("text"), QStringLiteral("Hier")}},
+                    QJsonObject{{QStringLiteral("inlineData"), QJsonObject{{QStringLiteral("mimeType"), QStringLiteral("image/png")},
+                                                                           {QStringLiteral("data"), QString::fromLatin1(png.toBase64())}}}}}}}}}}}}).toJson();
+            QCOMPARE(aiopt::geminiImage(reply).size(), photo.size());
+            QString said;
+            QVERIFY(aiopt::geminiImage(R"({"candidates":[{"content":{"parts":[{"text":"Geht nicht"}]}}]})", &said).isNull());
+            QCOMPARE(said, QStringLiteral("Geht nicht"));
+
+            saveAccounts({gptAcc});
+            AiImageDialog edit(photo);
+            edit.setMethod(AiImageDialog::Method::Edit);
+            edit.setApplyMode(AiImageDialog::Apply::Transfer);
+            auto* model = edit.findChild<QComboBox*>(QStringLiteral("imageModel"));
+            QVERIFY(model && model->currentText().startsWith(QStringLiteral("gpt-image")));
+            QVERIFY(edit.findChild<QComboBox*>(QStringLiteral("account"))->isEnabled());
+            // «KI-Ergebnis»: wärmer, etwas heller, kleiner als das Original
+            QImage warm = photo.convertToFormat(QImage::Format_RGB32).scaled(photo.width() / 2, photo.height() / 2);
+            for (int y = 0; y < warm.height(); ++y)
+                for (int x = 0; x < warm.width(); ++x) {
+                    const QRgb c = warm.pixel(x, y);
+                    warm.setPixel(x, y, qRgb(std::min(255, qRed(c) + 40), std::min(255, qGreen(c) + 15), std::max(0, qBlue(c) - 20)));
+                }
+            edit.addEditedImage(warm, QStringLiteral("Test"));
+            QCOMPARE(edit.variantCount(), 1);
+            const QImage transferred = edit.result();
+            QCOMPARE(transferred.size(), photo.size());
+            const QRgb before = photo.pixel(100, 60), after = transferred.pixel(100, 60);
+            QVERIFY2(qRed(after) > qRed(before) + 20 && qBlue(after) < qBlue(before),
+                     qPrintable(QStringLiteral("%1 -> %2").arg(before, 0, 16).arg(after, 0, 16)));
+            edit.findChild<QSlider*>()->setValue(0); // Stärke 0 = Original
+            QCOMPARE(edit.result().convertToFormat(QImage::Format_RGB32).pixel(100, 60), photo.convertToFormat(QImage::Format_RGB32).pixel(100, 60));
+            edit.findChild<QSlider*>()->setValue(100);
+            // Schärfen verändert Inhalte: Übernehmen schaltet aufs KI-Bild
+            for (QCheckBox* box : edit.findChildren<QCheckBox*>())
+                if (box->property("task").toInt() == aiopt::SharpenTask)
+                    box->setChecked(true);
+            QCOMPARE(edit.applyMode(), AiImageDialog::Apply::Replace);
+            const QImage replaced = edit.result();
+            const QRgb expectedPixel = warm.scaled(photo.size(), Qt::IgnoreAspectRatio, Qt::SmoothTransformation).pixel(100, 60);
+            QVERIFY(std::abs(qRed(replaced.pixel(100, 60)) - qRed(expectedPixel)) <= 2);
+            edit.addEditedImage(photo, QStringLiteral("Zweite"));
+            QCOMPARE(edit.variantCount(), 2);
+            QVERIFY(edit.findChild<QComboBox*>(QStringLiteral("variant"))->isVisibleTo(&edit));
+            edit.setMethod(AiImageDialog::Method::Values);
+        }
+        saveAccounts({gptAcc});
+        AiImageDialog dialog(photo);
+        dialog.setMethod(AiImageDialog::Method::Values);
+        sg = aiopt::parse(reply, all);
+        dialog.setSuggestion(sg);
+        QCOMPARE(dialog.basic().temperature, -12);
+        const QImage changed = dialog.result();
+        QVERIFY(changed.pixel(100, 60) != photo.convertToFormat(changed.format()).pixel(100, 60));
+        dialog.findChild<QSlider*>()->setValue(0); // Stärke
+        dialog.setSuggestion(aiopt::Suggestion{true, sg.basic, false, {}, {}});
+        QCOMPARE(dialog.result().convertToFormat(QImage::Format_RGB32).pixel(100, 60), photo.pixel(100, 60));
+        // Freistellen mit fertiger Maske: Hintergrund durchsichtig, Motiv unverändert
+        QImage mask(photo.size(), QImage::Format_Grayscale8);
+        mask.fill(0);
+        for (int y = 30; y < 90; ++y)
+            for (int x = 50; x < 150; ++x)
+                mask.setPixel(x, y, qRgb(255, 255, 255));
+        dialog.setCutoutMask(mask);
+        dialog.setCutout(true);
+        if (dialog.cutoutMethod() == AiImageDialog::CutoutMethod::Local) {
+            const QImage cut = dialog.result().convertToFormat(QImage::Format_ARGB32);
+            QCOMPARE(qAlpha(cut.pixel(10, 10)), 0);
+            QCOMPARE(qAlpha(cut.pixel(100, 60)), 255);
+            QCOMPARE(cut.pixel(100, 60) & 0xffffff, photo.pixel(100, 60) & 0xffffff);
+        }
+        dialog.setCutout(false);
+        // Cloud-Hilfen: hochkant -> 1024x1536, Rand weg, Originalgrösse zurück
+        QCOMPARE(aiopt::cloudSize(QSize(1000, 1500)), QSize(1024, 1536));
+        QCOMPARE(aiopt::cloudSize(QSize(1920, 1080)), QSize(1536, 1024));
+        QRect inner;
+        const QImage padded = aiopt::padForCloud(photo, &inner);
+        QCOMPARE(padded.size(), QSize(1536, 1024));
+        QVERIFY(inner.width() <= 1536 && inner.height() <= 1024 && (inner.width() == 1536 || inner.height() == 1024));
+        const QImage back = aiopt::unpadFromCloud(padded.scaled(768, 512), inner, photo.size());
+        QCOMPARE(back.size(), photo.size());
+        QVERIFY(qAbs(qRed(back.pixel(100, 60)) - qRed(photo.pixel(100, 60))) < 12);
+
+        dialog.resize(900, 760);
+        dialog.show();
+        QCoreApplication::processEvents();
+        if (const QString dir = qEnvironmentVariable("VEK_SCREENSHOT_DIR"); !dir.isEmpty())
+            dialog.grab().save(dir + QStringLiteral("/ki-bild-optimieren.png"));
+        saveAccounts({});
+    }
+
+    // Bild freistellen im Dialog mit dem echten Modell (nur mit VEK_ONNXRUNTIME und Modell);
+    // VEK_CUTOUT_FILE = eigenes Foto, sonst eine Scheibe
+    void cutoutDialogLocal()
+    {
+        QCoreApplication::setOrganizationName(QStringLiteral("VektoreditorTest"));
+        if (!matting::runtimeAvailable() || !matting::modelPresent(matting::defaultModel()))
+            QSKIP("ONNX Runtime oder Modell fehlt");
+        QImage photo(qEnvironmentVariable("VEK_CUTOUT_FILE"));
+        if (photo.isNull()) {
+            photo = QImage(400, 300, QImage::Format_RGB32);
+            photo.fill(qRgb(150, 150, 150));
+            QPainter p(&photo);
+            p.setBrush(QColor(220, 30, 30));
+            p.setPen(Qt::NoPen);
+            p.drawEllipse(QPointF(200, 150), 90, 90);
+        }
+        QSettings().setValue(QStringLiteral("aiOptimize/cutoutMethod"), 0);
+        AiImageDialog dialog(photo, nullptr, true);
+        dialog.resize(1000, 800);
+        dialog.show();
+        QTRY_VERIFY_WITH_TIMEOUT(dialog.cutout(), 2000);
+        QTRY_VERIFY_WITH_TIMEOUT(!dialog.cutoutWorking(), 120000);
+        const QImage cut = dialog.result().convertToFormat(QImage::Format_ARGB32);
+        QCOMPARE(cut.size(), photo.size());
+        QCOMPARE(qAlpha(cut.pixel(3, 3)), 0); // Ecke = Hintergrund
+        QCOMPARE(qAlpha(cut.pixel(cut.width() / 2, cut.height() / 2)), 255);
+        if (const QString dir = qEnvironmentVariable("VEK_SCREENSHOT_DIR"); !dir.isEmpty()) {
+            QTest::qWait(400);
+            dialog.grab().save(dir + QStringLiteral("/freistellen-dialog.png"));
+            QImage shown(cut.size(), QImage::Format_ARGB32);
+            shown.fill(QColor(255, 0, 255));
+            QPainter(&shown).drawImage(0, 0, cut);
+            shown.save(dir + QStringLiteral("/freistellen-ergebnis.png"));
+        }
+    }
+
+    // KI bearbeitet das Bild, echter Abruf (nur mit VEK_OPENAI_KEY und VEK_EDIT_FILE; kostet einige Rappen).
+    // VEK_EDIT_OUT=datei.png legt das übertragene Ergebnis ab, VEK_EDIT_MODEL wählt das Bildmodell.
+    void aiImageEditLive()
+    {
+        const QString key = qEnvironmentVariable("VEK_OPENAI_KEY");
+        if (key.isEmpty() || !qEnvironmentVariableIsSet("VEK_EDIT_FILE"))
+            QSKIP("nur mit VEK_OPENAI_KEY und VEK_EDIT_FILE");
+        QCoreApplication::setOrganizationName(QStringLiteral("VektoreditorTest"));
+        const QImage photo(qEnvironmentVariable("VEK_EDIT_FILE"));
+        QVERIFY(!photo.isNull());
+        ai::saveAccounts({ai::Account{QStringLiteral("o"), QStringLiteral("openai"), QStringLiteral("OpenAI"), QString(), key, QString()}});
+        auto cleanup = qScopeGuard([] { ai::saveAccounts({}); }); // Schlüssel nicht liegen lassen
+        AiImageDialog dialog(photo);
+        dialog.setMethod(AiImageDialog::Method::Edit);
+        dialog.setApplyMode(AiImageDialog::Apply::Transfer);
+        if (qEnvironmentVariableIsSet("VEK_EDIT_MODEL"))
+            dialog.findChild<QComboBox*>(QStringLiteral("imageModel"))->setCurrentText(qEnvironmentVariable("VEK_EDIT_MODEL"));
+        QElapsedTimer timer;
+        timer.start();
+        dialog.editImage();
+        QVERIFY(dialog.asking());
+        QTRY_VERIFY_WITH_TIMEOUT(!dialog.asking(), 360000);
+        qInfo().noquote() << "Antwort nach" << timer.elapsed() / 1000 << "s:" << dialog.findChild<QLabel*>(QStringLiteral("status"))->text();
+        QCOMPARE(dialog.variantCount(), 1);
+        const QImage result = dialog.result();
+        QCOMPARE(result.size(), photo.size());
+        if (qEnvironmentVariableIsSet("VEK_EDIT_OUT"))
+            result.save(qEnvironmentVariable("VEK_EDIT_OUT"));
+    }
+
+    // Freistellen über OpenAI, echter Abruf (nur mit VEK_OPENAI_KEY; kostet einige Rappen)
+    void cutoutDialogCloud()
+    {
+        const QString key = qEnvironmentVariable("VEK_OPENAI_KEY");
+        if (key.isEmpty())
+            QSKIP("nur mit VEK_OPENAI_KEY");
+        QCoreApplication::setOrganizationName(QStringLiteral("VektoreditorTest"));
+        QImage photo(qEnvironmentVariable("VEK_CUTOUT_FILE"));
+        QVERIFY(!photo.isNull());
+        ai::saveAccounts({ai::Account{QStringLiteral("o"), QStringLiteral("openai"), QStringLiteral("OpenAI"), QString(), key, QString()}});
+        auto cleanup = qScopeGuard([] { ai::saveAccounts({}); }); // Schlüssel nicht liegen lassen
+        QSettings().setValue(QStringLiteral("aiOptimize/cutoutMethod"), 1);
+        AiImageDialog dialog(photo, nullptr, true);
+        dialog.resize(1000, 800);
+        dialog.show();
+        QTRY_VERIFY_WITH_TIMEOUT(dialog.cutout(), 2000);
+        QTRY_VERIFY_WITH_TIMEOUT(!dialog.cutoutWorking(), 300000);
+        QSettings().setValue(QStringLiteral("aiOptimize/cutoutMethod"), 0);
+        const QImage cut = dialog.result().convertToFormat(QImage::Format_ARGB32);
+        QCOMPARE(cut.size(), photo.size());
+        QCOMPARE(qAlpha(cut.pixel(3, 3)), 0);
+        if (const QString dir = qEnvironmentVariable("VEK_SCREENSHOT_DIR"); !dir.isEmpty()) {
+            QImage shown(cut.size(), QImage::Format_ARGB32);
+            shown.fill(QColor(255, 0, 255));
+            QPainter(&shown).drawImage(0, 0, cut);
+            shown.save(dir + QStringLiteral("/freistellen-cloud.png"));
+        }
+    }
+
     void aiConnectors()
     {
         using namespace ai;

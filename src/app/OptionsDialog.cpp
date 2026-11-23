@@ -6,6 +6,7 @@
 #include "DimensionObject.h"
 #include "Editor.h"
 #include "ExpressionSpinBox.h"
+#include "BaselineGrid.h"
 #include "Options.h"
 #include "ImagePool.h"
 #include "Language.h"
@@ -14,6 +15,7 @@
 #include "ImageSearch.h"
 #include "WebSearch.h"
 #include "Labels.h"
+#include "CustomToolbars.h"
 #include "RectangleObject.h"
 
 #include <QButtonGroup>
@@ -21,6 +23,11 @@
 #include <QComboBox>
 #include <QDialogButtonBox>
 #include <QDoubleSpinBox>
+#include <QDockWidget>
+#include <QEventLoop>
+#include <QInputDialog>
+#include <QMimeData>
+#include <QToolBar>
 #include <QFileDialog>
 #include <QGroupBox>
 #include <QFile>
@@ -90,6 +97,23 @@ void collectActions(QMenu* menu, const QString& path, QList<std::pair<QString, Q
             out << std::pair{path + QLatin1Char('/') + plain(a->text()), a};
     }
 }
+
+// Befehlsliste: Einträge lassen sich auf eine eigene Symbolleiste ziehen
+class CommandList : public QListWidget {
+public:
+    using QListWidget::QListWidget;
+
+protected:
+    QStringList mimeTypes() const override { return {QString::fromLatin1(CustomToolbars::kMime)}; }
+    QMimeData* mimeData(const QList<QListWidgetItem*>& items) const override
+    {
+        if (items.isEmpty())
+            return nullptr;
+        auto* a = reinterpret_cast<QAction*>(items.first()->data(Qt::UserRole + 1).value<quintptr>());
+        return a ? CustomToolbars::mimeFor(a) : nullptr;
+    }
+    Qt::DropActions supportedDropActions() const override { return Qt::CopyAction; }
+};
 
 } // namespace
 
@@ -886,9 +910,12 @@ void OptionsDialog::buildCustomization()
     choice(QStringLiteral("ws/custom/menuMode"), tr("Menüleistenmodus:"), {tr("Normaler Modus")});
     laterRest();
     endGroup();
+    if (auto* bars = m_window ? m_window->findChild<CustomToolbars*>() : nullptr)
+        buildCustomBars(bars);
 
     page(base + tr("/Befehle"), tr("Befehle"));
-    m_layout->addWidget(buildCommandsPage());
+    // Befehlsliste so hoch wie möglich (zum Ziehen auf die Symbolleisten)
+    m_layout->addWidget(buildCommandsPage(), 20);
 
     page(base + tr("/Farbpalette"), tr("Farbpalette"));
     markLaterStart();
@@ -917,8 +944,13 @@ QWidget* OptionsDialog::buildCommandsPage()
     auto* layout = new QHBoxLayout(holder);
     auto* left = new QVBoxLayout;
     auto* categories = new QComboBox(holder);
-    auto* list = new QListWidget(holder);
+    auto* list = new CommandList(holder);
+    list->setObjectName(QStringLiteral("commandList"));
     list->setMinimumWidth(240);
+    list->setIconSize(QSize(20, 20));
+    list->setDragEnabled(true);
+    list->setDragDropMode(QAbstractItemView::DragOnly);
+    list->setDefaultDropAction(Qt::CopyAction);
     left->addWidget(categories);
     left->addWidget(list);
     layout->addLayout(left);
@@ -1022,7 +1054,11 @@ QWidget* OptionsDialog::buildCommandsPage()
         tip->setText(a->statusTip().isEmpty() ? a->toolTip() : a->statusTip());
         const bool inGroup = std::any_of(groupPrefixes.cbegin(), groupPrefixes.cend(),
                                          [&path](const QString& prefix) { return path.startsWith(prefix); });
-        where->setText(inGroup ? path : tr("Menüleiste/%1").arg(path));
+        QStringList places{inGroup ? path : tr("Menüleiste/%1").arg(path)};
+        if (auto* bars = m_window ? m_window->findChild<CustomToolbars*>() : nullptr)
+            for (const QString& bar : bars->barsContaining(a))
+                places << tr("Symbolleiste '%1'").arg(bar);
+        where->setText(places.join(QLatin1Char('\n')));
         title->setText(plain(a->text()));
         image->setPixmap(a->icon().pixmap(48));
         const QKeySequence s = shortcutFor(path, a);
@@ -1037,7 +1073,9 @@ QWidget* OptionsDialog::buildCommandsPage()
                 continue;
             auto* item = new QListWidgetItem(actions[i].second->icon(), actions[i].first.mid(category.size() + 1), list);
             item->setData(Qt::UserRole, i);
-            item->setToolTip(tr("Zum Ändern des Tastaturbefehls rechts unter 'Tastaturbefehle'"));
+            item->setData(Qt::UserRole + 1, quintptr(actions[i].second));
+            item->setToolTip(tr("Ziehen Sie dieses Element auf eine eigene Symbolleiste, um es hinzuzufügen.\n"
+                                "Tastaturbefehl ändern: rechts unter 'Tastaturbefehle'"));
         }
         list->setCurrentRow(0);
     };
@@ -1080,6 +1118,113 @@ QWidget* OptionsDialog::buildCommandsPage()
     fill();
     m_fields.insert(QStringLiteral("ws/custom/shortcuts"), holder);
     return holder;
+}
+
+void OptionsDialog::buildCustomBars(CustomToolbars* bars)
+{
+    group(tr("Eigene Symbolleisten"));
+    auto* list = new QListWidget(m_pageWidget);
+    list->setObjectName(QStringLiteral("customBarList"));
+    list->setMaximumHeight(120);
+    m_layout->addWidget(list);
+    auto refill = [list, bars] {
+        const QString current = list->currentItem() ? list->currentItem()->data(Qt::UserRole).toString() : QString();
+        const QSignalBlocker block(list);
+        list->clear();
+        for (CustomToolBar* b : bars->bars()) {
+            auto* item = new QListWidgetItem(b->windowTitle(), list);
+            item->setData(Qt::UserRole, b->id());
+            item->setFlags(item->flags() | Qt::ItemIsUserCheckable);
+            item->setCheckState(b->isHidden() ? Qt::Unchecked : Qt::Checked);
+            if (b->id() == current)
+                list->setCurrentItem(item);
+        }
+        if (!list->currentItem() && list->count() > 0)
+            list->setCurrentRow(list->count() - 1);
+    };
+    refill();
+    connect(bars, &CustomToolbars::changed, list, refill);
+    connect(list, &QListWidget::itemChanged, this, [bars](QListWidgetItem* item) {
+        if (CustomToolBar* b = bars->bar(item->data(Qt::UserRole).toString()))
+            b->setVisible(item->checkState() == Qt::Checked);
+    });
+    QBoxLayout* r = row();
+    auto* add = new QPushButton(tr("Neu …"), m_pageWidget);
+    add->setObjectName(QStringLiteral("customBarNew"));
+    auto* rename = new QPushButton(tr("Umbenennen …"), m_pageWidget);
+    auto* remove = new QPushButton(tr("Löschen"), m_pageWidget);
+    r->addWidget(add);
+    r->addWidget(rename);
+    r->addWidget(remove);
+    r->addStretch(1);
+    auto selected = [list, bars]() -> CustomToolBar* {
+        return list->currentItem() ? bars->bar(list->currentItem()->data(Qt::UserRole).toString()) : nullptr;
+    };
+    connect(add, &QPushButton::clicked, this, [this, bars, list] {
+        bool ok = false;
+        const QString name = QInputDialog::getText(this, tr("Neue Symbolleiste"), tr("Name der Symbolleiste:"), QLineEdit::Normal,
+                                                   tr("Symbolleiste %1").arg(bars->bars().size() + 1), &ok);
+        if (ok && !name.trimmed().isEmpty()) {
+            bars->create(name.trimmed());
+            list->setCurrentRow(list->count() - 1);
+        }
+    });
+    connect(rename, &QPushButton::clicked, this, [this, bars, selected] {
+        CustomToolBar* b = selected();
+        if (!b)
+            return;
+        bool ok = false;
+        const QString name = QInputDialog::getText(this, tr("Symbolleiste umbenennen"), tr("Name der Symbolleiste:"),
+                                                   QLineEdit::Normal, b->windowTitle(), &ok);
+        if (ok)
+            bars->rename(b, name);
+    });
+    connect(remove, &QPushButton::clicked, this, [this, bars, selected] {
+        CustomToolBar* b = selected();
+        if (b && QMessageBox::question(this, tr("Symbolleiste löschen"), tr("Symbolleiste '%1' löschen?").arg(b->windowTitle()))
+                     == QMessageBox::Yes)
+            bars->remove(b);
+    });
+    note(tr("Befehle unter 'Anpassung > Befehle' auf eine eigene Symbolleiste ziehen. Solange die Optionen offen sind, "
+            "lassen sich die Schaltflächen in den Leisten verschieben, in eine andere Leiste ziehen oder zum Entfernen "
+            "herausziehen (sonst mit gedrückter Alt-Taste). Die Leisten selbst sind am Griff frei verschiebbar."));
+    endGroup();
+}
+
+int OptionsDialog::exec()
+{
+    // Eigene Symbolleisten im Hauptfenster bleiben während der Optionen Ablageziel: deshalb nicht
+    // modal, das übrige Hauptfenster ist so lange gesperrt.
+    auto* bars = m_window ? m_window->findChild<CustomToolbars*>() : nullptr;
+    if (!bars || parentWidget() != m_window || !m_window->isVisible())
+        return QDialog::exec();
+    QList<QPointer<QWidget>> locked;
+    auto lock = [&locked](QWidget* w) {
+        if (w && w->isEnabled()) {
+            w->setEnabled(false);
+            locked << w;
+        }
+    };
+    lock(m_window->centralWidget());
+    lock(m_window->menuBar());
+    for (QToolBar* bar : m_window->findChildren<QToolBar*>(Qt::FindDirectChildrenOnly))
+        if (!qobject_cast<CustomToolBar*>(bar))
+            lock(bar);
+    for (QDockWidget* dock : m_window->findChildren<QDockWidget*>(Qt::FindDirectChildrenOnly))
+        lock(dock);
+    bars->setCustomizing(true);
+    setWindowModality(Qt::NonModal);
+    show();
+    raise();
+    activateWindow();
+    QEventLoop loop;
+    connect(this, &QDialog::finished, &loop, &QEventLoop::quit);
+    loop.exec(QEventLoop::DialogExec);
+    bars->setCustomizing(false);
+    for (const QPointer<QWidget>& w : std::as_const(locked))
+        if (w)
+            w->setEnabled(true);
+    return result();
 }
 
 // --- Dokument ---------------------------------------------------------------------------------
@@ -1468,12 +1613,27 @@ void OptionsDialog::buildDocument()
     check(QStringLiteral("doc/grid/show"), tr("Gitter anzeigen"));
     radios(QStringLiteral("doc/grid/dots"), QString(), {tr("Als Linien"), tr("Als Punkte")}, false);
     endGroup();
-    group(tr("Basisliniengitter"));
-    number(QStringLiteral("doc/grid/baseline/spacing"), tr("Abstand:"), 1, 200, 1, QStringLiteral(" pt"));
+    group(tr("Grundlinienraster"));
+    number(QStringLiteral("doc/grid/baseline/top"), tr("Oberste Linie (von oben):"), 0, 10000, 2, QStringLiteral(" mm"));
+    number(QStringLiteral("doc/grid/baseline/step"), tr("Linienabstand:"), 0.5, 1000, 2, QStringLiteral(" mm"));
+    number(QStringLiteral("doc/grid/baseline/bottom"), tr("Unterste Linie (von unten):"), 0, 10000, 2, QStringLiteral(" mm"));
     colorField(QStringLiteral("doc/grid/baseline/color"), tr("Farbe:"));
-    number(QStringLiteral("doc/grid/baseline/top"), tr("Von oben beginnen:"), 0, 1000, 1, QStringLiteral(" mm"));
     check(QStringLiteral("doc/grid/baseline/snap"), tr("An Gitter ausrichten"));
     check(QStringLiteral("doc/grid/baseline/show"), tr("Gitter anzeigen"));
+    check(QStringLiteral("doc/grid/baseline/text"), tr("Mengentext am Gitter ausrichten"));
+    {
+        const int moved = BaselineGrid::parseMoved(current(QStringLiteral("doc/grid/baseline/moved")).toString()).size();
+        QWidget* reset = button(tr("Verschobene Linien zurücksetzen (%1)").arg(moved), nullptr);
+        reset->setEnabled(moved > 0);
+        connect(static_cast<QPushButton*>(reset), &QPushButton::clicked, this, [this, reset] {
+            setPending(QStringLiteral("doc/grid/baseline/moved"), QString());
+            static_cast<QPushButton*>(reset)->setText(tr("Verschobene Linien zurücksetzen (%1)").arg(0));
+            reset->setEnabled(false);
+        });
+    }
+    note(tr("Mit dem Auswahlwerkzeug an den Griffen neben der Seite ziehen: erste oder letzte Linie dehnt "
+            "das Raster, jede andere Linie verschiebt nur sich selbst. Strg verschiebt nur die gezogene Linie, "
+            "Umschalt das ganze Raster. Doppelklick auf den Griff setzt eine verschobene Linie zurück."));
     endGroup();
     group(tr("Pixelgitter"));
     slider(QStringLiteral("doc/grid/pixel/opacity"), tr("Deckkraft:"), 0, 100, QString());

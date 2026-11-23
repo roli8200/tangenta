@@ -74,6 +74,8 @@ public:
     void setDropCap(int lines);
     bool hyphenate() const { return m_proto && m_proto->hyphenate(); }
     void setHyphenate(bool on);
+    bool followsBaselineGrid() const { return m_proto && m_proto->followsBaselineGrid(); }
+    void setFollowsBaselineGrid(bool on);
     QString text() const { return m_doc ? m_doc->toPlainText() : QString(); }
     // Text der Arbeitskopie passt nicht in die Rahmen
     bool overflows() const { return editing() && editingKind() == TextObject::Kind::Paragraph && flow().overflows(); }

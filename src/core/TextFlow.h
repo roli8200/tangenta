@@ -42,10 +42,14 @@ struct TextGlyph {
 // Ohne Umbruch (Grafiktext) gibt es genau einen Rahmen ohne Grenzen; die Zeilen richten sich
 // an der breitesten aus.
 //
+// Grundlinienraster (grids, je Rahmen die Rasterlinien in mm lokal zum Rahmen, aufsteigend):
+// Jede Zeile rückt nach unten auf die nächste Rasterlinie, die nicht über ihrer eigenen
+// Grundlinie liegt. Unterhalb der letzten Linie bleibt der natürliche Zeilenabstand.
+//
 // Ein- und Ausgaben in mm, jeweils lokal zum Rahmen (0,0 = links oben).
 class TextFlow {
 public:
-    TextFlow(const QTextDocument& doc, const QList<QSizeF>& frames, bool wrap);
+    TextFlow(const QTextDocument& doc, const QList<QSizeF>& frames, bool wrap, const QList<QList<double>>& grids = {});
     ~TextFlow();
     TextFlow(const TextFlow&) = delete;
     TextFlow& operator=(const TextFlow&) = delete;
@@ -104,6 +108,7 @@ private:
     std::vector<int> m_firstLine;                         // erste Zeile des Absatzes in m_lines
     std::vector<Line> m_lines;
     std::vector<QSizeF> m_frameSizes; // Layout-Einheiten
+    std::vector<std::vector<double>> m_grids; // je Rahmen, Layout-Einheiten
     int m_endPosition = 0;
     double m_width = 0.0; // breiteste Zeile (Grafiktext)
     double m_height = 0.0;

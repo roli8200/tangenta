@@ -38,8 +38,8 @@ public:
     QString text(const QString& key) const { return value(key).toString(); }
     QColor color(const QString& key) const { return QColor(value(key).toString()); }
 
-    // Mehrere Werte auf einmal (OK im Dialog); Dokument-Werte als ein Undo-Schritt
-    void apply(const QVariantMap& values);
+    // Mehrere Werte auf einmal (OK im Dialog); Dokument-Werte als ein Undo-Schritt (label leer = "Optionen")
+    void apply(const QVariantMap& values, const QString& label = QString());
     void set(const QString& key, const QVariant& value) { apply({{key, value}}); }
     // Blitzkorrektur aus Optionen > Text > Blitzkorrektur
     autocorrect::Settings autocorrectSettings() const;

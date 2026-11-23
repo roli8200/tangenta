@@ -102,6 +102,7 @@ private:
     };
     QHash<QString, Section> m_sections;
     QWidget* m_frame = nullptr;
+    QWidget* m_scroller = nullptr; // rollt m_frame, wenn die Felder breiter sind als das Fenster
     QWidget* m_host = nullptr; // die gerade sichtbare Leiste
     QBoxLayout* m_row = nullptr;
     QString m_signature;

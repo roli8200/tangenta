@@ -68,4 +68,19 @@ Copy-Item (Join-Path $gsDir 'doc\COPYING') (Join-Path $licTarget 'Ghostscript-AG
 foreach ($dll in 'msvcp140.dll', 'vcruntime140.dll', 'vcruntime140_1.dll') {
     Copy-Item (Join-Path $env:WINDIR "System32\$dll") $target -Force
 }
+# ONNX Runtime (MIT) für «Bild freistellen»: wird zur Laufzeit geladen; aus dem offiziellen NuGet-Paket.
+# Windows bringt in System32 eine alte Fassung mit, deshalb liegt die eigene neben tangenta.exe.
+$ortVersion = '1.32.0'
+$ortDir = Join-Path $env:USERPROFILE "onnxruntime\$ortVersion"
+if (-not (Test-Path (Join-Path $ortDir 'runtimes\win-x64\native\onnxruntime.dll'))) {
+    $pkg = Join-Path $env:USERPROFILE "onnxruntime\dl\microsoft.ml.onnxruntime.$ortVersion.nupkg"
+    New-Item -ItemType Directory -Force (Split-Path $pkg) | Out-Null
+    if (-not (Test-Path $pkg)) {
+        Invoke-WebRequest "https://api.nuget.org/v3-flatcontainer/microsoft.ml.onnxruntime/$ortVersion/microsoft.ml.onnxruntime.$ortVersion.nupkg" -OutFile $pkg
+    }
+    & 'C:\Program Files\7-Zip\7z.exe' x -y "-o$ortDir" $pkg 'runtimes\win-x64\native\onnxruntime.dll' 'LICENSE' | Out-Null
+    if ($LASTEXITCODE -ne 0) { throw 'ONNX Runtime entpacken fehlgeschlagen' }
+}
+Copy-Item (Join-Path $ortDir 'runtimes\win-x64\native\onnxruntime.dll') $target -Force
+Copy-Item (Join-Path $ortDir 'LICENSE') (Join-Path $licTarget 'ONNXRuntime-MIT.txt') -Force
 Write-Host "Fertig: $target\tangenta.exe"

@@ -306,6 +306,97 @@ int Canvas::guideAt(const QPointF& screen) const
     return -1;
 }
 
+bool Canvas::baselineGridShown() const
+{
+    // Zu dicht (unter 3 px Abstand): weder Linien noch Griffe
+    return Options::instance().flag(QStringLiteral("doc/grid/baseline/show"))
+        && m_baselinePreview.value_or(BaselineGrid::fromOptions()).step * m_zoom >= 3.0;
+}
+
+void Canvas::setBaselinePreview(std::optional<BaselineGrid> grid)
+{
+    m_baselinePreview = grid;
+    update();
+}
+
+std::pair<double, double> Canvas::baselineHandleColumns(const QRectF& pageRect) const
+{
+    // Neben der Seite; ist der Rand nicht zu sehen, am Fensterrand über der Seite
+    constexpr double kWidth = 12.0;
+    return {std::max(pageRect.left(), kWidth), std::min(pageRect.right(), width() - kWidth)};
+}
+
+int Canvas::baselineHandleAt(const QPointF& screen) const
+{
+    if (m_toolId != ToolId::Pick || !baselineGridShown())
+        return -1;
+    const QRectF pageRect = viewTransform().mapRect(QRectF(QPointF(0, 0), m_editor.currentPage().size()));
+    const auto [left, right] = baselineHandleColumns(pageRect);
+    if (!(screen.x() >= left - 13.0 && screen.x() <= left + 1.0) && !(screen.x() >= right - 1.0 && screen.x() <= right + 13.0))
+        return -1;
+    const QList<double> lines = BaselineGrid::fromOptions().lines(m_editor.currentPage().size().height());
+    int best = -1;
+    double bestDistance = 5.0;
+    for (int i = 0; i < lines.size(); ++i) {
+        const double d = std::abs(toScreen(QPointF(0, lines[i])).y() - screen.y());
+        if (d <= bestDistance) {
+            best = i;
+            bestDistance = d;
+        }
+    }
+    return best;
+}
+
+void Canvas::paintBaselineGrid(QPainter& p, const QRectF& pageRect) const
+{
+    // Über dem Inhalt (wie Hilfslinien), sonst verdeckt ein Hintergrundobjekt die Linien;
+    // einzeln verschobene Linien orange wie ihre Griffe
+    const Options& opt = Options::instance();
+    const QRectF shown = pageRect.intersected(paintArea());
+    if (baselineGridShown() && !shown.isEmpty()) {
+        const BaselineGrid grid = m_baselinePreview.value_or(BaselineGrid::fromOptions());
+        const QColor color = opt.color(QStringLiteral("doc/grid/baseline/color")).darker(115);
+        p.save();
+        p.setRenderHint(QPainter::Antialiasing, false);
+        const QList<double> lines = grid.lines(m_editor.currentPage().size().height());
+        for (int i = 0; i < lines.size(); ++i) {
+            const double sy = std::round(toScreen(QPointF(0, lines[i])).y()) + 0.5;
+            if (sy < shown.top() || sy > shown.bottom())
+                continue;
+            p.setPen(QPen(grid.moved.contains(i) ? QColor(0xe0, 0x80, 0x00) : color, 1));
+            p.drawLine(QPointF(pageRect.left(), sy), QPointF(pageRect.right(), sy));
+        }
+        p.restore();
+    }
+}
+
+void Canvas::paintBaselineHandles(QPainter& p, const QRectF& pageRect) const
+{
+    if (m_toolId != ToolId::Pick || !baselineGridShown())
+        return;
+    const BaselineGrid grid = m_baselinePreview.value_or(BaselineGrid::fromOptions());
+    const QList<double> lines = grid.lines(m_editor.currentPage().size().height());
+    const auto [left, right] = baselineHandleColumns(pageRect);
+    const QColor base = Options::instance().color(QStringLiteral("doc/grid/baseline/color")).darker(260);
+    p.save();
+    p.setRenderHint(QPainter::Antialiasing);
+    for (int i = 0; i < lines.size(); ++i) {
+        const double y = toScreen(QPointF(0, lines[i])).y();
+        if (y < -6 || y > height() + 6)
+            continue;
+        // Erste und letzte Linie (dehnen/stauchen) gross, die übrigen klein; verschobene orange
+        const bool end = i == 0 || i == lines.size() - 1;
+        const double h = end ? 5.0 : 3.5;
+        const double w = end ? 10.0 : 7.0;
+        const QColor fill = grid.moved.contains(i) ? QColor(0xe0, 0x80, 0x00) : base;
+        p.setPen(QPen(fill.darker(130), 1));
+        p.setBrush(end ? fill : fill.lighter(150));
+        p.drawPolygon(QPolygonF({QPointF(left - 1 - w, y - h), QPointF(left - 1, y), QPointF(left - 1 - w, y + h)}));
+        p.drawPolygon(QPolygonF({QPointF(right + 1 + w, y - h), QPointF(right + 1, y), QPointF(right + 1 + w, y + h)}));
+    }
+    p.restore();
+}
+
 bool Canvas::guideSegment(const Guide& guide, double inset, QPointF* a, QPointF* b) const
 {
     // Lange Strecke durch den Anker, dann auf das (verkleinerte) Fenster zuschneiden (Liang-Barsky)
@@ -341,6 +432,18 @@ bool Canvas::guideSegment(const Guide& guide, double inset, QPointF* a, QPointF*
 bool Canvas::offerPaletteColor(const std::optional<Color>& color, bool fill)
 {
     return tool()->paletteColor(color, fill);
+}
+
+void Canvas::setViewState(const QVariant& state)
+{
+    const QVariantList v = state.toList();
+    if (v.size() != 2)
+        return;
+    m_fitPending = false;
+    m_zoom = v[0].toDouble();
+    m_origin = v[1].toPointF();
+    update();
+    emit viewChanged();
 }
 
 void Canvas::resizeEvent(QResizeEvent*)
@@ -440,7 +543,9 @@ void Canvas::paintEvent(QPaintEvent*)
     if (multi)
         paintPageLabels(p, layout);
     paintSuperClipEdit(p);
+    paintBaselineGrid(p, pageRect);
     paintGuides(p);
+    paintBaselineHandles(p, pageRect);
     p.setRenderHint(QPainter::Antialiasing);
     tool()->paintOverlay(p);
     // Seitengrösse ziehen: neue Seitenfläche gestrichelt
@@ -673,21 +778,6 @@ void Canvas::paintGrid(QPainter& p, const QRectF& pageRect) const
         for (double y = std::ceil(d.top() / px) * px; y <= d.bottom(); y += px)
             p.drawLine(QPointF(shown.left(), std::round(toScreen(QPointF(0, y)).y()) + 0.5), QPointF(shown.right(), std::round(toScreen(QPointF(0, y)).y()) + 0.5));
         p.restore();
-    }
-    // Basisliniengitter
-    if (opt.flag(QStringLiteral("doc/grid/baseline/show")) && !shown.isEmpty()) {
-        const double spacing = opt.number(QStringLiteral("doc/grid/baseline/spacing")) * 25.4 / 72.0;
-        if (spacing * m_zoom >= 3.0) {
-            p.save();
-            p.setRenderHint(QPainter::Antialiasing, false);
-            p.setPen(QPen(opt.color(QStringLiteral("doc/grid/baseline/color")).darker(115), 1));
-            for (double y = opt.number(QStringLiteral("doc/grid/baseline/top")); y <= m_editor.currentPage().size().height(); y += spacing) {
-                const double sy = std::round(toScreen(QPointF(0, y)).y()) + 0.5;
-                if (sy >= shown.top() && sy <= shown.bottom())
-                    p.drawLine(QPointF(pageRect.left(), sy), QPointF(pageRect.right(), sy));
-            }
-            p.restore();
-        }
     }
     if (!opt.flag(QStringLiteral("doc/grid/show")))
         return;
@@ -2536,7 +2626,7 @@ QList<TextFrameGeometry> Canvas::textChainGeometry(NodeId id) const
             continue;
         const Page* page = doc.pageOf(member);
         const bool visible = page == &m_editor.currentPage() || page == &doc.masterPage();
-        frames << TextFrameGeometry{member, t->transform(), t->frameSize(), visible};
+        frames << TextFrameGeometry{member, t->transform(), t->frameSize(), visible, t->baselineGridLines()};
     }
     return frames;
 }

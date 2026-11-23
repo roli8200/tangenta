@@ -3,7 +3,7 @@ cmake_minimum_required(VERSION 3.21)
 if(APPLE AND NOT CMAKE_OSX_DEPLOYMENT_TARGET)
     set(CMAKE_OSX_DEPLOYMENT_TARGET 13.0 CACHE STRING "Älteste unterstützte macOS-Version")
 endif()
-project(Tangenta VERSION 0.91 LANGUAGES C CXX)
+project(Tangenta VERSION 0.92 LANGUAGES C CXX)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -125,6 +125,10 @@ add_library(vekcore STATIC
     src/core/BlurBake.cpp
     src/core/Ramp.cpp
     src/core/TextFlow.cpp
+    src/core/BaselineGrid.cpp
+    src/core/Matting.cpp
+    src/core/Cutout.cpp
+    src/core/ColorTransfer.cpp
     src/core/TextObject.cpp
     src/core/Hyphenator.cpp
     src/core/ImageObject.cpp
@@ -150,15 +154,25 @@ add_library(vekcore STATIC
     src/core/Imposition.cpp
     src/core/DocumentIO.cpp
     src/core/CdrImport.cpp
+    src/core/CdrExport.cpp
 )
 target_include_directories(vekcore PUBLIC src/core)
+# ONNX Runtime (MIT): nur der C-Header; die Bibliothek wird zur Laufzeit geladen (Matting.cpp)
+target_include_directories(vekcore PRIVATE third_party/onnxruntime/include)
 target_link_libraries(vekcore PUBLIC Qt6::Core Qt6::Gui PRIVATE miniz libraw hunspell potrace qrcodegen vek_cdr)
+# Freistellungs-Assistent rechnet auf allen Kernen
+if(OpenMP_CXX_FOUND)
+    target_link_libraries(vekcore PRIVATE OpenMP::OpenMP_CXX)
+endif()
 target_compile_definitions(vekcore PUBLIC VEK_DICTIONARY_SOURCE="${VEK_DICTIONARY_SOURCE}")
 # Deutsche Trennmuster (hyph-utf8, MIT) für die Silbentrennung im Mengentext
 qt_add_resources(vekcore "hyphenation" PREFIX "/hyphenation" BASE resources/hyphenation
     FILES resources/hyphenation/hyph-de-1996.pat)
 # Google-Fonts-Familien (tools/google-fonts-list.py) für die Schriftersetzung beim PDF-Import
 qt_add_resources(vekcore "fonts" PREFIX "/fonts" BASE resources/fonts FILES resources/fonts/googlefonts.tsv)
+# Voreinstellungen für den CDR-Export (tools/cdr-template.py)
+qt_add_resources(vekcore "cdr" PREFIX "/cdr" BASE resources/cdr FILES resources/cdr/x3-template.riff
+    resources/cdr/x6-template.riff)
 
 # --- Anwendung -----------------------------------------------------------------
 if(VEK_BUILD_APP)
@@ -211,6 +225,7 @@ if(VEK_BUILD_APP)
         src/app/Canvas.cpp
         src/app/Ruler.cpp
         src/app/SnapEngine.cpp
+        src/app/BaselineGridOptions.cpp
         src/app/PickTool.cpp
         src/app/ZoomTool.cpp
         src/app/RectangleTool.cpp
@@ -230,6 +245,10 @@ if(VEK_BUILD_APP)
         src/app/AiTools.cpp
         src/app/AiChat.cpp
         src/app/AiPanel.cpp
+        src/app/AiImageDialog.cpp
+        src/app/MenuIcons.cpp
+        src/app/CustomToolbars.cpp
+        src/app/CutoutAssistant.cpp
         src/app/McpServer.cpp
         src/app/ClaudeCode.cpp
         src/app/WebSearch.cpp
@@ -241,6 +260,8 @@ if(VEK_BUILD_APP)
         src/app/CutTools.cpp
         src/app/FlyoutButton.cpp
         src/app/UiScale.cpp
+        src/app/TangentaStyle.cpp
+        src/app/Splash.cpp
         src/app/Language.cpp
         src/app/FreehandTool.cpp
         src/app/ShapeTool.cpp
@@ -274,7 +295,7 @@ if(VEK_BUILD_APP)
     endif()
     qt_add_resources(vekapp "dxf" PREFIX "/dxf" BASE resources/dxf FILES resources/dxf/acad2004.dxf)
     qt_add_resources(vekapp "brand" PREFIX "/brand" BASE resources/brand FILES
-        resources/brand/tangenta.svg
+        resources/brand/tangenta.svg resources/brand/tangenta-mark.svg
         resources/brand/tangenta-16.png resources/brand/tangenta-24.png
         resources/brand/tangenta-32.png resources/brand/tangenta-48.png
         resources/brand/tangenta-64.png resources/brand/tangenta-128.png

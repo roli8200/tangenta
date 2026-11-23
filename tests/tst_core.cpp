@@ -1,3 +1,5 @@
+#include "Matting.h"
+#include "Cutout.h"
 #include "ImageCorrect.h"
 #include "Blend.h"
 #include "BlendObject.h"
@@ -49,6 +51,7 @@
 #include "Mosaic.h"
 #include <QFileInfo>
 #include <numbers>
+#include "ColorTransfer.h"
 
 using namespace vek;
 
@@ -78,6 +81,101 @@ bool fuzzyRect(const QRectF& a, const QRectF& b)
 }
 
 } // namespace
+
+// Messreihe mit echten Bildern: VEK_CUTOUT_BENCH = Ordner mit fg_*.png (mit Alpha) und bg_*.png
+static void benchCutout()
+{
+    const QString dir = qEnvironmentVariable("VEK_CUTOUT_BENCH");
+    if (dir.isEmpty())
+        return;
+    const QStringList fgs = QDir(dir).entryList({QStringLiteral("fg_*.png")});
+    const QStringList bgs = QDir(dir).entryList({QStringLiteral("bg_*.png")});
+    const int bandOut = qEnvironmentVariableIntValue("VEK_CUTOUT_BAND") > 0 ? qEnvironmentVariableIntValue("VEK_CUTOUT_BAND") : 18;
+    for (int k = 0; k < fgs.size(); ++k) {
+        const QImage fg = QImage(dir + QLatin1Char('/') + fgs[k]).convertToFormat(QImage::Format_ARGB32);
+        QImage bg = QImage(dir + QLatin1Char('/') + bgs[k % bgs.size()]).convertToFormat(QImage::Format_RGB32);
+        bg = bg.scaled(fg.size(), Qt::KeepAspectRatioByExpanding, Qt::SmoothTransformation).copy(QRect(QPoint(0, 0), fg.size()));
+        const int W = fg.width(), H = fg.height();
+        QImage photo(W, H, QImage::Format_RGB32), gt(W, H, QImage::Format_Grayscale8), solid(W, H, QImage::Format_Grayscale8);
+        for (int y = 0; y < H; ++y) {
+            for (int x = 0; x < W; ++x) {
+                const QRgb f = fg.pixel(x, y), b = bg.pixel(x, y);
+                const double a = qAlpha(f) / 255.0;
+                photo.setPixel(x, y, qRgb(int(a * qRed(f) + (1 - a) * qRed(b) + 0.5), int(a * qGreen(f) + (1 - a) * qGreen(b) + 0.5),
+                                          int(a * qBlue(f) + (1 - a) * qBlue(b) + 0.5)));
+                gt.scanLine(y)[x] = uchar(qAlpha(f));
+                solid.scanLine(y)[x] = qAlpha(f) >= 128 ? 255 : 0;
+            }
+        }
+        const QImage outer = cutout::refineAlpha(solid, bandOut, 0, 0), inner = cutout::refineAlpha(solid, -bandOut, 0, 0);
+        QImage band(W, H, QImage::Format_Grayscale8), fill(W, H, QImage::Format_Grayscale8);
+        for (int y = 0; y < H; ++y)
+            for (int x = 0; x < W; ++x) {
+                band.scanLine(y)[x] = outer.scanLine(y)[x] > 0 && inner.scanLine(y)[x] == 0 ? 255 : 0;
+                fill.scanLine(y)[x] = inner.scanLine(y)[x] > 0 ? 255 : 0;
+            }
+        const QImage tri = cutout::trimap(band, fill);
+        auto score = [&](const QImage& a, double* mseOut = nullptr) {
+            double s = 0, mse = 0;
+            for (int y = 0; y < H; ++y)
+                for (int x = 0; x < W; ++x) {
+                    const double e = (a.constScanLine(y)[x] - gt.constScanLine(y)[x]) / 255.0;
+                    s += std::abs(e);
+                    mse += e * e;
+                }
+            if (mseOut)
+                *mseOut = mse / (W * H) * 1000;
+            return s / 1000;
+        };
+        QImage prior;
+        QString error;
+        if (matting::runtimeAvailable(&error) && matting::modelPresent(matting::defaultModel()))
+            prior = matting::subjectMask(photo, matting::defaultModel(), &error);
+        if (!prior.isNull())
+            qInfo("%s: nur Modell SAD %.2f", qPrintable(fgs[k]), score(prior));
+        qInfo("%s: Trimap allein SAD %.2f", qPrintable(fgs[k]), score(tri));
+        {
+            QElapsedTimer t;
+            t.start();
+            const QImage a = cutout::solveAlpha(photo, tri);
+            qInfo("  Standard       SAD %7.2f  %5lld ms", score(a), t.elapsed());
+            QImage shown(W, H, QImage::Format_RGB32);
+            shown.fill(qRgb(0, 170, 0));
+            QPainter(&shown).drawImage(0, 0, cutout::compose(photo, a));
+            shown.save(QDir::tempPath() + QStringLiteral("/cutout-") + fgs[k].chopped(4) + QStringLiteral(".jpg"));
+            photo.save(QDir::tempPath() + QStringLiteral("/cutout-") + fgs[k].chopped(4) + QStringLiteral("-photo.jpg"));
+        }
+        if (qEnvironmentVariableIsSet("VEK_CUTOUT_QUICK"))
+            continue;
+        struct Variant {
+            const char* name;
+            int radius;
+            double eps;
+            qint64 work;
+            double prior;
+        };
+        const Variant variants[] = {{"r1 e-6", 1, 1e-6, 4'000'000, 0},   {"r1 e-7", 1, 1e-7, 4'000'000, 0},
+                                    {"r1 e-5", 1, 1e-5, 4'000'000, 0},   {"r2 e-6", 2, 1e-6, 4'000'000, 0},
+                                    {"r1 e-6 0.5MP", 1, 1e-6, 500'000, 0}, {"r1 e-6 p.01", 1, 1e-6, 4'000'000, 0.01},
+                                    {"r1 e-6 p.05", 1, 1e-6, 4'000'000, 0.05}, {"r1 e-6 p.2", 1, 1e-6, 4'000'000, 0.2}};
+        for (const Variant& v : variants) {
+            if (v.prior > 0 && prior.isNull())
+                continue;
+            cutout::Settings s;
+            s.radius = v.radius;
+            s.epsilon = v.eps;
+            s.workPixels = v.work;
+            s.priorWeight = v.prior;
+            QElapsedTimer t;
+            t.start();
+            const QImage a = cutout::solveAlpha(photo, tri, v.prior > 0 ? prior : QImage(), s);
+            double mse = 0;
+            const double sad = score(a, &mse);
+            qInfo("  %-14s SAD %7.2f  MSE %6.3f  %5lld ms", v.name, sad, mse, t.elapsed());
+        }
+    }
+}
+
 
 class TestCore : public QObject {
     Q_OBJECT
@@ -1161,6 +1259,366 @@ private slots:
             right = std::max(right, b.right());
         }
         QVERIFY2(left > -1.0 && right > 45.0, qPrintable(QStringLiteral("%1 %2").arg(left).arg(right)));
+    }
+
+    // Farbübertragung KI -> Original: bekannte Farbabbildung wird aus einer kleineren Fassung gelernt,
+    // Grösse, Transparenz und Farbtiefe bleiben; lokaler Rest übernimmt grossflächige Aufhellung
+    void colorTransfer()
+    {
+        QImage original(300, 200, QImage::Format_ARGB32);
+        for (int y = 0; y < 200; ++y)
+            for (int x = 0; x < 300; ++x) {
+                const int ring = int(std::hypot(x - 150, y - 100)) % 40 < 20 ? 40 : 0;
+                original.setPixel(x, y, qRgba(std::min(255, x * 255 / 300 / 2 + 60 + ring), std::min(255, y + 30), 160 - ring, x < 10 ? 128 : 255));
+            }
+        auto mapped = [](const QImage& in, double lift) {
+            QImage out = in.convertToFormat(QImage::Format_ARGB32);
+            for (int y = 0; y < out.height(); ++y)
+                for (int x = 0; x < out.width(); ++x) {
+                    const QRgb c = out.pixel(x, y);
+                    const double l = lift * (x < out.width() / 2 ? 1.0 : 0.0);
+                    auto f = [l](double v, double gain, double off) { return std::clamp(int(std::lround(255 * std::clamp(v / 255 * gain + off + l, 0.0, 1.0))), 0, 255); };
+                    out.setPixel(x, y, qRgba(f(qRed(c), 0.8, 0.12), f(qGreen(c), 1.1, -0.02), f(qBlue(c), 0.7, 0.05), qAlpha(c)));
+                }
+            return out;
+        };
+        auto error = [](const QImage& a, const QImage& b, int x0, int x1) {
+            double sum = 0;
+            int n = 0;
+            for (int y = 10; y < a.height() - 10; ++y)
+                for (int x = x0; x < x1; ++x) {
+                    const QRgb p = a.pixel(x, y), q = b.pixel(x, y);
+                    sum += std::abs(qRed(p) - qRed(q)) + std::abs(qGreen(p) - qGreen(q)) + std::abs(qBlue(p) - qBlue(q));
+                    n += 3;
+                }
+            return sum / n;
+        };
+        const QImage expected = mapped(original, 0.0);
+        const QImage small = expected.scaled(150, 100, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+        const colortransfer::Result plain = colortransfer::transfer(original, small, 0.0);
+        QCOMPARE(plain.image.size(), original.size());
+        QCOMPARE(qAlpha(plain.image.pixel(5, 50)), 128);
+        QVERIFY2(error(plain.image, expected, 20, 280) < 4.0, qPrintable(QString::number(error(plain.image, expected, 20, 280))));
+        QVERIFY(plain.alignment > 0.8);
+        // Lokal: linke Hälfte von der KI aufgehellt
+        const QImage lifted = mapped(original, 0.15);
+        const QImage liftedSmall = lifted.scaled(150, 100, Qt::IgnoreAspectRatio, Qt::SmoothTransformation);
+        const double globalOnly = error(colortransfer::transfer(original, liftedSmall, 0.0).image, lifted, 30, 120);
+        const colortransfer::Result local = colortransfer::transfer(original, liftedSmall, 1.0);
+        const double withLocal = error(local.image, lifted, 30, 120);
+        QVERIFY2(withLocal < globalOnly * 0.6, qPrintable(QStringLiteral("%1 / %2").arg(withLocal).arg(globalOnly)));
+        qInfo("Farbübertragung: Übereinstimmung %.2f (lokal aufgehellt %.2f), Abweichung global %.1f, lokal %.1f", plain.alignment, local.alignment, globalOnly, withLocal);
+        QVERIFY(local.localUsed > 0.9);
+        // Fremdes Bild: keine Übereinstimmung, kein lokaler Rest
+        QImage noise(300, 200, QImage::Format_RGB32);
+        quint32 seed = 7;
+        for (int y = 0; y < 200; ++y)
+            for (int x = 0; x < 300; ++x) {
+                seed = seed * 1664525u + 1013904223u;
+                noise.setPixel(x, y, qRgb(int(seed >> 24), int((seed >> 16) & 255), int((seed >> 8) & 255)));
+            }
+        const colortransfer::Result foreign = colortransfer::transfer(original, noise, 1.0);
+        QVERIFY(foreign.alignment < 0.3);
+        QCOMPARE(foreign.localUsed, 0.0);
+        // 16 Bit bleiben 16 Bit
+        const QImage deep = original.convertToFormat(QImage::Format_RGBA64);
+        QCOMPARE(colortransfer::transfer(deep, small, 0.5).image.format(), QImage::Format_RGBA64);
+        // Probe mit echten Bildern: VEK_TRANSFER=original;ki;ausgabe
+        if (const QStringList f = qEnvironmentVariable("VEK_TRANSFER").split(QLatin1Char(';')); f.size() == 3) {
+            QElapsedTimer timer;
+            timer.start();
+            const colortransfer::Result r = colortransfer::transfer(QImage(f[0]), QImage(f[1]), 0.8);
+            qInfo("Probe: Übereinstimmung %.2f, lokal %.2f, %lld ms", r.alignment, r.localUsed, timer.elapsed());
+            r.image.save(f[2]);
+        }
+    }
+
+    // Freistellen: Maske anwenden (Kantenhärte, 16 Bit bleibt 16 Bit); mit ONNX Runtime und Modell
+    // (VEK_ONNXRUNTIME, VEK_MATTING_MODEL_DIR) auch die echte Maske eines Motivs
+    void cutoutAssistant()
+    {
+        // Füllen: innerhalb des Rings, nicht darüber hinaus; der Bildrand schliesst ab
+        QImage marker(100, 80, QImage::Format_Grayscale8);
+        marker.fill(0);
+        {
+            QPainter p(&marker);
+            p.setPen(QPen(Qt::white, 6));
+            p.drawEllipse(QPointF(50, 40), 25, 25);
+            p.drawLine(0, 75, 99, 75); // Linie über die ganze Breite: unten abgeschlossen
+        }
+        const QImage inside = cutout::floodFill(marker, QPoint(50, 40));
+        QCOMPARE(inside.size(), marker.size());
+        QCOMPARE(qGray(inside.pixel(50, 40)), 255);
+        QCOMPARE(qGray(inside.pixel(5, 5)), 0);
+        QVERIFY(cutout::floodFill(marker, QPoint(50, 15)).isNull()); // auf dem Marker
+        const QImage below = cutout::floodFill(marker, QPoint(50, 78));
+        QCOMPARE(qGray(below.pixel(2, 79)), 255);
+        QCOMPARE(qGray(below.pixel(2, 60)), 0);
+
+        // Trimap: Füllung = Motiv, Marker = unbekannt, Pinsel haben Vorrang
+        QImage keep(100, 80, QImage::Format_Grayscale8), remove(100, 80, QImage::Format_Grayscale8);
+        keep.fill(0);
+        remove.fill(0);
+        keep.setPixel(5, 5, 255);
+        remove.setPixel(50, 40, 255);
+        const QImage tri = cutout::trimap(marker, inside, keep, remove);
+        QCOMPARE(qGray(tri.pixel(45, 40)), int(cutout::Foreground));
+        QCOMPARE(qGray(tri.pixel(25, 40)), int(cutout::Unknown));
+        QCOMPARE(qGray(tri.pixel(90, 10)), int(cutout::Background));
+        QCOMPARE(qGray(tri.pixel(5, 5)), int(cutout::Foreground));
+        QCOMPARE(qGray(tri.pixel(50, 40)), int(cutout::Background));
+
+        // Kanten: Scheibe mit feinen, halbdurchsichtigen "Haaren" vor strukturiertem Hintergrund
+        const int W = 360, H = 260;
+        QImage gt(W, H, QImage::Format_ARGB32_Premultiplied);
+        gt.fill(Qt::transparent);
+        {
+            QPainter p(&gt);
+            p.setRenderHint(QPainter::Antialiasing);
+            p.setPen(Qt::NoPen);
+            p.setBrush(Qt::white);
+            p.drawEllipse(QPointF(180, 130), 70, 70);
+            for (int i = 0; i < 40; ++i) {
+                const double t = i * 2 * M_PI / 40;
+                p.setPen(QPen(QColor(255, 255, 255, 150), 1.2));
+                p.drawLine(QPointF(180 + 66 * std::cos(t), 130 + 66 * std::sin(t)),
+                           QPointF(180 + 88 * std::cos(t + 0.08), 130 + 88 * std::sin(t + 0.08)));
+            }
+        }
+        QImage alphaGt(W, H, QImage::Format_Grayscale8);
+        QImage photo(W, H, QImage::Format_RGB32);
+        for (int y = 0; y < H; ++y) {
+            for (int x = 0; x < W; ++x) {
+                const double a = qAlpha(gt.pixel(x, y)) / 255.0;
+                alphaGt.scanLine(y)[x] = uchar(qAlpha(gt.pixel(x, y)));
+                // Hintergrund: Blauverlauf mit Wolkenstreifen; Motiv: Orange mit Schattierung
+                const double cloud = 0.5 + 0.5 * std::sin(x * 0.07 + std::sin(y * 0.05) * 2.0);
+                const QColor bg(int(60 + 120 * cloud), int(120 + 80 * cloud), int(220 + 30 * cloud));
+                const QColor fg(int(230 - (y - 60) * 0.3), int(130 - (x - 110) * 0.2), 40);
+                photo.setPixel(x, y, qRgb(int(a * fg.red() + (1 - a) * bg.red()), int(a * fg.green() + (1 - a) * bg.green()),
+                                          int(a * fg.blue() + (1 - a) * bg.blue())));
+            }
+        }
+        // Benutzer-Trimap: Band ±12 px um die Kante (Haare liegen darin), innen gefüllt
+        QImage solid = alphaGt.copy();
+        for (int y = 0; y < H; ++y)
+            for (int x = 0; x < W; ++x)
+                solid.scanLine(y)[x] = solid.scanLine(y)[x] >= 250 ? 255 : 0;
+        const QImage outer = cutout::refineAlpha(solid, 26, 0, 0), inner = cutout::refineAlpha(solid, -8, 0, 0);
+        QImage band(W, H, QImage::Format_Grayscale8);
+        for (int y = 0; y < H; ++y)
+            for (int x = 0; x < W; ++x)
+                band.scanLine(y)[x] = outer.scanLine(y)[x] > 0 && inner.scanLine(y)[x] == 0 ? 255 : 0;
+        const QImage filled = cutout::floodFill(band, QPoint(180, 130));
+        QVERIFY(!filled.isNull());
+        const QImage userTri = cutout::trimap(band, filled);
+        auto sad = [&](const QImage& a) {
+            double s = 0;
+            for (int y = 0; y < H; ++y)
+                for (int x = 0; x < W; ++x)
+                    s += std::abs(a.constScanLine(y)[x] - alphaGt.constScanLine(y)[x]) / 255.0;
+            return s;
+        };
+        QImage naive = userTri.copy(); // Band halb durchsichtig
+        const double base = sad(naive);
+        QElapsedTimer t;
+        t.start();
+        const QImage alpha = cutout::solveAlpha(photo, userTri);
+        QVERIFY(!alpha.isNull());
+        const double err = sad(alpha);
+        qInfo("Freistellungs-Assistent: SAD %.1f (Trimap allein %.1f), %lld ms", err, base, t.elapsed());
+        QVERIFY2(err < base * 0.15, qPrintable(QStringLiteral("%1 vs %2").arg(err).arg(base)));
+        // verkleinert gerechnet und geführt hochskaliert: kaum schlechter
+        cutout::Settings small;
+        small.maxUnknown = 8000;
+        const double errSmall = sad(cutout::solveAlpha(photo, userTri, {}, small));
+        qInfo("  verkleinert: SAD %.1f", errSmall);
+        QVERIFY2(errSmall < base * 0.3, qPrintable(QString::number(errSmall)));
+        // Pinselstrich: nur der Bereich wird neu gerechnet, der Rest bleibt
+        {
+            QImage removeLayer(W, H, QImage::Format_Grayscale8);
+            removeLayer.fill(0);
+            QPainter(&removeLayer).fillRect(QRect(100, 60, 30, 30), Qt::white);
+            const QImage tri2 = cutout::trimap(band, filled, {}, removeLayer);
+            const QRect changed = cutout::changedBounds(userTri, tri2);
+            QVERIFY(QRect(100, 60, 30, 30).contains(changed));
+            QElapsedTimer tl;
+            tl.start();
+            const QImage local = cutout::updateAlpha(photo, tri2, alpha, changed);
+            const qint64 localMs = tl.elapsed();
+            const QImage full = cutout::solveAlpha(photo, tri2);
+            double diff = 0;
+            for (int y = 0; y < H; ++y)
+                for (int x = 0; x < W; ++x)
+                    diff += std::abs(local.constScanLine(y)[x] - full.constScanLine(y)[x]) / 255.0;
+            qInfo("  Bereich neu: %lld ms, Abweichung zur ganzen Rechnung %.1f", localMs, diff);
+            QCOMPARE(qGray(local.pixel(115, 75)), 0);
+            QVERIFY2(diff < 15, qPrintable(QString::number(diff)));
+            QVERIFY(cutout::changedBounds(tri2, tri2).isEmpty());
+        }
+        // Abbruch
+        std::atomic_bool cancel{true};
+        QVERIFY(cutout::solveAlpha(photo, userTri, {}, {}, {{}, &cancel}).isNull());
+
+        // Farbsaum: Haarpixel bekommen die Motivfarbe statt des Himmelsblaus
+        const QImage plain = cutout::compose(photo, alpha, false);
+        const QImage clean = cutout::compose(photo, alpha, true);
+        QCOMPARE(clean.format(), QImage::Format_ARGB32);
+        double bluePlain = 0, blueClean = 0;
+        int count = 0;
+        for (int y = 0; y < H; ++y) {
+            for (int x = 0; x < W; ++x) {
+                const int a = alphaGt.constScanLine(y)[x];
+                if (a < 60 || a > 200)
+                    continue;
+                bluePlain += qBlue(plain.pixel(x, y));
+                blueClean += qBlue(clean.pixel(x, y));
+                ++count;
+            }
+        }
+        QVERIFY(count > 50);
+        qInfo("  Blauanteil an Kanten: %.0f -> %.0f", bluePlain / count, blueClean / count);
+        QVERIFY(blueClean < bluePlain * 0.6);
+        QCOMPARE(cutout::compose(photo.convertToFormat(QImage::Format_RGBA64), alpha).format(), QImage::Format_RGBA64);
+
+        // Nachbearbeitung: verschieben, weich, hart
+        QImage disc(41, 41, QImage::Format_Grayscale8);
+        disc.fill(0);
+        for (int y = 15; y <= 25; ++y)
+            for (int x = 15; x <= 25; ++x)
+                disc.scanLine(y)[x] = 255;
+        QCOMPARE(qGray(cutout::refineAlpha(disc, 3, 0, 0).pixel(13, 20)), 255);
+        QCOMPARE(qGray(cutout::refineAlpha(disc, -3, 0, 0).pixel(16, 20)), 0);
+        const int soft = qGray(cutout::refineAlpha(disc, 0, 4, 0).pixel(15, 20));
+        QVERIFY(soft > 60 && soft < 230);
+
+        benchCutout();
+    }
+
+    void mattingMasksSubject()
+    {
+        QImage image(64, 32, QImage::Format_RGB32);
+        image.fill(qRgb(200, 100, 50));
+        QImage mask(64, 32, QImage::Format_Grayscale8);
+        for (int y = 0; y < 32; ++y)
+            for (int x = 0; x < 64; ++x)
+                mask.setPixel(x, y, qRgb(x * 4, x * 4, x * 4)); // Verlauf 0..252
+        const QImage soft = matting::applyMask(image, mask, 0);
+        QCOMPARE(qAlpha(soft.pixel(0, 5)), 0);
+        QVERIFY(qAbs(qAlpha(soft.pixel(32, 5)) - 128) <= 1);
+        QCOMPARE(QColor(soft.pixel(63, 5)).red(), 200); // Farbe bleibt
+        const QImage hard = matting::applyMask(image, mask, 100);
+        QCOMPARE(qAlpha(hard.pixel(20, 5)), 0);
+        QCOMPARE(qAlpha(hard.pixel(44, 5)), 255);
+        QImage deep = image.convertToFormat(QImage::Format_RGBA64);
+        QCOMPARE(matting::applyMask(deep, mask.scaled(16, 8), 0).format(), QImage::Format_RGBA64); // Maske wird skaliert
+
+        QString error;
+        if (!matting::runtimeAvailable(&error) || !matting::modelPresent(matting::defaultModel()))
+            QSKIP(qPrintable(QStringLiteral("ONNX Runtime oder Modell fehlt: ") + error));
+        // Rote Scheibe auf grauem Grund: Mitte Motiv, Ecken Hintergrund
+        QImage photo(400, 300, QImage::Format_RGB32);
+        photo.fill(qRgb(150, 150, 150));
+        {
+            QPainter p(&photo);
+            p.setRenderHint(QPainter::Antialiasing);
+            p.setPen(Qt::NoPen);
+            p.setBrush(QColor(220, 30, 30));
+            p.drawEllipse(QPointF(200, 150), 90, 90);
+        }
+        QElapsedTimer t;
+        t.start();
+        const QImage m = matting::subjectMask(photo, matting::defaultModel(), &error);
+        QVERIFY2(!m.isNull(), qPrintable(error));
+        qInfo("Freistellen %s: %lld ms", qPrintable(matting::runtimeVersion()), t.elapsed());
+        QCOMPARE(m.size(), photo.size());
+        QVERIFY2(qGray(m.pixel(200, 150)) > 200, qPrintable(QString::number(qGray(m.pixel(200, 150)))));
+        QVERIFY2(qGray(m.pixel(10, 10)) < 40, qPrintable(QString::number(qGray(m.pixel(10, 10)))));
+        QVERIFY(qGray(m.pixel(390, 290)) < 40);
+    }
+
+    void paragraphTextFollowsBaselineGrid()
+    {
+        Document doc;
+        auto setGrid = [&doc](bool show) {
+            Transaction tx(doc, QStringLiteral("Raster"));
+            QJsonObject o = doc.masterPage().options();
+            o[QStringLiteral("doc/grid/baseline/show")] = show;
+            o[QStringLiteral("doc/grid/baseline/top")] = 15.0;
+            o[QStringLiteral("doc/grid/baseline/step")] = 5.0;
+            o[QStringLiteral("doc/grid/baseline/bottom")] = 15.0;
+            tx.modify<Page>(doc.masterPage().id(), [&o](Page& p) { p.setOptions(o); });
+            tx.commit();
+        };
+        auto make = [&doc](double y, double pt, const QSizeF& size) {
+            auto t = std::make_unique<TextObject>(TextObject::Kind::Paragraph, size);
+            t->setPlainText(QStringLiteral("Erste Zeile\nZweite Zeile\nDritte Zeile\nVierte Zeile"), CharFormat{QStringLiteral("Arial"), pt});
+            t->setTransform(QTransform::fromTranslate(20, y));
+            Transaction tx(doc, QStringLiteral("Text"));
+            const NodeId id = tx.insert(firstLayer(doc, 0), -1, std::move(t));
+            tx.commit();
+            return id;
+        };
+        auto onGrid = [](const QList<QLineF>& lines, double step) {
+            QStringList bad;
+            for (const QLineF& l : lines) {
+                const double k = (l.y1() - 15.0) / step;
+                if (std::abs(k - std::round(k)) > 0.002)
+                    bad << QString::number(l.y1(), 'f', 3);
+            }
+            return bad;
+        };
+        const NodeId small = make(31.3, 10.0, QSizeF(80, 60));  // Zeile ~4 mm < 5 mm: jede Zeile eine Linie
+        const NodeId large = make(120.7, 16.0, QSizeF(80, 60)); // Zeile > 5 mm: jede zweite Linie
+        QVERIFY(onGrid(doc.findAs<TextObject>(small)->baselines(), 5.0).size() == 4); // ohne Raster: frei
+
+        setGrid(true);
+        const QList<QLineF> s = doc.findAs<TextObject>(small)->baselines();
+        QCOMPARE(s.size(), 4);
+        QVERIFY2(onGrid(s, 5.0).isEmpty(), qPrintable(onGrid(s, 5.0).join(QLatin1Char(' '))));
+        for (int i = 1; i < s.size(); ++i)
+            QVERIFY(std::abs(s[i].y1() - s[i - 1].y1() - 5.0) < 0.01);
+        QVERIFY(s.first().y1() > 31.3 && s.first().y1() < 31.3 + 5.0 + 4.0);
+        const QList<QLineF> l = doc.findAs<TextObject>(large)->baselines();
+        QVERIFY2(onGrid(l, 5.0).isEmpty(), qPrintable(onGrid(l, 5.0).join(QLatin1Char(' '))));
+        for (int i = 1; i < l.size(); ++i)
+            QVERIFY(std::abs(l[i].y1() - l[i - 1].y1() - 10.0) < 0.01);
+
+        // Rahmen verschieben: Zeilen rasten neu ein
+        {
+            Transaction tx(doc, QStringLiteral("Schieben"));
+            tx.modify<TextObject>(small, [](TextObject& o) { o.setTransform(QTransform::fromTranslate(20, 33.9)); });
+            tx.commit();
+        }
+        QVERIFY(onGrid(doc.findAs<TextObject>(small)->baselines(), 5.0).isEmpty());
+
+        // Je Rahmen abschaltbar (bleibt beim Speichern erhalten)
+        {
+            Transaction tx(doc, QStringLiteral("Aus"));
+            tx.modify<TextObject>(small, [](TextObject& o) { o.setFollowsBaselineGrid(false); });
+            tx.commit();
+        }
+        const auto* off = doc.findAs<TextObject>(small);
+        QVERIFY(!off->followsBaselineGrid() && off->baselineGridLines().isEmpty());
+        QVERIFY(!onGrid(off->baselines(), 5.0).isEmpty());
+        QJsonObject json;
+        off->writeProperties(json);
+        QCOMPARE(json.value(QStringLiteral("baselineGrid")).toBool(true), false);
+
+        // Raster ausgeblendet: natürlicher Abstand
+        setGrid(false);
+        QVERIFY(!onGrid(doc.findAs<TextObject>(large)->baselines(), 5.0).isEmpty());
+        QVERIFY(doc.findAs<TextObject>(large)->baselineGridLines().isEmpty());
+
+        // Ausdrücklich eingeschaltet: gilt auch bei ausgeblendetem Raster
+        {
+            Transaction tx(doc, QStringLiteral("Text am Raster"));
+            QJsonObject o = doc.masterPage().options();
+            o[QStringLiteral("doc/grid/baseline/text")] = true;
+            tx.modify<Page>(doc.masterPage().id(), [&o](Page& p) { p.setOptions(o); });
+            tx.commit();
+        }
+        QVERIFY(onGrid(doc.findAs<TextObject>(large)->baselines(), 5.0).isEmpty());
     }
 
     void textChainsFlowThroughFrames()

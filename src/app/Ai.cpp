@@ -74,7 +74,7 @@ const QList<Kind>& kinds()
          {QStringLiteral("claude-opus-5-5"), QStringLiteral("claude-sonnet-5-5"), QStringLiteral("claude-haiku-5-5")},
          QObject::tr("API-Schlüssel aus platform.claude.com/settings/keys. Wird nach Verbrauch abgerechnet.")},
         {QStringLiteral("openai"), QStringLiteral("OpenAI"), QStringLiteral("https://api.openai.com/v1"), true, false,
-         QStringLiteral("gpt-4o"), {QStringLiteral("gpt-4o"), QStringLiteral("gpt-4o-mini"), QStringLiteral("gpt-4-turbo")},
+         QStringLiteral("gpt-5.5"), {QStringLiteral("gpt-5.5"), QStringLiteral("gpt-5.4-mini"), QStringLiteral("gpt-4.1")},
          QObject::tr("API-Schlüssel aus platform.openai.com/api-keys. Für Azure OpenAI hier die eigene Adresse eintragen.")},
         {QStringLiteral("gemini"), QStringLiteral("Google Gemini"), QStringLiteral("https://generativelanguage.googleapis.com/v1beta/openai"),
          true, false, QStringLiteral("gemini-2.5-flash"),
@@ -446,6 +446,11 @@ QJsonObject AnthropicProvider::requestBody(const QString& system, const QList<Me
         switch (m.role) {
         case Message::Role::User:
             add(QStringLiteral("user"), {{QStringLiteral("type"), QStringLiteral("text")}, {QStringLiteral("text"), m.text}});
+            for (const QByteArray& png : m.images)
+                add(QStringLiteral("user"), {{QStringLiteral("type"), QStringLiteral("image")},
+                                             {QStringLiteral("source"), QJsonObject{{QStringLiteral("type"), QStringLiteral("base64")},
+                                                                                    {QStringLiteral("media_type"), QStringLiteral("image/png")},
+                                                                                    {QStringLiteral("data"), imageBase64(png)}}}});
             break;
         case Message::Role::Assistant:
             if (!m.text.trimmed().isEmpty())
@@ -606,7 +611,16 @@ QJsonObject OpenAiProvider::requestBody(const QString& system, const QList<Messa
             flushImages();
         switch (m.role) {
         case Message::Role::User:
-            messages.append(QJsonObject{{QStringLiteral("role"), QStringLiteral("user")}, {QStringLiteral("content"), m.text}});
+            if (m.images.isEmpty() || !images) {
+                messages.append(QJsonObject{{QStringLiteral("role"), QStringLiteral("user")}, {QStringLiteral("content"), m.text}});
+            } else {
+                QJsonArray content{QJsonObject{{QStringLiteral("type"), QStringLiteral("text")}, {QStringLiteral("text"), m.text}}};
+                for (const QByteArray& png : m.images)
+                    content.append(QJsonObject{{QStringLiteral("type"), QStringLiteral("image_url")},
+                                               {QStringLiteral("image_url"),
+                                                QJsonObject{{QStringLiteral("url"), QStringLiteral("data:image/png;base64,") + imageBase64(png)}}}});
+                messages.append(QJsonObject{{QStringLiteral("role"), QStringLiteral("user")}, {QStringLiteral("content"), content}});
+            }
             break;
         case Message::Role::Assistant:
             if (!m.text.trimmed().isEmpty())

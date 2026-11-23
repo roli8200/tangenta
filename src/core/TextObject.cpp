@@ -223,6 +223,29 @@ void TextObject::setAlignment(TextParagraph::Align align)
     invalidate();
 }
 
+void TextObject::setFollowsBaselineGrid(bool on)
+{
+    if (m_followGrid != on) {
+        m_followGrid = on;
+        invalidate();
+    }
+}
+
+void TextObject::setBaselineGridLines(const QList<double>& lines) const
+{
+    if (m_grid != lines) {
+        m_grid = lines;
+        invalidate();
+    }
+}
+
+QList<QList<double>> TextObject::flowGrids() const
+{
+    QList<QList<double>> grids{m_grid};
+    grids << m_followerGrids;
+    return grids;
+}
+
 void TextObject::setHyphenate(bool on)
 {
     m_hyphenate = on;
@@ -304,7 +327,7 @@ const TextObject::Cache& TextObject::cache() const
         QList<QSizeF> frames;
         if (m_kind == Kind::Paragraph)
             frames << m_frame << m_followerSizes;
-        const TextFlow flow(*doc, frames, m_kind == Kind::Paragraph);
+        const TextFlow flow(*doc, frames, m_kind == Kind::Paragraph, flowGrids());
         for (int i = 0; i < flow.frameCount(); ++i) {
             FrameContent f;
             f.pieces = flow.pieces(i);
@@ -349,8 +372,9 @@ bool TextObject::overflows() const
 
 void TextObject::clearChain() const
 {
-    if (!m_followerSizes.isEmpty()) {
+    if (!m_followerSizes.isEmpty() || !m_followerGrids.isEmpty()) {
         m_followerSizes.clear();
+        m_followerGrids.clear();
         invalidate();
     }
     m_chain.reset();
@@ -364,7 +388,7 @@ QList<QList<TextParagraph>> TextObject::paragraphsByFrame() const
     const std::unique_ptr<QTextDocument> doc = toDocument(true);
     QList<QSizeF> frames{m_frame};
     frames << m_followerSizes;
-    const TextFlow flow(*doc, frames, true);
+    const TextFlow flow(*doc, frames, true, flowGrids());
     QList<QList<TextParagraph>> result;
     for (int i = 0; i < flow.frameCount(); ++i) {
         auto [from, to] = flow.frameRange(i);
@@ -413,6 +437,7 @@ void TextObject::linkChains(std::vector<const TextObject*> texts)
         QList<NodeId> ids{head->id()};
         QList<const TextObject*> followers;
         QList<QSizeF> sizes;
+        QList<QList<double>> grids;
         for (const TextObject* cur = head; cur->m_next != 0;) {
             const TextObject* next = byId.value(cur->m_next);
             if (!next || previous.value(next->id()) != cur->id() || ids.contains(next->id()))
@@ -420,12 +445,14 @@ void TextObject::linkChains(std::vector<const TextObject*> texts)
             ids << next->id();
             followers << next;
             sizes << next->m_frame;
+            grids << next->m_grid;
             cur = next;
         }
         if (followers.isEmpty())
             continue;
-        if (head->m_followerSizes != sizes) {
+        if (head->m_followerSizes != sizes || head->m_followerGrids != grids) {
             head->m_followerSizes = sizes;
+            head->m_followerGrids = grids;
             head->invalidate();
         }
         auto chain = std::make_shared<const QList<NodeId>>(ids);
@@ -563,6 +590,30 @@ QPainterPath TextObject::snapPath() const
     return frame;
 }
 
+QList<QLineF> TextObject::baselines() const
+{
+    QList<QLineF> out;
+    if (hasEnvelope() || fitted())
+        return out;
+    const std::unique_ptr<QTextDocument> doc = toDocument(true);
+    QList<QSizeF> frames;
+    if (m_kind == Kind::Paragraph)
+        frames << m_frame << m_followerSizes;
+    const TextFlow flow(*doc, frames, m_kind == Kind::Paragraph, flowGrids());
+    const double width = frameRect().width();
+    for (int pos = 0, n = 0; n < 1000; ++n) {
+        const TextFlow::Caret c = flow.caret(flow.lineStart(pos));
+        if (c.frame != 0)
+            break;
+        out << transform().map(QLineF(0, c.baseline, width, c.baseline));
+        const int next = flow.lineBelow(pos);
+        if (flow.lineStart(next) == flow.lineStart(pos))
+            break;
+        pos = next;
+    }
+    return out;
+}
+
 QRectF TextObject::boundingRect() const
 {
     if (hasEnvelope() || fitted())
@@ -602,6 +653,8 @@ void TextObject::writeProperties(QJsonObject& out) const
         out[QStringLiteral("height")] = m_frame.height();
         if (m_hyphenate)
             out[QStringLiteral("hyphenate")] = true;
+        if (!m_followGrid)
+            out[QStringLiteral("baselineGrid")] = false;
         if (m_next != 0)
             out[QStringLiteral("next")] = QString::number(m_next); // als Text wie die Ids
     }
@@ -645,6 +698,7 @@ void TextObject::readProperties(const QJsonObject& in)
     m_kind = in.value(QStringLiteral("kind")).toString() == QLatin1String("paragraph") ? Kind::Paragraph : Kind::Artistic;
     m_frame = QSizeF(in.value(QStringLiteral("width")).toDouble(), in.value(QStringLiteral("height")).toDouble());
     m_hyphenate = in.value(QStringLiteral("hyphenate")).toBool();
+    m_followGrid = in.value(QStringLiteral("baselineGrid")).toBool(true);
     m_next = in.value(QStringLiteral("next")).toString().toULongLong();
     m_pathId = in.value(QStringLiteral("onPath")).toString().toULongLong();
     m_pathOffset = in.value(QStringLiteral("pathOffset")).toDouble();

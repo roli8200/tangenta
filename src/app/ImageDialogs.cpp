@@ -236,6 +236,18 @@ void ImagePreviewDialog::renderPreview()
         p.end();
         m_shown = split;
     }
+    if (m_shown.hasAlphaChannel()) {
+        // Durchsichtiges (z.B. freigestellt) wie üblich auf Schachbrett zeigen
+        QImage board(m_shown.size(), QImage::Format_RGB32);
+        QPainter p(&board);
+        for (int y = 0; y < board.height(); y += 8)
+            for (int x = 0; x < board.width(); x += 8)
+                p.fillRect(x, y, 8, 8, ((x + y) / 8) % 2 ? QColor(204, 204, 204) : QColor(255, 255, 255));
+        p.drawImage(0, 0, m_shown);
+        p.end();
+        m_preview->setPixmap(QPixmap::fromImage(board));
+        return;
+    }
     m_preview->setPixmap(QPixmap::fromImage(m_shown));
 }
 

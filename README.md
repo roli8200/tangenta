@@ -70,6 +70,25 @@ checked the result itself and then reported what it had done.
 and adjust detail, smoothing, number of colors and background live. Colors can be merged or replaced.
 Quick Trace does the whole job with a single click.
 
+## Photos: AI retouching and precise cut-outs
+
+**Optimize image with AI** (Bitmaps menu) lets an image model edit your photo: remove colour casts,
+fix exposure and contrast, bring back natural colours, emphasize the sky, sharpen, denoise, smooth
+skin, restore old photos or colourize black-and-white pictures. Pick the tasks, a look and a wish in
+your own words.
+- **Your original stays sharp**: TANGENTA compares the AI result with your photo and transfers colour
+  and light onto the original, in full resolution and colour depth. For tasks that change the content
+  (sharpen, restore, colourize) you can take the AI image itself.
+- **Variants**: every request adds a variant to compare; strength and the classic sliders fine-tune it.
+- **Providers**: OpenAI (gpt-image) or Google Gemini with your own API key. Alternatively the AI only
+  suggests slider values and TANGENTA does the computing.
+
+**Cut out** removes backgrounds in one click, locally with a segmentation model (BiRefNet, nothing
+leaves your computer) or via OpenAI. For difficult edges there is the **Cutout Assistant**: paint a
+green band over the edge, fill the inside, and TANGENTA computes the opacity of every pixel in the band
+(closed-form matting), so fine hair stays and colour fringes are removed. Brushes to keep or remove
+details, edge shift, feather and hardness, preview on checkerboard, black, white or green.
+
 ## Millions of free images, right inside the program
 
 <p align="center">
@@ -91,12 +110,13 @@ resolution up to the original, and the credit is kept in the object name after i
 | **Shaping** | Shape tool with all node types, knife, eraser, crop, weld, intersect, trim, outline to object, join curves |
 | **Fill and outline** | uniform, gradient, pattern, texture, mesh fill, interactive fill, arrowheads, line styles |
 | **Effects** | blend, contour, extrude, envelope, perspective, drop shadow, transparency, lens, bevel, blur, SuperClip |
-| **Text** | artistic and paragraph text, linked frames, text on path, bullets, drop caps, hyphenation, spell checking, QuickCorrect |
-| **Bitmaps** | import up to camera raw files (NEF, CR2, CR3, ARW, DNG …), tone curve, brightness/contrast, color balance, filters, SuperTrace |
+| **Text** | artistic and paragraph text, baseline grid that paragraph text snaps to, linked frames, text on path, bullets, drop caps, hyphenation, spell checking, QuickCorrect |
+| **Bitmaps** | import up to camera raw files (NEF, CR2, CR3, ARW, DNG …), tone curve, brightness/contrast, color balance, live bitmap effects, filters, SuperTrace, AI image editing, cut out, Cutout Assistant |
 | **Document** | pages with master page, layers, object manager, symbols and clones, guides, grid, unlimited undo |
-| **Exchange** | open: CDR, CMX, PDF, AI, SVG (including Inkscape), EPS/PS, DXF, images. Export: PDF, SVG, EPS, DXF, PNG, JPEG, TIFF, WebP, PSD, HTML |
+| **Exchange** | open: CDR (with transparency, PowerClip, gradients and mesh fills), CMX, PDF, AI, SVG (including Inkscape), EPS/PS, DXF, images. Export: CDR (X6 or X3), PDF, SVG, EPS, DXF, PNG, JPEG, TIFF, WebP, PSD, HTML. Clipboard in both directions |
 | **Printing** | print preview, imposition for booklets and step-and-repeat |
 | **Automation** | JavaScript scripting with editor and its own API, AI assistant |
+| **Workspace** | several documents in their own windows, your own toolbars by drag & drop from Options > Customization > Commands, icons on every menu command, adjustable interface size |
 
 The most important shortcuts and moves are listed in [docs/usage.md](docs/usage.md).
 
@@ -112,8 +132,8 @@ packages:
 Silent installation, e.g. via GPO, Intune or a script:
 
 ```bat
-TANGENTA-0.91-x64-setup.exe /quiet
-msiexec /i TANGENTA-0.91-x64.msi /qn INSTALLFOLDER="D:\Programs\TANGENTA" DESKTOPSHORTCUT=1
+TANGENTA-0.92-x64-setup.exe /quiet
+msiexec /i TANGENTA-0.92-x64.msi /qn INSTALLFOLDER="D:\Programs\TANGENTA" DESKTOPSHORTCUT=1
 ```
 
 The packages are not signed yet. If Windows shows "Windows protected your PC", click *More info* →
@@ -121,7 +141,7 @@ The packages are not signed yet. If Windows shows "Windows protected your PC", c
 
 ### macOS 13 or newer
 
-`TANGENTA-0.91-macos.dmg` runs on Macs with Apple silicon and with Intel processors. Open the disk image
+`TANGENTA-0.92-macos.dmg` runs on Macs with Apple silicon and with Intel processors. Open the disk image
 and drag TANGENTA into *Applications*.
 
 The Mac version is not signed by Apple yet. On first start macOS refuses to open it: open
@@ -136,7 +156,7 @@ Windows and Linux versions. Feedback is welcome.
 One package each for Debian 12, Debian 13, Ubuntu 24.04 and Ubuntu 26.04. Qt 6.10 is included.
 
 ```sh
-sudo apt install ./tangenta_0.91-1.debian12_amd64.deb
+sudo apt install ./tangenta_0.92-1.debian12_amd64.deb
 ```
 
 ### Other Linux systems (Flatpak)
@@ -145,7 +165,7 @@ For Fedora, openSUSE, Arch, Mint and every other system with Flatpak. Flatpak fe
 (Qt 6.10) from Flathub during installation.
 
 ```sh
-flatpak install --user TANGENTA-0.91-x86_64.flatpak
+flatpak install --user TANGENTA-0.92-x86_64.flatpak
 flatpak run ch.tangenta.Tangenta
 ```
 

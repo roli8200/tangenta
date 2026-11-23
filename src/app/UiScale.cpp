@@ -11,7 +11,9 @@ InterfaceScale interfaceScale()
 {
     QSettings settings;
     InterfaceScale s;
-    s.fitScreen = settings.value(QStringLiteral("ui/fitScreen"), true).toBool();
+    // Vorgabe ist die Skalierung des Systems wie bei allen anderen Programmen. Neuer Schlüssel:
+    // ui/fitScreen stand früher vorgegeben auf ein und machte TANGENTA auf 4K-Bildschirmen zu gross
+    s.fitScreen = settings.value(QStringLiteral("ui/physicalSize"), false).toBool();
     s.factor = std::clamp(settings.value(QStringLiteral("ui/scale"), 1.0).toDouble(), 0.5, 3.0);
     return s;
 }
@@ -19,7 +21,7 @@ InterfaceScale interfaceScale()
 void setInterfaceScale(const InterfaceScale& scale)
 {
     QSettings settings;
-    settings.setValue(QStringLiteral("ui/fitScreen"), scale.fitScreen);
+    settings.setValue(QStringLiteral("ui/physicalSize"), scale.fitScreen);
     settings.setValue(QStringLiteral("ui/scale"), scale.factor);
 }
 

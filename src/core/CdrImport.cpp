@@ -6,6 +6,7 @@
 #include "ImageObject.h"
 #include "ImagePool.h"
 #include "Ramp.h"
+#include "SuperClipObject.h"
 #include "TextObject.h"
 
 #include <libcdr/libcdr.h>
@@ -19,6 +20,7 @@
 #include <QImage>
 #include <QPainterPath>
 #include <QTransform>
+#include <QtMath>
 #include <QtEndian>
 
 #include <algorithm>
@@ -131,7 +133,15 @@ public:
 
     void setStyle(const Props& p) override { m_style = p; }
 
-    void startLayer(const Props&) override { m_open.push_back(std::make_unique<GroupObject>()); }
+    // Gruppen kommen als Ebenen. PowerClip (powerclip-collect.inc): erstes Kind ist der Rahmen,
+    // danach die Inhalte
+    void startLayer(const Props& p) override
+    {
+        if (p["tangenta:powerclip"])
+            m_open.push_back(std::make_unique<SuperClipObject>());
+        else
+            m_open.push_back(std::make_unique<GroupObject>());
+    }
     void endLayer() override { closeOne(); }
     void openGroup(const Props& p) override { startLayer(p); }
     void closeGroup() override { closeOne(); }
@@ -184,10 +194,10 @@ public:
         if (!parent())
             return;
         const QString key = imagepool::add(withMask(binary(p, "office:binary-data")));
-        if (key.isEmpty())
-            return;
         const double x = num(p, "svg:x") * kMm, y = num(p, "svg:y") * kMm;
         const double w = num(p, "svg:width") * kMm, h = num(p, "svg:height") * kMm;
+        if (key.isEmpty())
+            return;
         if (w <= 0 || h <= 0)
             return;
         auto image = std::make_unique<ImageObject>(key, QSizeF(w, h));
@@ -218,6 +228,7 @@ public:
                                    num(p, "tangenta:box-w") * kMm, num(p, "tangenta:box-h") * kMm);
         }
         m_paragraphs.clear();
+        m_shifts.clear();
         m_textStroke.reset();
         m_textStrokeWidth = 0.0;
         m_textNoFill = false;
@@ -237,7 +248,6 @@ public:
             }
         if (!any)
             return;
-        std::unique_ptr<TextObject> text = m_textMatrix ? placedText(largest) : framedText(largest);
         // Läufe ohne Füllung haben keine eigene Farbe und zeigen die (leere) Füllung des Objekts;
         // die Kontur der Zeichen wird die Kontur des Textobjekts
         vek::Style st;
@@ -245,12 +255,99 @@ public:
         st.stroke = m_textStroke;
         if (m_textStroke)
             st.strokeWidth = std::max(m_textStrokeWidth * kMm, 0.076);
+        if (shiftedLine()) {
+            auto group = std::make_unique<GroupObject>();
+            for (std::unique_ptr<TextObject>& piece : shiftedPieces()) {
+                piece->setStyle(st);
+                applyOpacity(*piece);
+                TextObject* raw = piece.get();
+                attachDetachedChild(*group, std::move(piece));
+                for (const TextRun& run : raw->paragraphs().first().runs)
+                    registerFont(run.format, m_rawFont.value(run.format.family, run.format.family), raw);
+            }
+            attachDetachedChild(*parent(), std::move(group));
+            return;
+        }
+        mergeRuns();
+        std::unique_ptr<TextObject> text = m_textMatrix ? placedText(largest) : framedText(largest);
         text->setStyle(st);
+        applyOpacity(*text);
         TextObject* raw = text.get();
         attachDetachedChild(*parent(), std::move(text));
         for (const TextParagraph& par : std::as_const(m_paragraphs))
             for (const TextRun& run : par.runs)
                 registerFont(run.format, m_rawFont.value(run.format.family, run.format.family), raw);
+    }
+
+    // Horizontal verschobene Zeichen (z. B. Tageszahlen eines Kalenders als ein Text, jede Zahl in
+    // ihrer Spalte): Nur eine Zeile Grafiktext wird zerlegt, Mengentext behält die Läufe ohne Verschiebung
+    bool shiftedLine() const
+    {
+        if (!m_textMatrix || m_textBox || m_paragraphs.size() != 1 || m_shifts.size() != 1)
+            return false;
+        return std::any_of(m_shifts.first().cbegin(), m_shifts.first().cend(), [](double s) { return std::abs(s) > 0.01; });
+    }
+
+    // Ohne Verschiebung gehören gleich formatierte Nachbarläufe wieder zusammen
+    void mergeRuns()
+    {
+        for (TextParagraph& par : m_paragraphs) {
+            QList<TextRun> merged;
+            for (const TextRun& run : std::as_const(par.runs)) {
+                if (!merged.isEmpty() && merged.last().format == run.format)
+                    merged.last().text += run.text;
+                else
+                    merged << run;
+            }
+            par.runs = merged;
+        }
+    }
+
+    static QFont runFont(const CharFormat& format)
+    {
+        const QString installed = fontmatch::installedFamily(format.family);
+        QFont font(installed.isEmpty() ? format.family : installed);
+        font.setPixelSize(std::max(1, int(std::lround(format.sizePt * 25.4 / 72.0 * TextObject::kUnitsPerMm))));
+        font.setBold(format.bold);
+        font.setItalic(format.italic);
+        return font;
+    }
+
+    // Je Lauf ein Grafiktext an seiner natürlichen Stelle plus Verschiebung (Anteil der Schriftgrösse),
+    // alle auf derselben Grundlinie
+    std::vector<std::unique_ptr<TextObject>> shiftedPieces() const
+    {
+        const TextParagraph& par = m_paragraphs.first();
+        const QList<double>& shifts = m_shifts.first();
+        std::vector<double> advances;
+        double total = 0.0;
+        for (const TextRun& run : par.runs) {
+            advances.push_back(QFontMetricsF(runFont(run.format)).horizontalAdvance(run.text) / TextObject::kUnitsPerMm);
+            total += advances.back();
+        }
+        double originX = 0.0;
+        if (par.align == TextParagraph::Align::Center)
+            originX = total / 2.0;
+        else if (par.align == TextParagraph::Align::Right)
+            originX = total;
+        std::vector<std::unique_ptr<TextObject>> pieces;
+        double x = 0.0;
+        for (qsizetype i = 0; i < par.runs.size(); ++i) {
+            const TextRun& run = par.runs[i];
+            if (!run.text.trimmed().isEmpty()) {
+                TextParagraph single;
+                single.runs << run;
+                auto piece = std::make_unique<TextObject>(TextObject::Kind::Artistic);
+                piece->setParagraphs({single});
+                const double ascent = QFontMetricsF(runFont(run.format)).ascent() / TextObject::kUnitsPerMm;
+                const double em = run.format.sizePt * 25.4 / 72.0;
+                piece->setTransform(QTransform::fromTranslate(x + shifts.value(i) * em - originX - piece->frameRect().left(), -ascent)
+                                    * *m_textMatrix);
+                pieces.push_back(std::move(piece));
+            }
+            x += advances[size_t(i)];
+        }
+        return pieces;
     }
     // Ältere Ausgabe ohne Abbildung: Rahmen achsenparallel aus den Seitenmassen
     std::unique_ptr<TextObject> framedText(double largest) const
@@ -323,6 +420,7 @@ public:
     void openParagraph(const Props& p) override
     {
         m_paragraph = TextParagraph();
+        m_runShifts.clear();
         const QString align = str(p, "fo:text-align");
         if (align == QLatin1String("center"))
             m_paragraph.align = TextParagraph::Align::Center;
@@ -333,10 +431,14 @@ public:
     }
     void closeParagraph() override
     {
-        if (m_paragraph.runs.isEmpty())
+        if (m_paragraph.runs.isEmpty()) {
             m_paragraph.runs << TextRun{QString(), m_format};
+            m_runShifts << 0.0;
+        }
         m_paragraphs << m_paragraph;
+        m_shifts << m_runShifts;
         m_paragraph = TextParagraph();
+        m_runShifts.clear();
     }
     void openSpan(const Props& p) override
     {
@@ -352,6 +454,7 @@ public:
                               italic || str(p, "fo:font-style") == QLatin1String("italic"), false,
                               noFill ? std::nullopt : std::optional<Color>(color(str(p, "fo:color")).value_or(Color(0, 0, 0))));
         m_textNoFill = m_textNoFill || noFill;
+        m_shift = num(p, "tangenta:h-shift");
         // Breite 0 heisst bei Text: keine Kontur (so steht es auch bei gewöhnlichem Text in der Datei)
         if (const auto c = color(str(p, "tangenta:stroke-color")); c && !m_textStroke && num(p, "tangenta:stroke-width") > 0.0) {
             m_textStroke = *c;
@@ -390,7 +493,7 @@ public:
     void endTableObject() override {}
 
 private:
-    GroupObject* parent() const
+    Node* parent() const
     {
         if (m_skip > 0 || pages.empty())
             return nullptr;
@@ -401,9 +504,9 @@ private:
     {
         if (m_open.empty())
             return;
-        std::unique_ptr<GroupObject> group = std::move(m_open.back());
+        std::unique_ptr<DrawObject> group = std::move(m_open.back());
         m_open.pop_back();
-        GroupObject* target = parent();
+        Node* target = parent();
         if (target && group->childCount() > 0)
             attachDetachedChild(*target, std::move(group));
     }
@@ -418,10 +521,12 @@ private:
     {
         if (!m_inText)
             return;
-        if (!m_paragraph.runs.isEmpty() && m_paragraph.runs.last().format == m_format)
+        if (!m_paragraph.runs.isEmpty() && m_paragraph.runs.last().format == m_format && m_runShifts.last() == m_shift) {
             m_paragraph.runs.last().text += s;
-        else
+        } else {
             m_paragraph.runs << TextRun{s, m_format};
+            m_runShifts << m_shift;
+        }
     }
 
     void drawPoints(const Props& p, bool closed)
@@ -447,7 +552,7 @@ private:
         std::unique_ptr<CurveObject> curve = CurveObject::fromPath(path);
         if (curve->subPaths().isEmpty())
             return;
-        curve->setStyle(style());
+        curve->setStyle(style(curve->localPath().boundingRect()));
         applyOpacity(*curve);
         attachDetachedChild(*parent(), std::move(curve));
     }
@@ -457,17 +562,175 @@ private:
         const double opacity = num(m_style, "draw:opacity", 1.0);
         if (opacity < 1.0)
             o.setEffect(Effect::Transparency, Ramp::uniform((1.0 - std::clamp(opacity, 0.0, 1.0)) * 100.0));
+        if (const std::optional<Ramp> ramp = transparency(o))
+            o.setEffect(Effect::Transparency, *ramp);
+        if (int(num(m_style, "tangenta:transparency-kind")) == 5)
+            o.setBlendMode(blendMode(int(num(m_style, "tangenta:transparency-mode"))));
     }
 
-    vek::Style style() const
+    // Verlauf der Transparenz aus einer Füllung mit Grauwerten (transparency-output.inc): Geometrie wie
+    // bei Farbverläufen im Begrenzungsrechteck auf der Seite; die Ramp kennt nur Anfang und Ende,
+    // also gelten der erste und der letzte Wert (radial: erster Wert aussen)
+    std::optional<Ramp> transparencyGradient(const DrawObject& o) const
+    {
+        const librevenge::RVNGPropertyListVector* v = m_style.child("tangenta:transparency-stops");
+        if (!v || v->count() < 2)
+            return std::nullopt;
+        const double first = std::clamp(num((*v)[0], "tangenta:transparency"), 0.0, 100.0);
+        const double last = std::clamp(num((*v)[v->count() - 1], "tangenta:transparency"), 0.0, 100.0);
+        const QRectF page = o.path().boundingRect();
+        const QRectF bounds = o.localPath().boundingRect();
+        if (page.width() <= 0.0 || page.height() <= 0.0 || bounds.width() <= 0.0 || bounds.height() <= 0.0)
+            return Ramp::uniform((first + last) / 2.0);
+        const QTransform toLocal = o.transform().inverted();
+        auto rel = [&](const QPointF& p) {
+            const QPointF l = toLocal.map(p);
+            return QPointF((l.x() - bounds.left()) / bounds.width(), (l.y() - bounds.top()) / bounds.height());
+        };
+        const int type = int(num(m_style, "tangenta:transparency-gradient-type"));
+        const double angle = qDegreesToRadians(num(m_style, "tangenta:transparency-gradient-angle"));
+        const double edge = std::clamp(num(m_style, "tangenta:transparency-gradient-edge"), 0.0, 49.0) / 100.0;
+        const QPointF dir(std::cos(angle), -std::sin(angle));
+        Ramp r;
+        if (type != 2 && type != 3 && type != 4) {
+            const double half = (std::abs(page.width() * dir.x()) + std::abs(page.height() * dir.y())) / 2.0 * (1.0 - 2.0 * edge);
+            r.type = Ramp::Type::Linear;
+            r.from = first;
+            r.to = last;
+            r.start = rel(page.center() - dir * half);
+            r.end = rel(page.center() + dir * half);
+            return r;
+        }
+        const QPointF m(page.center().x() + num(m_style, "tangenta:transparency-gradient-cx") / 100.0 * page.width() / 2.0,
+                        page.center().y() - num(m_style, "tangenta:transparency-gradient-cy") / 100.0 * page.height() / 2.0);
+        double radius = 0.0;
+        for (const QPointF& corner : {page.topLeft(), page.topRight(), page.bottomLeft(), page.bottomRight()})
+            radius = std::max(radius, std::hypot(corner.x() - m.x(), corner.y() - m.y()));
+        r.start = rel(m);
+        if (type == 3) {
+            r.type = Ramp::Type::Conical;
+            r.from = first;
+            r.to = last;
+            r.end = rel(m + dir * radius);
+        } else {
+            r.type = Ramp::Type::Radial;
+            r.from = last;
+            r.to = first;
+            r.end = rel(m + QPointF(radius * (1.0 - edge), 0.0));
+        }
+        return r;
+    }
+
+    // Mischmodus der Transparenz; Nummern wie in der Skript-Schnittstelle des Originals (0-24).
+    // Die später hinzugekommenen in der Reihenfolge des Menüs; 28 (Bildschirm) und 29 (Überlagern)
+    // sind an Dateien mit Vorschaubild geprüft, die übrigen folgen daraus
+    static BlendMode blendMode(int mode)
+    {
+        switch (mode) {
+        case 1: return BlendMode::And;
+        case 2: return BlendMode::Or;
+        case 3: return BlendMode::Xor;
+        case 6: return BlendMode::Invert;
+        case 7: return BlendMode::Add;
+        case 8: return BlendMode::Subtract;
+        case 9: return BlendMode::Multiply;
+        case 10: return BlendMode::Divide;
+        case 11: return BlendMode::Lighten;
+        case 12: return BlendMode::Darken;
+        case 13: return BlendMode::Multiply; // Texturieren
+        case 14: return BlendMode::Color;
+        case 15: return BlendMode::Hue;
+        case 16: return BlendMode::Saturation;
+        case 17: return BlendMode::Luminosity;
+        case 18: return BlendMode::Red;
+        case 19: return BlendMode::Green;
+        case 20: return BlendMode::Blue;
+        case 24: return BlendMode::Difference;
+        case 27: return BlendMode::Behind;
+        case 28: return BlendMode::Screen;
+        case 29: return BlendMode::Overlay;
+        case 30: return BlendMode::SoftLight;
+        case 31: return BlendMode::HardLight;
+        case 32: return BlendMode::ColorDodge;
+        case 33: return BlendMode::ColorBurn;
+        case 34: return BlendMode::Exclusion;
+        default: return BlendMode::Normal;
+        }
+    }
+
+    // Transparenz aus der Datei (transparency-read.inc): gleichmässig oder als linearer Verlauf
+    // zwischen zwei Anfassern in Seitenkoordinaten; die Ramp rechnet relativ zur Grundform
+    std::optional<Ramp> transparency(const DrawObject& o) const
+    {
+        const int kind = int(num(m_style, "tangenta:transparency-kind"));
+        const double from = std::clamp(num(m_style, "tangenta:transparency-from"), 0.0, 100.0);
+        const double to = std::clamp(num(m_style, "tangenta:transparency-to"), 0.0, 100.0);
+        if (kind == 1) {
+            if (int(num(m_style, "tangenta:transparency-subtype")) != 0 || from <= 0.0)
+                return std::nullopt;
+            return Ramp::uniform(from);
+        }
+        if (kind != 5)
+            return std::nullopt;
+        // Die lokalen Anfasser mit der Abbildung des Objekts treffen; die Punkte "in der Zeichnung"
+        // (tangenta:transparency-x1 …) sind das Begrenzungsrechteck
+        if (!m_style["tangenta:transparency-lx1"] && m_style.child("tangenta:transparency-stops"))
+            return transparencyGradient(o);
+        if (!m_style["tangenta:transparency-lx1"])
+            return from > 0.0 ? std::optional<Ramp>(Ramp::uniform(from)) : std::nullopt;
+        const QPointF a(num(m_style, "tangenta:transparency-lx1") * kMm, num(m_style, "tangenta:transparency-ly1") * kMm);
+        const QPointF b(num(m_style, "tangenta:transparency-lx2") * kMm, num(m_style, "tangenta:transparency-ly2") * kMm);
+        const QRectF bounds = o.localPath().boundingRect();
+        if (bounds.width() <= 0.0 || bounds.height() <= 0.0)
+            return Ramp::uniform((from + to) / 2.0);
+        const QTransform toLocal = o.transform().inverted();
+        auto rel = [&](const QPointF& p) {
+            const QPointF l = toLocal.map(p);
+            return QPointF((l.x() - bounds.left()) / bounds.width(), (l.y() - bounds.top()) / bounds.height());
+        };
+        Ramp r;
+        r.type = Ramp::Type::Linear;
+        r.from = from;
+        r.to = to;
+        r.start = rel(a);
+        r.end = rel(b);
+        return r;
+    }
+
+    // Maschenfüllung (mesh-output.inc): Knoten zeilenweise auf der Seite, hier relativ zum
+    // Begrenzungsrechteck der Grundform
+    std::optional<Fill> meshFill(const QRectF& bounds) const
+    {
+        const librevenge::RVNGPropertyListVector* nodes = m_style.child("tangenta:mesh-nodes");
+        const int rows = int(num(m_style, "tangenta:mesh-rows")), columns = int(num(m_style, "tangenta:mesh-columns"));
+        if (!nodes || rows < 2 || columns < 2 || nodes->count() != unsigned(rows * columns) || bounds.width() <= 0.0
+            || bounds.height() <= 0.0)
+            return std::nullopt;
+        MeshFill mesh;
+        mesh.rows = rows - 1;
+        mesh.columns = columns - 1;
+        for (unsigned long i = 0; i < nodes->count(); ++i) {
+            const Props& n = (*nodes)[i];
+            const QPointF p(num(n, "svg:x") * kMm, num(n, "svg:y") * kMm);
+            mesh.points.append(QPointF((p.x() - bounds.left()) / bounds.width(), (p.y() - bounds.top()) / bounds.height()));
+            mesh.colors.append(color(str(n, "tangenta:color")).value_or(Color()));
+        }
+        if (!mesh.isValid())
+            return std::nullopt;
+        return Fill::meshFill(mesh);
+    }
+
+    vek::Style style(const QRectF& bounds = QRectF()) const
     {
         vek::Style st;
         const QString fill = str(m_style, "draw:fill");
-        if (fill == QLatin1String("solid")) {
+        if (const std::optional<Fill> mesh = meshFill(bounds)) {
+            st.fill = *mesh;
+        } else if (fill == QLatin1String("solid")) {
             if (const auto c = color(str(m_style, "draw:fill-color")))
                 st.fill = Fill::solid(*c);
         } else if (fill == QLatin1String("gradient")) {
-            st.fill = gradient();
+            st.fill = bounds.isValid() && m_style["tangenta:gradient-type"] ? cdrGradient(bounds) : gradient();
         } else if (fill == QLatin1String("bitmap")) {
             st.fill = bitmapFill();
         } else {
@@ -550,6 +813,60 @@ private:
         return f;
     }
 
+    // Verlauf aus den Angaben der Datei (gradient-output.inc), bezogen auf das Begrenzungsrechteck
+    // der Form auf der Seite: linear über die ganze Ausdehnung in Richtung des Winkels, radial und
+    // quadratisch vom (verschobenen) Mittelpunkt bis zur entferntesten Ecke, konisch um den
+    // Mittelpunkt. Randabstand verkürzt den Übergang, Farbe 0 liegt bei radial aussen.
+    Fill cdrGradient(const QRectF& r) const
+    {
+        QList<GradientStop> stops;
+        if (const librevenge::RVNGPropertyListVector* v = m_style.child("tangenta:gradient-stops"))
+            for (unsigned long i = 0; i < v->count(); ++i)
+                if (const auto c = color(str((*v)[i], "svg:stop-color")))
+                    stops << GradientStop{std::clamp(num((*v)[i], "svg:offset"), 0.0, 1.0), *c};
+        if (stops.isEmpty())
+            return Fill::none();
+        if (stops.size() == 1 || r.width() <= 0.0 || r.height() <= 0.0)
+            return Fill::solid(stops.first().color);
+        const double mid = num(m_style, "tangenta:gradient-midpoint", 0.5);
+        if (stops.size() == 2 && mid > 0.02 && mid < 0.98 && std::abs(mid - 0.5) > 0.01) {
+            const Color a = stops.first().color, b = stops.last().color;
+            auto mix = [](int x, int y) { return std::uint8_t((x + y) / 2); };
+            stops.insert(1, GradientStop{mid, Color(mix(a.r, b.r), mix(a.g, b.g), mix(a.b, b.b), mix(a.a, b.a))});
+        }
+        const int type = int(num(m_style, "tangenta:gradient-type"));
+        const double angle = qDegreesToRadians(num(m_style, "tangenta:gradient-angle"));
+        const double edge = std::clamp(num(m_style, "tangenta:gradient-edge"), 0.0, 49.0) / 100.0;
+        const QPointF dir(std::cos(angle), -std::sin(angle)); // y nach unten
+        auto rel = [&](const QPointF& p) { return QPointF((p.x() - r.left()) / r.width(), (p.y() - r.top()) / r.height()); };
+        Fill f;
+        if (type != 2 && type != 3 && type != 4) {
+            const double half = (std::abs(r.width() * dir.x()) + std::abs(r.height() * dir.y())) / 2.0 * (1.0 - 2.0 * edge);
+            f.type = Fill::Type::Linear;
+            f.start = rel(r.center() - dir * half);
+            f.end = rel(r.center() + dir * half);
+        } else {
+            const QPointF m(r.center().x() + num(m_style, "tangenta:gradient-cx") / 100.0 * r.width() / 2.0,
+                            r.center().y() - num(m_style, "tangenta:gradient-cy") / 100.0 * r.height() / 2.0);
+            double radius = 0.0;
+            for (const QPointF& corner : {r.topLeft(), r.topRight(), r.bottomLeft(), r.bottomRight()})
+                radius = std::max(radius, std::hypot(corner.x() - m.x(), corner.y() - m.y()));
+            f.start = rel(m);
+            if (type == 3) {
+                f.type = Fill::Type::Conical;
+                f.end = rel(m + dir * radius);
+            } else {
+                f.type = Fill::Type::Radial;
+                f.end = rel(m + QPointF(radius * (1.0 - edge), 0.0));
+                for (GradientStop& st : stops)
+                    st.position = 1.0 - st.position;
+            }
+        }
+        f.stops = stops;
+        f.sortStops();
+        return f;
+    }
+
     Fill bitmapFill() const
     {
         const QString key = imagepool::add(withMask(binary(m_style, "draw:fill-image")));
@@ -589,7 +906,7 @@ private:
     }
 
     Props m_style;
-    std::vector<std::unique_ptr<GroupObject>> m_open;
+    std::vector<std::unique_ptr<DrawObject>> m_open;
     int m_skip = 0;
     bool m_inText = false;
     QRectF m_textFrame;
@@ -601,6 +918,9 @@ private:
     QList<TextParagraph> m_paragraphs;
     TextParagraph m_paragraph;
     CharFormat m_format;
+    double m_shift = 0.0;            // horizontale Verschiebung des Laufs, Anteil der Schriftgrösse
+    QList<double> m_runShifts;       // je Lauf des offenen Absatzes
+    QList<QList<double>> m_shifts;   // je Absatz
     QHash<QString, QString> m_rawFont; // Familie -> Name in der Datei
 };
 

@@ -92,6 +92,9 @@ public:
     QPainterPath path() const override;
     // Rahmen (Mengentext) bzw. Ausdehnung (Grafiktext) statt der Glyphen
     QPainterPath snapPath() const override;
+    // Grundlinien der Zeilen in diesem Rahmen, über die Rahmenbreite, in Seitenkoordinaten
+    // (Einrasten «Textbasislinie»); leer bei Hülle oder Text an Pfad
+    QList<QLineF> baselines() const;
     bool hitTest(const QPointF& point, double tolerance, bool treatAsFilled) const override;
     void applyTransform(const QTransform& m) override;
 
@@ -114,6 +117,12 @@ public:
     // Silbentrennung (Mengentext): weiche Trennstriche nur beim Setzen, nie im gespeicherten Text
     bool hyphenate() const { return m_hyphenate; }
     void setHyphenate(bool on);
+    // Mengentext: Zeilen am Grundlinienraster ausrichten, wenn das Dokument es verlangt (Vorgabe ja)
+    bool followsBaselineGrid() const { return m_followGrid; }
+    void setFollowsBaselineGrid(bool on);
+    // Rasterlinien in mm lokal zum Rahmen; setzt Document::updateTextFlow, leer = kein Raster
+    const QList<double>& baselineGridLines() const { return m_grid; }
+    void setBaselineGridLines(const QList<double>& lines) const;
 
     // Gefärbte Glyphenpfade, lokal in mm (bei Folgerahmen der Teil des Kettentextes, der hier steht)
     const QList<Piece>& pieces() const;
@@ -194,6 +203,10 @@ private:
     QSizeF m_frame;
     QList<TextParagraph> m_paragraphs;
     bool m_hyphenate = false;
+    bool m_followGrid = true;
+    mutable QList<double> m_grid;
+    mutable QList<QList<double>> m_followerGrids;
+    QList<QList<double>> flowGrids() const;
     NodeId m_next = 0;
     NodeId m_pathId = 0;
     double m_pathOffset = 0.0;

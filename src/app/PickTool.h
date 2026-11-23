@@ -34,6 +34,10 @@ class Editor;
 //  - Hilfslinien lassen sich anklicken, ziehen und mit Entf löschen; zurück ins Lineal
 //    gezogen verschwinden sie. Ein zweiter Klick auf die ausgewählte Hilfslinie zeigt
 //    Drehgriffe an ihren Enden und den Ankerpunkt (verschiebbar entlang der Linie).
+//  - Grundlinienraster: Griffe links und rechts der Seite. Erste bzw. letzte Linie ziehen dehnt
+//    oder staucht das Raster (die andere Endlinie bleibt), eine Linie dazwischen verschiebt nur
+//    sie; Strg = nur diese Linie (auch erste/letzte), Umschalt = ganzes Raster verschieben.
+//    Doppelklick setzt eine verschobene Linie zurück, Rechtsklick zeigt ein Menü.
 class PickTool final : public Tool {
 public:
     explicit PickTool(Canvas& canvas);
@@ -66,7 +70,7 @@ public:
 
 private:
     enum class Mode { Scale, Rotate };
-    enum class Drag { None, Pending, Move, Handle, Center, Marquee, Guide, GuideRotate, GuideAnchor, RightPending, RightMove };
+    enum class Drag { None, Pending, Move, Handle, Center, Marquee, Guide, GuideRotate, GuideAnchor, Baseline, RightPending, RightMove };
     // Reihenfolge im Uhrzeigersinn ab oben links
     enum Handle { TopLeft, Top, TopRight, Right, BottomRight, Bottom, BottomLeft, Left, HandleCount, NoHandle = -1 };
 
@@ -116,6 +120,7 @@ private:
     // Einrasten: beim Drücken aufgebaut, da sich die Ziele während des Zugs nicht ändern
     std::optional<SnapEngine> m_snapEngine;
     QList<QPointF> m_snapSources;
+    QList<QPointF> m_baselineSources; // Grundlinien gewählter Texte: am Grundlinienraster mit Vorrang
     mutable SnapResult m_snapResult;
     // Hilfslinie, die gerade gezogen oder gedreht wird
     int m_guide = -1;
@@ -127,6 +132,14 @@ private:
     // Drehpunkt der ausgewählten Hilfslinie: frei verschiebbar (auch neben die Linie), sonst der Anker
     std::optional<QPointF> m_guidePivot;
     QPointF m_guidePivotStart;
+    // Grundlinie, die gerade gezogen wird; was das Ziehen bewirkt (Beschriftung des Undo-Schritts)
+    int m_baseline = -1;
+    BaselineGrid m_baselineStart;
+    BaselineGrid m_baselineCurrent;
+    bool m_baselineMoved = false;
+    QString m_baselineLabel;
+    void dragBaseline(const QPointF& doc, Qt::KeyboardModifiers mods);
+    QString baselineTip() const;
 };
 
 } // namespace vek

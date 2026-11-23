@@ -25,6 +25,7 @@ namespace ai {
 struct Account;
 }
 
+class CustomToolbars;
 class Editor;
 
 // Dialog "Optionen": links der Baum (Arbeitsbereich, Dokument, Global),
@@ -46,6 +47,8 @@ public:
     void setPending(const QString& key, const QVariant& value);
 
     void accept() override;
+    // Mit Hauptfenster: nicht modal, damit Befehle auf eigene Symbolleisten gezogen werden können
+    int exec() override;
 
 private:
     // --- Bausteine: fügen in die aktuelle Seite bzw. Gruppe ein
@@ -81,6 +84,7 @@ private:
     void buildGuidePages();
     void buildGlobal();
     QWidget* buildCommandsPage();
+    void buildCustomBars(CustomToolbars* bars);
 
     QVariant current(const QString& key) const;
 

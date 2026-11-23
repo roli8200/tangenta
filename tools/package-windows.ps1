@@ -63,7 +63,7 @@ function Emit-Directory([string]$dir, [string]$indent) {
         [void]$sb.AppendLine("$indent<Component Id=`"$(Id 'c' $rel)`" Bitness=`"always64`">")
         [void]$sb.AppendLine("$indent  <File Id=`"$fileId`" Source=`"$(Esc $file.FullName)`" KeyPath=`"yes`">")
         if ($rel -eq 'tangenta.exe') {
-            [void]$sb.AppendLine("$indent    <Shortcut Id=`"StartMenu`" Directory=`"ProgramMenuFolder`" Name=`"TANGENTA`" Description=`"Vektorgrafik`" WorkingDirectory=`"INSTALLFOLDER`" Icon=`"TangentaIcon`" Advertise=`"yes`" />")
+            [void]$sb.AppendLine("$indent    <Shortcut Id=`"StartMenu`" Directory=`"ProgramMenuFolder`" Name=`"TANGENTA`" Description=`"Vektorgrafik`" WorkingDirectory=`"INSTALLFOLDER`" Icon=`"TangentaIcon.ico`" Advertise=`"yes`" />")
             [void]$sb.AppendLine("$indent  </File>")
             # Eigenes Format fest verknüpft (nicht angekündigt), gleiche ProgIds wie MainWindow::registerFileTypes
             [void]$sb.AppendLine("$indent  <ProgId Id=`"Tangenta.Document`" Description=`"TANGENTA-Zeichnung`" Icon=`"MainExe`" IconIndex=`"0`">")
@@ -108,8 +108,8 @@ $product = @"
     <SummaryInformation Description="TANGENTA $version - Vektorgrafik" Manufacturer="$manufacturer" />
     <MajorUpgrade DowngradeErrorMessage="Eine neuere Version von TANGENTA ist bereits installiert." />
     <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
-    <Icon Id="TangentaIcon" SourceFile="$(Esc $icon)" />
-    <Property Id="ARPPRODUCTICON" Value="TangentaIcon" />
+    <Icon Id="TangentaIcon.ico" SourceFile="$(Esc $icon)" />
+    <Property Id="ARPPRODUCTICON" Value="TangentaIcon.ico" />
     <Property Id="ARPURLINFOABOUT" Value="$homepage" />
     <Property Id="ARPHELPLINK" Value="$homepage" />
     <Property Id="DESKTOPSHORTCUT" Value="0" />
@@ -123,7 +123,7 @@ $($sb.ToString())      </Directory>
     <StandardDirectory Id="ProgramMenuFolder" />
     <StandardDirectory Id="DesktopFolder">
       <Component Id="DesktopShortcut" Condition="DESKTOPSHORTCUT = 1" Bitness="always64">
-        <Shortcut Id="Desktop" Name="TANGENTA" Target="[INSTALLFOLDER]tangenta.exe" WorkingDirectory="INSTALLFOLDER" Icon="TangentaIcon" />
+        <Shortcut Id="Desktop" Name="TANGENTA" Target="[INSTALLFOLDER]tangenta.exe" WorkingDirectory="INSTALLFOLDER" Icon="TangentaIcon.ico" />
         <RegistryValue Root="HKMU" Key="Software\TANGENTA" Name="DesktopShortcut" Type="integer" Value="1" KeyPath="yes" />
       </Component>
     </StandardDirectory>

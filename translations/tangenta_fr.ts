@@ -1247,7 +1247,7 @@
         <translation>Aperçu plein écran</translation>
     </message>
     <message>
-        <source>Basisliniengitter</source>
+        <source>Grundlinienraster</source>
         <translation>Grille de lignes de base</translation>
     </message>
     <message>
@@ -1281,6 +1281,10 @@
     <message>
         <source>Dynamische Hilfslinie</source>
         <translation>Repère dynamique</translation>
+    </message>
+    <message>
+        <source>Grundlinie zurücksetzen</source>
+        <translation>Réinitialiser la ligne de base</translation>
     </message>
     <message>
         <source>Hierher &amp;verschieben</source>
@@ -1349,6 +1353,26 @@
     <message>
         <source>Schubsen</source>
         <translation>Décalage</translation>
+    </message>
+    <message>
+        <source>Grundlinienraster verschieben</source>
+        <translation>Déplacer la grille de lignes de base</translation>
+    </message>
+    <message>
+        <source>Grundlinie verschieben</source>
+        <translation>Déplacer la ligne de base</translation>
+    </message>
+    <message>
+        <source>Grundlinienraster dehnen</source>
+        <translation>Étirer la grille de lignes de base</translation>
+    </message>
+    <message>
+        <source>Linie %1: %2 mm (%3%4 mm)</source>
+        <translation>Ligne %1 : %2 mm (%3%4 mm)</translation>
+    </message>
+    <message>
+        <source>Oben %1 mm · Abstand %2 mm · Unten %3 mm</source>
+        <translation>Haut %1 mm · Espacement %2 mm · Bas %3 mm</translation>
     </message>
     <message>
         <source>Vergrössern</source>
@@ -1958,6 +1982,98 @@
         <source>Reihenfolge umkehren (Ende zuunterst)</source>
         <translation>Inverser l’ordre (fin en dessous)</translation>
     </message>
+    <message>
+        <source>Ebene 1</source>
+        <translation>Calque 1</translation>
+    </message>
+    <message>
+        <source>CDR-Vorlage fehlt.</source>
+        <translation>Le modèle CDR est manquant.</translation>
+    </message>
+    <message>
+        <source>CDR-Vorlage ist beschädigt.</source>
+        <translation>Le modèle CDR est endommagé.</translation>
+    </message>
+    <message>
+        <source>ZIP-Container konnte nicht angelegt werden.</source>
+        <translation>Impossible de créer le conteneur ZIP.</translation>
+    </message>
+    <message>
+        <source>ZIP-Container konnte nicht geschrieben werden.</source>
+        <translation>Impossible d&apos;écrire le conteneur ZIP.</translation>
+    </message>
+    <message>
+        <source>Die KI hat keine Werte geliefert.</source>
+        <translation>L&apos;IA n&apos;a renvoyé aucune valeur.</translation>
+    </message>
+    <message>
+        <source>Die Antwort der KI war nicht lesbar: %1</source>
+        <translation>La réponse de l&apos;IA est illisible : %1</translation>
+    </message>
+    <message>
+        <source>Farbstich entfernen, Weissabgleich</source>
+        <translation>Supprimer la dominante de couleur, balance des blancs</translation>
+    </message>
+    <message>
+        <source>Belichtung und Kontrast</source>
+        <translation>Exposition et contraste</translation>
+    </message>
+    <message>
+        <source>Natürliche, kräftige Farben</source>
+        <translation>Couleurs naturelles et éclatantes</translation>
+    </message>
+    <message>
+        <source>Himmel betonen</source>
+        <translation>Mettre le ciel en valeur</translation>
+    </message>
+    <message>
+        <source>Schärfen, Details herausarbeiten</source>
+        <translation>Accentuer, faire ressortir les détails</translation>
+    </message>
+    <message>
+        <source>Rauschen entfernen</source>
+        <translation>Supprimer le bruit</translation>
+    </message>
+    <message>
+        <source>Haut glätten (Porträt)</source>
+        <translation>Lisser la peau (portrait)</translation>
+    </message>
+    <message>
+        <source>Altes Foto restaurieren</source>
+        <translation>Restaurer une photo ancienne</translation>
+    </message>
+    <message>
+        <source>Schwarzweissfoto kolorieren</source>
+        <translation>Coloriser une photo noir et blanc</translation>
+    </message>
+    <message>
+        <source>Abbruchgrund: %1</source>
+        <translation>Motif de l&apos;interruption : %1</translation>
+    </message>
+    <message>
+        <source>VEKTORGRAFIK · LAYOUT · BILD</source>
+        <translation>GRAPHISME VECTORIEL · MISE EN PAGE · IMAGE</translation>
+    </message>
+    <message>
+        <source>Version %1</source>
+        <translation>Version %1</translation>
+    </message>
+    <message>
+        <source>Frei und kostenlos für Windows, Linux und macOS</source>
+        <translation>Libre et gratuit pour Windows, Linux et macOS</translation>
+    </message>
+    <message>
+        <source>© Intersoft Networks · GPLv3</source>
+        <translation>© Intersoft Networks · GPLv3</translation>
+    </message>
+    <message>
+        <source>Über TANGENTA</source>
+        <translation>À propos de TANGENTA</translation>
+    </message>
+    <message>
+        <source>&lt;p&gt;&lt;b&gt;TANGENTA %1&lt;/b&gt; – Vektorgrafik, Layout und Bildbearbeitung.&lt;br&gt;Qt %2 · %3&lt;/p&gt;&lt;p&gt;Freie Software unter der GNU General Public License, Version 3.&lt;br&gt;© Intersoft Networks, Frauenfeld&lt;/p&gt;&lt;p&gt;&lt;a href=&quot;https://tangenta.ch&quot;&gt;tangenta.ch&lt;/a&gt; · &lt;a href=&quot;https://github.com/roli8200/tangenta&quot;&gt;Quellcode auf GitHub&lt;/a&gt;&lt;/p&gt;</source>
+        <translation>&lt;p&gt;&lt;b&gt;TANGENTA %1&lt;/b&gt; – graphisme vectoriel, mise en page et retouche d&apos;images.&lt;br&gt;Qt %2 · %3&lt;/p&gt;&lt;p&gt;Logiciel libre sous licence publique générale GNU, version 3.&lt;br&gt;© Intersoft Networks, Frauenfeld&lt;/p&gt;&lt;p&gt;&lt;a href=&quot;https://tangenta.ch&quot;&gt;tangenta.ch&lt;/a&gt; · &lt;a href=&quot;https://github.com/roli8200/tangenta&quot;&gt;Code source sur GitHub&lt;/a&gt;&lt;/p&gt;</translation>
+    </message>
 </context>
 <context>
     <name>media</name>
@@ -2318,6 +2434,385 @@
     <message>
         <source>Abgebrochen. Was bis hier geändert wurde, bleibt (Strg+Z nimmt es zurück).</source>
         <translation>Interrompu. Les modifications faites jusqu&apos;ici sont conservées (Ctrl+Z les annule).</translation>
+    </message>
+</context>
+<context>
+    <name>vek::AiImageDialog</name>
+    <message>
+        <source>Bild freistellen</source>
+        <translation>Détourer l&apos;image</translation>
+    </message>
+    <message>
+        <source>Bild mit KI optimieren</source>
+        <translation>Optimiser l&apos;image avec l&apos;IA</translation>
+    </message>
+    <message>
+        <source>KI bearbeitet das Bild</source>
+        <translation>L&apos;IA retouche l&apos;image</translation>
+    </message>
+    <message>
+        <source>KI schlägt Reglerwerte vor</source>
+        <translation>L&apos;IA propose des valeurs de réglage</translation>
+    </message>
+    <message>
+        <source>Ein Bildmodell (OpenAI, Google Gemini) bearbeitet eine Kopie des Bildes nach den gewählten Aufgaben. TANGENTA überträgt das Ergebnis aufs Original.</source>
+        <translation>Un modèle d&apos;image (OpenAI, Google Gemini) retouche une copie de l&apos;image selon les tâches choisies. TANGENTA reporte le résultat sur l&apos;original.</translation>
+    </message>
+    <message>
+        <source>Die KI sieht eine verkleinerte Kopie und schlägt nur Werte für die Regler vor; gerechnet wird in TANGENTA. Schnell und günstig, aber begrenzt auf diese Regler.</source>
+        <translation>L&apos;IA voit une copie réduite et ne propose que des valeurs pour les curseurs ; le calcul est effectué dans TANGENTA. Rapide et économique, mais limité à ces curseurs.</translation>
+    </message>
+    <message>
+        <source>Verfahren:</source>
+        <translation>Méthode :</translation>
+    </message>
+    <message>
+        <source>Einrichten …</source>
+        <translation>Configurer …</translation>
+    </message>
+    <message>
+        <source>Öffnet Extras &gt; Optionen &gt; Global &gt; KI: dort einen Zugang mit API-Schlüssel anlegen</source>
+        <translation>Ouvre Outils &gt; Options &gt; Global &gt; IA : y créer un accès avec une clé API</translation>
+    </message>
+    <message>
+        <source>KI-Zugang:</source>
+        <translation>Accès IA :</translation>
+    </message>
+    <message>
+        <source>Bildmodell des Anbieters; eigene Modellnamen lassen sich eintippen</source>
+        <translation>Modèle d&apos;image du fournisseur ; il est possible de saisir d&apos;autres noms de modèle</translation>
+    </message>
+    <message>
+        <source>Hoch</source>
+        <translation>Élevée</translation>
+    </message>
+    <message>
+        <source>Mittel</source>
+        <translation>Moyenne</translation>
+    </message>
+    <message>
+        <source>Niedrig</source>
+        <translation>Faible</translation>
+    </message>
+    <message>
+        <source>Qualität bei OpenAI: höher ist genauer, dauert länger und kostet mehr</source>
+        <translation>Qualité chez OpenAI : plus elle est élevée, plus le résultat est précis, mais plus long et plus coûteux</translation>
+    </message>
+    <message>
+        <source>Bildmodell:</source>
+        <translation>Modèle d&apos;image :</translation>
+    </message>
+    <message>
+        <source>Natürlich und ausgewogen</source>
+        <translation>Naturel et équilibré</translation>
+    </message>
+    <message>
+        <source>Lebendig, kräftige Farben</source>
+        <translation>Vivant, couleurs éclatantes</translation>
+    </message>
+    <message>
+        <source>Warm</source>
+        <translation>Chaud</translation>
+    </message>
+    <message>
+        <source>Kühl</source>
+        <translation>Froid</translation>
+    </message>
+    <message>
+        <source>Hell und freundlich</source>
+        <translation>Clair et accueillant</translation>
+    </message>
+    <message>
+        <source>Stimmungsvoll, dunkler</source>
+        <translation>Ambiance, plus sombre</translation>
+    </message>
+    <message>
+        <source>Für den Druck</source>
+        <translation>Pour l&apos;impression</translation>
+    </message>
+    <message>
+        <source>Ziel:</source>
+        <translation>Objectif :</translation>
+    </message>
+    <message>
+        <source>Verändert Bildinhalte: wird nur mit „KI-Bild übernehmen“ übertragen</source>
+        <translation>Modifie le contenu de l&apos;image : appliqué uniquement avec « Utiliser l&apos;image IA »</translation>
+    </message>
+    <message>
+        <source>Verbessern:</source>
+        <translation>Améliorer :</translation>
+    </message>
+    <message>
+        <source>Farbstich (Temperatur, Tönung)</source>
+        <translation>Dominante de couleur (température, teinte)</translation>
+    </message>
+    <message>
+        <source>Belichtung und Kontrast</source>
+        <translation>Exposition et contraste</translation>
+    </message>
+    <message>
+        <source>Sättigung</source>
+        <translation>Saturation</translation>
+    </message>
+    <message>
+        <source>Die KI darf ändern:</source>
+        <translation>L&apos;IA peut modifier :</translation>
+    </message>
+    <message>
+        <source>z.B. Himmel etwas blauer, Gesichter heller</source>
+        <translation>p. ex. ciel un peu plus bleu, visages plus clairs</translation>
+    </message>
+    <message>
+        <source>Wunsch:</source>
+        <translation>Souhait :</translation>
+    </message>
+    <message>
+        <source>Farbe und Licht aufs Original übertragen</source>
+        <translation>Reporter couleur et lumière sur l&apos;original</translation>
+    </message>
+    <message>
+        <source>KI-Bild übernehmen</source>
+        <translation>Utiliser l&apos;image IA</translation>
+    </message>
+    <message>
+        <source>Das Original bleibt in voller Auflösung, Farbtiefe und Schärfe; übernommen werden Farben, Weissabgleich, Belichtung und grossflächige Korrekturen der KI.</source>
+        <translation>L&apos;original conserve sa résolution, sa profondeur de couleur et sa netteté ; seuls les couleurs, la balance des blancs, l&apos;exposition et les corrections étendues de l&apos;IA sont repris.</translation>
+    </message>
+    <message>
+        <source>Das Bild der KI ersetzt das Original (höchstens 1536 Pixel, wird hochgerechnet). Nötig für Schärfen, Entrauschen, Retusche, Restaurieren und Kolorieren; Details können sich ändern.</source>
+        <translation>L&apos;image de l&apos;IA remplace l&apos;original (1536 pixels au maximum, agrandie). Nécessaire pour accentuer, réduire le bruit, retoucher, restaurer et coloriser ; des détails peuvent changer.</translation>
+    </message>
+    <message>
+        <source>Übernehmen:</source>
+        <translation>Appliquer :</translation>
+    </message>
+    <message>
+        <source>Variante:</source>
+        <translation>Variante :</translation>
+    </message>
+    <message>
+        <source>Stärke (%):</source>
+        <translation>Intensité (%) :</translation>
+    </message>
+    <message>
+        <source>Lokal (%):</source>
+        <translation>Local (%) :</translation>
+    </message>
+    <message>
+        <source>Wie fein grossflächige Korrekturen der KI (Himmel, aufgehellte Bereiche) übernommen werden; 0 = nur eine Farbabbildung fürs ganze Bild</source>
+        <translation>Finesse avec laquelle les corrections étendues de l&apos;IA (ciel, zones éclaircies) sont reprises ; 0 = une seule correspondance de couleurs pour toute l&apos;image</translation>
+    </message>
+    <message>
+        <source>Temperatur:</source>
+        <translation>Température :</translation>
+    </message>
+    <message>
+        <source>Tönung:</source>
+        <translation>Teinte :</translation>
+    </message>
+    <message>
+        <source>Sättigung:</source>
+        <translation>Saturation :</translation>
+    </message>
+    <message>
+        <source>Helligkeit:</source>
+        <translation>Luminosité :</translation>
+    </message>
+    <message>
+        <source>Kontrast:</source>
+        <translation>Contraste :</translation>
+    </message>
+    <message>
+        <source>Glanzlichter:</source>
+        <translation>Tons clairs :</translation>
+    </message>
+    <message>
+        <source>Schatten:</source>
+        <translation>Ombres :</translation>
+    </message>
+    <message>
+        <source>Mitteltöne:</source>
+        <translation>Tons moyens :</translation>
+    </message>
+    <message>
+        <source>Tonwerte vorher strecken (wie Automatische Anpassung)</source>
+        <translation>Étirer d&apos;abord les tons (comme Réglage automatique)</translation>
+    </message>
+    <message>
+        <source>Motiv freistellen (Hintergrund entfernen)</source>
+        <translation>Détourer le sujet (supprimer l&apos;arrière-plan)</translation>
+    </message>
+    <message>
+        <source>Lokal, pixelgenau (offline)</source>
+        <translation>Local, au pixel près (hors ligne)</translation>
+    </message>
+    <message>
+        <source>OpenAI (zeichnet das Motiv neu)</source>
+        <translation>OpenAI (redessine le sujet)</translation>
+    </message>
+    <message>
+        <source>Ein Freistellmodell rechnet auf diesem Rechner eine Maske; das Motiv bleibt Pixel für Pixel das Original. Kein Bild verlässt den Rechner.</source>
+        <translation>Un modèle de détourage calcule un masque sur cet ordinateur ; le sujet reste l&apos;original, pixel pour pixel. Aucune image ne quitte l&apos;ordinateur.</translation>
+    </message>
+    <message>
+        <source>Schickt das Bild an OpenAI (gpt-image-1.5). Die KI liefert das Motiv neu gezeichnet auf transparentem Grund: Details, Schrift und Gesichter können sich verändern.</source>
+        <translation>Envoie l&apos;image à OpenAI (gpt-image-1.5). L&apos;IA renvoie le sujet redessiné sur fond transparent : les détails, le texte et les visages peuvent changer.</translation>
+    </message>
+    <message>
+        <source>Kantenhärte:</source>
+        <translation>Dureté des bords :</translation>
+    </message>
+    <message>
+        <source>„%1“ verändert Bildinhalte, deshalb wird das KI-Bild selbst übernommen.</source>
+        <translation>« %1 » modifie le contenu de l&apos;image ; l&apos;image IA elle-même est donc utilisée.</translation>
+    </message>
+    <message>
+        <source>Noch kein passender KI-Zugang.</source>
+        <translation>Pas encore d&apos;accès IA approprié.</translation>
+    </message>
+    <message>
+        <source>Zum Bearbeiten braucht es einen Zugang zu OpenAI oder Google Gemini mit API-Schlüssel: „Einrichten …“. Der Zugang über Claude Code kann keine Bilder übergeben.</source>
+        <translation>La retouche nécessite un accès à OpenAI ou Google Gemini avec une clé API : « Configurer … ». L&apos;accès via Claude Code ne peut pas transmettre d&apos;images.</translation>
+    </message>
+    <message>
+        <source>Mit „Einrichten …“ einen Zugang mit API-Schlüssel anlegen (Claude, OpenAI, Gemini, Ollama …). Der Zugang über Claude Code kann hier keine Bilder übergeben.</source>
+        <translation>Créez un accès avec une clé API via « Configurer … » (Claude, OpenAI, Gemini, Ollama …). L&apos;accès via Claude Code ne peut pas transmettre d&apos;images ici.</translation>
+    </message>
+    <message>
+        <source>KI bearbeiten lassen</source>
+        <translation>Retoucher avec l&apos;IA</translation>
+    </message>
+    <message>
+        <source>Weitere Variante</source>
+        <translation>Autre variante</translation>
+    </message>
+    <message>
+        <source>KI fragen</source>
+        <translation>Demander à l&apos;IA</translation>
+    </message>
+    <message>
+        <source>Schickt das Bild (höchstens 1536 Pixel) an den gewählten Anbieter. Abgerechnet wird beim Anbieter nach Verbrauch.</source>
+        <translation>Envoie l&apos;image (1536 pixels au maximum) au fournisseur choisi. La facturation se fait chez le fournisseur, selon l&apos;utilisation.</translation>
+    </message>
+    <message>
+        <source>Schickt eine verkleinerte Kopie des Bildes an den gewählten KI-Zugang. Die KI schlägt nur Reglerwerte vor; gerechnet wird in TANGENTA auf dem Original.</source>
+        <translation>Envoie une copie réduite de l&apos;image à l&apos;accès IA choisi. L&apos;IA ne propose que des valeurs de réglage ; le calcul est effectué dans TANGENTA sur l&apos;original.</translation>
+    </message>
+    <message>
+        <source>KI bearbeitet das Bild …</source>
+        <translation>L&apos;IA retouche l&apos;image …</translation>
+    </message>
+    <message>
+        <source>KI denkt nach …</source>
+        <translation>L&apos;IA réfléchit …</translation>
+    </message>
+    <message>
+        <source>KI erneut fragen</source>
+        <translation>Redemander à l&apos;IA</translation>
+    </message>
+    <message>
+        <source>Motiv wird erkannt … (einige Sekunden)</source>
+        <translation>Détection du sujet … (quelques secondes)</translation>
+    </message>
+    <message>
+        <source>Freistellen ging nicht: %1</source>
+        <translation>Le détourage a échoué : %1</translation>
+    </message>
+    <message>
+        <source>Motiv freigestellt (%1). Kantenhärte nach Wunsch.</source>
+        <translation>Sujet détouré (%1). Ajustez la dureté des bords à votre convenance.</translation>
+    </message>
+    <message>
+        <source>Freistellmodell herunterladen</source>
+        <translation>Télécharger le modèle de détourage</translation>
+    </message>
+    <message>
+        <source>Zum Freistellen braucht TANGENTA einmalig das Modell %1 (%2 MB, Lizenz %3). Es wird von
+%4
+heruntergeladen, geprüft und unter
+%5
+gespeichert. Jetzt herunterladen?</source>
+        <translation>Pour le détourage, TANGENTA a besoin une seule fois du modèle %1 (%2 Mo, licence %3). Il sera téléchargé depuis
+%4
+vérifié et enregistré dans
+%5
+Télécharger maintenant ?</translation>
+    </message>
+    <message>
+        <source>Kann %1 nicht schreiben.</source>
+        <translation>Impossible d&apos;écrire %1.</translation>
+    </message>
+    <message>
+        <source>Modell wird heruntergeladen: %1 von %2 MB</source>
+        <translation>Téléchargement du modèle : %1 sur %2 Mo</translation>
+    </message>
+    <message>
+        <source>Prüfsumme stimmt nicht</source>
+        <translation>La somme de contrôle ne correspond pas</translation>
+    </message>
+    <message>
+        <source>Download fehlgeschlagen: %1</source>
+        <translation>Échec du téléchargement : %1</translation>
+    </message>
+    <message>
+        <source>Dafür braucht es einen OpenAI-Zugang mit API-Schlüssel (Optionen &gt; Global &gt; KI).</source>
+        <translation>Cela nécessite un accès OpenAI avec une clé API (Options &gt; Global &gt; IA).</translation>
+    </message>
+    <message>
+        <source>Bild wird an OpenAI geschickt … (bis zu einer Minute)</source>
+        <translation>Envoi de l&apos;image à OpenAI … (jusqu&apos;à une minute)</translation>
+    </message>
+    <message>
+        <source>OpenAI hat kein Bild geliefert.</source>
+        <translation>OpenAI n&apos;a renvoyé aucune image.</translation>
+    </message>
+    <message>
+        <source>Von OpenAI freigestellt. Achtung: Das Motiv ist neu gezeichnet und kann vom Original abweichen.</source>
+        <translation>Détouré par OpenAI. Attention : le sujet a été redessiné et peut différer de l&apos;original.</translation>
+    </message>
+    <message>
+        <source>Vorschlag übernommen.</source>
+        <translation>Proposition appliquée.</translation>
+    </message>
+    <message>
+        <source>Versuch %1: %2</source>
+        <translation>Tentative %1 : %2</translation>
+    </message>
+    <message>
+        <source>Bild wird an %1 geschickt …</source>
+        <translation>Envoi de l&apos;image à %1 …</translation>
+    </message>
+    <message>
+        <source>Bild wird an OpenAI (%1) geschickt … das dauert meist eine halbe bis zwei Minuten.</source>
+        <translation>Envoi de l&apos;image à OpenAI (%1) … cela prend généralement entre une demi-minute et deux minutes.</translation>
+    </message>
+    <message>
+        <source>Bild wird an Google Gemini (%1) geschickt … das dauert meist eine halbe Minute.</source>
+        <translation>Envoi de l&apos;image à Google Gemini (%1) … cela prend généralement une demi-minute.</translation>
+    </message>
+    <message>
+        <source>Gemini hat kein Bild geliefert.</source>
+        <translation>Gemini n&apos;a renvoyé aucune image.</translation>
+    </message>
+    <message>
+        <source>Gemini hat kein Bild geliefert: %1</source>
+        <translation>Gemini n&apos;a renvoyé aucune image : %1</translation>
+    </message>
+    <message>
+        <source>Variante %1</source>
+        <translation>Variante %1</translation>
+    </message>
+    <message>
+        <source>Variante %1 (%2)</source>
+        <translation>Variante %1 (%2)</translation>
+    </message>
+    <message>
+        <source>Variante %1 ist da. Unter „Variante“ lassen sich alle Ergebnisse vergleichen; Stärke und Regler stimmen sie fein ab.</source>
+        <translation>La variante %1 est prête. Comparez tous les résultats sous « Variante » ; la force et les curseurs permettent de les affiner.</translation>
+    </message>
+    <message>
+        <source>Die KI hat das Bild verschoben oder neu gezeichnet; übernommen werden deshalb vor allem Farbe und Licht insgesamt.</source>
+        <translation>L&apos;IA a décalé ou redessiné l&apos;image ; seules la couleur et la lumière globales sont donc reprises pour l&apos;essentiel.</translation>
     </message>
 </context>
 <context>
@@ -3040,6 +3535,228 @@ Clic gauche : remplissage, clic droit : contour</translation>
     </message>
 </context>
 <context>
+    <name>vek::CustomToolBar</name>
+    <message>
+        <source>Befehle hierher ziehen</source>
+        <translation>Faites glisser des commandes ici</translation>
+    </message>
+    <message>
+        <source>Trennlinie davor einfügen</source>
+        <translation>Insérer un séparateur avant</translation>
+    </message>
+    <message>
+        <source>Aus der Leiste entfernen</source>
+        <translation>Retirer de la barre</translation>
+    </message>
+    <message>
+        <source>Trennlinie anfügen</source>
+        <translation>Ajouter un séparateur</translation>
+    </message>
+</context>
+<context>
+    <name>vek::CutoutAssistant</name>
+    <message>
+        <source>Freistellungs-Assistent</source>
+        <translation>Assistant de détourage</translation>
+    </message>
+    <message>
+        <source>Vergrössern</source>
+        <translation>Zoom avant</translation>
+    </message>
+    <message>
+        <source>Verkleinern</source>
+        <translation>Zoom arrière</translation>
+    </message>
+    <message>
+        <source>Hand (Bild verschieben; auch Leertaste oder mittlere Maustaste)</source>
+        <translation>Main (déplacer l&apos;image ; aussi barre d&apos;espace ou bouton central de la souris)</translation>
+    </message>
+    <message>
+        <source>Originalgrösse (1:1)</source>
+        <translation>Taille réelle (1:1)</translation>
+    </message>
+    <message>
+        <source>Ganzes Bild</source>
+        <translation>Image entière</translation>
+    </message>
+    <message>
+        <source>Rückgängig (Strg+Z)</source>
+        <translation>Annuler (Ctrl+Z)</translation>
+    </message>
+    <message>
+        <source>Wiederherstellen (Strg+Y)</source>
+        <translation>Rétablir (Ctrl+Y)</translation>
+    </message>
+    <message>
+        <source>Zurücksetzen</source>
+        <translation>Réinitialiser</translation>
+    </message>
+    <message>
+        <source>Marker: Band über die Kante des Objekts ziehen</source>
+        <translation>Marqueur : tracer une bande sur le bord de l&apos;objet</translation>
+    </message>
+    <message>
+        <source>Radierer: Markierung und Füllung entfernen</source>
+        <translation>Gomme : effacer le marquage et le remplissage</translation>
+    </message>
+    <message>
+        <source>Füllen: innerhalb der Markierung klicken</source>
+        <translation>Remplir : cliquer à l&apos;intérieur du marquage</translation>
+    </message>
+    <message>
+        <source>Detail behalten: Bereiche, die zum Objekt gehören</source>
+        <translation>Conserver le détail : zones appartenant à l&apos;objet</translation>
+    </message>
+    <message>
+        <source>Detail entfernen: Bereiche, die weg sollen</source>
+        <translation>Supprimer le détail : zones à éliminer</translation>
+    </message>
+    <message>
+        <source>Hilfsmitteloptionen</source>
+        <translation>Options de l&apos;outil</translation>
+    </message>
+    <message>
+        <source> px</source>
+        <translation> px</translation>
+    </message>
+    <message>
+        <source>Spitzengrösse:</source>
+        <translation>Taille de la pointe :</translation>
+    </message>
+    <message>
+        <source>Vorschau</source>
+        <translation>Aperçu</translation>
+    </message>
+    <message>
+        <source>Markierung anzeigen</source>
+        <translation>Afficher le marquage</translation>
+    </message>
+    <message>
+        <source>Füllung anzeigen</source>
+        <translation>Afficher le remplissage</translation>
+    </message>
+    <message>
+        <source>Originalbild anzeigen</source>
+        <translation>Afficher l&apos;image originale</translation>
+    </message>
+    <message>
+        <source>Hintergrund:</source>
+        <translation>Arrière-plan :</translation>
+    </message>
+    <message>
+        <source>Schachbrett</source>
+        <translation>Damier</translation>
+    </message>
+    <message>
+        <source>Weiss</source>
+        <translation>Blanc</translation>
+    </message>
+    <message>
+        <source>Schwarz</source>
+        <translation>Noir</translation>
+    </message>
+    <message>
+        <source>Grau</source>
+        <translation>Gris</translation>
+    </message>
+    <message>
+        <source>Grün</source>
+        <translation>Vert</translation>
+    </message>
+    <message>
+        <source>Kanten</source>
+        <translation>Bords</translation>
+    </message>
+    <message>
+        <source>Farbsaum entfernen</source>
+        <translation>Supprimer la frange de couleur</translation>
+    </message>
+    <message>
+        <source>Halbdurchsichtige Kanten (Haare) bekommen die Farbe des Objekts statt des alten Hintergrunds</source>
+        <translation>Les bords semi-transparents (cheveux) prennent la couleur de l&apos;objet au lieu de celle de l&apos;ancien arrière-plan</translation>
+    </message>
+    <message>
+        <source>Kante nach innen (−) oder aussen (+) verschieben, in Pixeln</source>
+        <translation>Déplacer le bord vers l&apos;intérieur (−) ou l&apos;extérieur (+), en pixels</translation>
+    </message>
+    <message>
+        <source>Kante verschieben:</source>
+        <translation>Déplacer le bord :</translation>
+    </message>
+    <message>
+        <source>Weiche Kante:</source>
+        <translation>Bord adouci :</translation>
+    </message>
+    <message>
+        <source>Kantenhärte:</source>
+        <translation>Dureté des bords :</translation>
+    </message>
+    <message>
+        <source>Ergebnis</source>
+        <translation>Résultat</translation>
+    </message>
+    <message>
+        <source>Ausschnitt</source>
+        <translation>Détourage</translation>
+    </message>
+    <message>
+        <source>Ausschnitt und Originalbild</source>
+        <translation>Détourage et image originale</translation>
+    </message>
+    <message>
+        <source>Hinweise</source>
+        <translation>Conseils</translation>
+    </message>
+    <message>
+        <source>Abbrechen</source>
+        <translation>Annuler</translation>
+    </message>
+    <message>
+        <source>Klicken Sie neben die Markierung, nicht darauf.</source>
+        <translation>Cliquez à côté du marquage, pas dessus.</translation>
+    </message>
+    <message>
+        <source>Fast das ganze Bild ist gefüllt: Die Markierung ist vermutlich nicht geschlossen. Rückgängig machen, die Lücke mit dem Marker schliessen und erneut füllen.</source>
+        <translation>Presque toute l&apos;image est remplie : le marquage n&apos;est probablement pas fermé. Annulez, fermez l&apos;ouverture avec le marqueur et remplissez à nouveau.</translation>
+    </message>
+    <message>
+        <source>Ziehen Sie mit dem Marker eine geschlossene Linie über die Kante des Objekts: halb auf dem Objekt, halb auf dem Hintergrund. Bei Haaren und Fell breiter malen, sodass alle feinen Strähnen im grünen Band liegen. Der Bildrand schliesst die Linie ab.</source>
+        <translation>Avec le marqueur, tracez une ligne fermée sur le bord de l&apos;objet : moitié sur l&apos;objet, moitié sur l&apos;arrière-plan. Pour les cheveux et la fourrure, peignez plus large afin que toutes les mèches fines se trouvent dans la bande verte. Le bord de l&apos;image ferme la ligne.</translation>
+    </message>
+    <message>
+        <source>Radierer: entfernt Markierung, Füllung und Detailpinsel.</source>
+        <translation>Gomme : efface le marquage, le remplissage et les traits du pinceau de détail.</translation>
+    </message>
+    <message>
+        <source>Klicken Sie innerhalb der Markierung, um das Objekt zu füllen. Danach auf «Vorschau».</source>
+        <translation>Cliquez à l&apos;intérieur du marquage pour remplir l&apos;objet. Ensuite, cliquez sur «Aperçu».</translation>
+    </message>
+    <message>
+        <source>Detail behalten: Malen Sie über Teile des Objekts, die in der Vorschau fehlen.</source>
+        <translation>Conserver le détail : peignez sur les parties de l&apos;objet qui manquent dans l&apos;aperçu.</translation>
+    </message>
+    <message>
+        <source>Detail entfernen: Malen Sie über Reste des Hintergrunds, die in der Vorschau stehen geblieben sind.</source>
+        <translation>Supprimer le détail : peignez sur les restes d&apos;arrière-plan encore visibles dans l&apos;aperçu.</translation>
+    </message>
+    <message>
+        <source>Ziehen verschiebt das Bild. Mausrad: Zoom.</source>
+        <translation>Faites glisser pour déplacer l&apos;image. Molette : zoom.</translation>
+    </message>
+    <message>
+        <source>Prüfen Sie die Kanten mit verschiedenen Hintergründen. Mit «Kante verschieben» lassen sich Säume entfernen.</source>
+        <translation>Vérifiez les bords sur différents arrière-plans. «Déplacer le bord» permet de supprimer les franges.</translation>
+    </message>
+    <message>
+        <source>Kanten werden berechnet …</source>
+        <translation>Calcul des bords …</translation>
+    </message>
+    <message>
+        <source>KI-Modell schätzt das Objekt …</source>
+        <translation>Le modèle d&apos;IA estime l&apos;objet …</translation>
+    </message>
+</context>
+<context>
     <name>vek::CylinderDialog</name>
     <message>
         <source>Zylinder</source>
@@ -3400,6 +4117,10 @@ Clic gauche : remplissage, clic droit : contour</translation>
         <translation>Césure</translation>
     </message>
     <message>
+        <source>Am Grundlinienraster ausrichten</source>
+        <translation>Aligner sur la grille de lignes de base</translation>
+    </message>
+    <message>
         <source>In Kurven konvertieren</source>
         <translation>Convertir en courbes</translation>
     </message>
@@ -3716,16 +4437,8 @@ Clic gauche : remplissage, clic droit : contour</translation>
         <translation>Substitution de polices</translation>
     </message>
     <message>
-        <source>Diese Schriften aus dem PDF sind auf diesem Rechner nicht installiert. Wählen Sie je Schrift eine ähnliche installierte Schrift (der Text bleibt bearbeitbar) oder &lt;b&gt;Als Kurven&lt;/b&gt; – dann sieht alles genau wie im PDF aus. Nach dem Installieren einer Schrift: &lt;b&gt;Schriften neu einlesen&lt;/b&gt;.</source>
-        <translation>Ces polices du PDF ne sont pas installées sur cet ordinateur. Choisissez pour chaque police une police installée similaire (le texte reste modifiable) ou &lt;b&gt;En courbes&lt;/b&gt; – tout apparaît alors exactement comme dans le PDF. Après l&apos;installation d&apos;une police : &lt;b&gt;Recharger les polices&lt;/b&gt;.</translation>
-    </message>
-    <message>
-        <source>Schrift im PDF</source>
-        <translation>Police dans le PDF</translation>
-    </message>
-    <message>
-        <source>So im PDF</source>
-        <translation>Comme dans le PDF</translation>
+        <source>Diese Schriften aus der Datei sind auf diesem Rechner nicht installiert. Wählen Sie je Schrift eine ähnliche installierte Schrift (der Text bleibt bearbeitbar). Sind die Umrisse in der Datei eingebettet, geht auch &lt;b&gt;Als Kurven&lt;/b&gt; – dann sieht alles genau wie in der Datei aus. Nach dem Installieren einer Schrift: &lt;b&gt;Schriften neu einlesen&lt;/b&gt;.</source>
+        <translation>Ces polices du fichier ne sont pas installées sur cet ordinateur. Choisissez pour chaque police une police installée similaire (le texte reste modifiable). Si les contours sont incorporés dans le fichier, &lt;b&gt;En courbes&lt;/b&gt; est aussi possible – tout apparaît alors exactement comme dans le fichier. Après l&apos;installation d&apos;une police : &lt;b&gt;Recharger les polices&lt;/b&gt;.</translation>
     </message>
     <message>
         <source>Ersetzen durch</source>
@@ -3734,6 +4447,14 @@ Clic gauche : remplissage, clic droit : contour</translation>
     <message>
         <source>So nach dem Import</source>
         <translation>Après l&apos;importation</translation>
+    </message>
+    <message>
+        <source>Schrift in der Datei</source>
+        <translation>Police dans le fichier</translation>
+    </message>
+    <message>
+        <source>So in der Datei</source>
+        <translation>Comme dans le fichier</translation>
     </message>
     <message>
         <source>Importieren</source>
@@ -3800,8 +4521,8 @@ Clic gauche : remplissage, clic droit : contour</translation>
         <translation>%1 (installée)</translation>
     </message>
     <message>
-        <source>Als Kurven – genau wie im PDF</source>
-        <translation>En courbes – exactement comme dans le PDF</translation>
+        <source>Als Kurven – genau wie in der Datei</source>
+        <translation>En courbes – exactement comme dans le fichier</translation>
     </message>
     <message>
         <source>Andere Schrift …</source>
@@ -4710,6 +5431,14 @@ un double-clic en ajoute un, Suppr le supprime</translation>
         <translation>Co&amp;uper</translation>
     </message>
     <message>
+        <source>S&amp;chliessen</source>
+        <translation>&amp;Fermer</translation>
+    </message>
+    <message>
+        <source>A&amp;lle schliessen</source>
+        <translation>Fermer &amp;tout</translation>
+    </message>
+    <message>
         <source>Wieder&amp;herstellen</source>
         <translation>&amp;Rétablir</translation>
     </message>
@@ -4720,6 +5449,10 @@ un double-clic en ajoute un, Suppr le supprime</translation>
     <message>
         <source>&amp;Einfügen</source>
         <translation>C&amp;oller</translation>
+    </message>
+    <message>
+        <source>&amp;Inhalte einfügen …</source>
+        <translation>Collage &amp;spécial …</translation>
     </message>
     <message>
         <source>&amp;Duplizieren</source>
@@ -4900,6 +5633,10 @@ un double-clic en ajoute un, Suppr le supprime</translation>
     <message>
         <source>&amp;Gitter</source>
         <translation>Gr&amp;ille</translation>
+    </message>
+    <message>
+        <source>G&amp;rundlinienraster</source>
+        <translation>Grille de lignes de &amp;base</translation>
     </message>
     <message>
         <source>A&amp;usrichten an</source>
@@ -5306,8 +6043,144 @@ TANGENTA traite les images en interne avec 16 bits par canal (données brutes d&
         <translation>Courbe de tonalité</translation>
     </message>
     <message>
+        <source>Bild mit &amp;KI optimieren …</source>
+        <translation>Optimiser l&apos;image avec l&apos;&amp;IA …</translation>
+    </message>
+    <message>
+        <source>Bild mit KI optimieren</source>
+        <translation>Optimiser l&apos;image avec l&apos;IA</translation>
+    </message>
+    <message>
+        <source>Bild &amp;freistellen …</source>
+        <translation>&amp;Détourer l&apos;image …</translation>
+    </message>
+    <message>
+        <source>Bild freistellen</source>
+        <translation>Détourer l&apos;image</translation>
+    </message>
+    <message>
+        <source>Freistellungs-&amp;Assistent …</source>
+        <translation>&amp;Assistant de détourage …</translation>
+    </message>
+    <message>
+        <source>Ü&amp;berlappend</source>
+        <translation>&amp;Cascade</translation>
+    </message>
+    <message>
+        <source>&amp;Nebeneinander</source>
+        <translation>&amp;Mosaïque</translation>
+    </message>
+    <message>
+        <source>Nä&amp;chstes Fenster</source>
+        <translation>Fenêtre &amp;suivante</translation>
+    </message>
+    <message>
+        <source>&amp;Vorheriges Fenster</source>
+        <translation>Fenêtre &amp;précédente</translation>
+    </message>
+    <message>
+        <source>&amp;Hilfe</source>
+        <translation>&amp;Aide</translation>
+    </message>
+    <message>
+        <source>TANGENTA im &amp;Web (tangenta.ch)</source>
+        <translation>TANGENTA sur le &amp;Web (tangenta.ch)</translation>
+    </message>
+    <message>
+        <source>Ü&amp;ber TANGENTA …</source>
+        <translation>À &amp;propos de TANGENTA …</translation>
+    </message>
+    <message>
         <source>Bildersuche: freie Fotos und Symbole suchen und einfügen</source>
         <translation>Recherche d’images : trouver et insérer des photos et icônes libres</translation>
+    </message>
+    <message>
+        <source>Freistellungs-Assistent</source>
+        <translation>Assistant de détourage</translation>
+    </message>
+    <message>
+        <source>Grundlinie &amp;zurücksetzen</source>
+        <translation>&amp;Réinitialiser la ligne de base</translation>
+    </message>
+    <message>
+        <source>Grundlinie zurücksetzen</source>
+        <translation>Réinitialiser la ligne de base</translation>
+    </message>
+    <message>
+        <source>&amp;Alle Grundlinien zurücksetzen</source>
+        <translation>Réinitialiser &amp;toutes les lignes de base</translation>
+    </message>
+    <message>
+        <source>Grundlinien zurücksetzen</source>
+        <translation>Réinitialiser les lignes de base</translation>
+    </message>
+    <message>
+        <source>Grundlinienraster &amp;einrichten …</source>
+        <translation>&amp;Configurer la grille de lignes de base …</translation>
+    </message>
+    <message>
+        <source>Dokument</source>
+        <translation>Document</translation>
+    </message>
+    <message>
+        <source>/Gitter</source>
+        <translation>/Grille</translation>
+    </message>
+    <message>
+        <source>TANGENTA-Objekte</source>
+        <translation>Objets TANGENTA</translation>
+    </message>
+    <message>
+        <source>Dateien (Bilder, Vektorgrafik)</source>
+        <translation>Fichiers (images, graphiques vectoriels)</translation>
+    </message>
+    <message>
+        <source>SVG-Vektorgrafik</source>
+        <translation>Graphique vectoriel SVG</translation>
+    </message>
+    <message>
+        <source>Bild (PNG, mit Transparenz)</source>
+        <translation>Image (PNG, avec transparence)</translation>
+    </message>
+    <message>
+        <source>Bild (Bitmap)</source>
+        <translation>Image (bitmap)</translation>
+    </message>
+    <message>
+        <source>Einfügen</source>
+        <translation>Coller</translation>
+    </message>
+    <message>
+        <source>Die SVG-Grafik liess sich nicht lesen.
+
+%1</source>
+        <translation>Impossible de lire le graphique SVG.
+
+%1</translation>
+    </message>
+    <message>
+        <source>Inhalte einfügen</source>
+        <translation>Collage spécial</translation>
+    </message>
+    <message>
+        <source>Als:</source>
+        <translation>En tant que :</translation>
+    </message>
+    <message>
+        <source>Neue Symbolleiste …</source>
+        <translation>Nouvelle barre d&apos;outils …</translation>
+    </message>
+    <message>
+        <source>Arbeitsbereich/Anpassung/Befehlsleisten</source>
+        <translation>Espace de travail/Personnalisation/Barres de commandes</translation>
+    </message>
+    <message>
+        <source>Anpassen …</source>
+        <translation>Personnaliser …</translation>
+    </message>
+    <message>
+        <source>Arbeitsbereich/Anpassung/Befehle</source>
+        <translation>Espace de travail/Personnalisation/Commandes</translation>
     </message>
     <message>
         <source>QR-Code einfügen</source>
@@ -6475,10 +7348,6 @@ TANGENTA traite les images en interne avec 16 bits par canal (données brutes d&
         <translation>La nouvelle taille de l&apos;interface s&apos;applique au prochain démarrage. Redémarrer maintenant ?</translation>
     </message>
     <message>
-        <source>%1[*] – TANGENTA</source>
-        <translation>%1[*] – TANGENTA</translation>
-    </message>
-    <message>
         <source>%1 — %2 × %3 mm</source>
         <translation>%1 — %2 × %3 mm</translation>
     </message>
@@ -7140,6 +8009,14 @@ TANGENTA traite les images en interne avec 16 bits par canal (données brutes d&
     <message>
         <source>DXF – AutoCAD</source>
         <translation>DXF – AutoCAD</translation>
+    </message>
+    <message>
+        <source>CDR – Vektorzeichnung (Version 16, X6)</source>
+        <translation>CDR – dessin vectoriel (version 16, X6)</translation>
+    </message>
+    <message>
+        <source>CDR – Vektorzeichnung (Version 13, X3)</source>
+        <translation>CDR – dessin vectoriel (version 13, X3)</translation>
     </message>
     <message>
         <source>TTF – TrueType-Schrift (Auswahl als Zeichen)</source>
@@ -9296,10 +10173,6 @@ TANGENTA traite les images en interne avec 16 bits par canal (données brutes d&
         <translation>Barre de menus/%1</translation>
     </message>
     <message>
-        <source>Zum Ändern des Tastaturbefehls rechts unter &apos;Tastaturbefehle&apos;</source>
-        <translation>Pour modifier le raccourci clavier, voir &apos;Raccourcis clavier&apos; à droite</translation>
-    </message>
-    <message>
         <source>Dokument</source>
         <translation>Document</translation>
     </message>
@@ -9699,16 +10572,8 @@ TANGENTA traite les images en interne avec 16 bits par canal (données brutes d&
         <translation>En points</translation>
     </message>
     <message>
-        <source>Basisliniengitter</source>
-        <translation>Grille de ligne de base</translation>
-    </message>
-    <message>
-        <source>Abstand:</source>
-        <translation>Espacement :</translation>
-    </message>
-    <message>
-        <source>Von oben beginnen:</source>
-        <translation>Commencer en haut à :</translation>
+        <source>Mengentext am Gitter ausrichten</source>
+        <translation>Aligner le texte courant sur la grille</translation>
     </message>
     <message>
         <source>Pixelgitter</source>
@@ -10143,6 +11008,30 @@ TANGENTA traite les images en interne avec 16 bits par canal (données brutes d&
         <translation>Sous macOS, le paquet de l’application associe les types de fichiers ; pour d’autres programmes, utilisez Lire les informations &gt; Ouvrir avec dans le Finder.</translation>
     </message>
     <message>
+        <source>Grundlinienraster</source>
+        <translation>Grille de lignes de base</translation>
+    </message>
+    <message>
+        <source>Oberste Linie (von oben):</source>
+        <translation>Ligne supérieure (depuis le haut) :</translation>
+    </message>
+    <message>
+        <source>Linienabstand:</source>
+        <translation>Espacement des lignes :</translation>
+    </message>
+    <message>
+        <source>Unterste Linie (von unten):</source>
+        <translation>Ligne inférieure (depuis le bas) :</translation>
+    </message>
+    <message>
+        <source>Verschobene Linien zurücksetzen (%1)</source>
+        <translation>Réinitialiser les lignes déplacées (%1)</translation>
+    </message>
+    <message>
+        <source>Mit dem Auswahlwerkzeug an den Griffen neben der Seite ziehen: erste oder letzte Linie dehnt das Raster, jede andere Linie verschiebt nur sich selbst. Strg verschiebt nur die gezogene Linie, Umschalt das ganze Raster. Doppelklick auf den Griff setzt eine verschobene Linie zurück.</source>
+        <translation>Avec l&apos;outil Sélection, faites glisser les poignées à côté de la page : la première ou la dernière ligne étire la grille, toute autre ligne se déplace seule. Ctrl ne déplace que la ligne tirée, Maj toute la grille. Un double-clic sur la poignée réinitialise une ligne déplacée.</translation>
+    </message>
+    <message>
         <source>VEK-Dateien öffnen sich danach per Doppelklick in TANGENTA. Die übrigen Typen erscheinen im Explorer unter &apos;Öffnen mit&apos;, ohne das bisherige Standardprogramm zu ersetzen.</source>
         <translation>Les fichiers VEK s&apos;ouvrent ensuite dans TANGENTA par un double-clic. Les autres types apparaissent dans l&apos;Explorateur sous « Ouvrir avec », sans remplacer le programme par défaut actuel.</translation>
     </message>
@@ -10217,6 +11106,52 @@ TANGENTA traite les images en interne avec 16 bits par canal (données brutes d&
     <message>
         <source>Neu …</source>
         <translation>Nouveau …</translation>
+    </message>
+    <message>
+        <source>Symbolleiste &apos;%1&apos;</source>
+        <translation>Barre d&apos;outils &apos;%1&apos;</translation>
+    </message>
+    <message>
+        <source>Ziehen Sie dieses Element auf eine eigene Symbolleiste, um es hinzuzufügen.
+Tastaturbefehl ändern: rechts unter &apos;Tastaturbefehle&apos;</source>
+        <translation>Faites glisser cet élément sur une barre d&apos;outils personnalisée pour l&apos;ajouter.
+Modifier le raccourci clavier : à droite sous &apos;Raccourcis clavier&apos;</translation>
+    </message>
+    <message>
+        <source>Eigene Symbolleisten</source>
+        <translation>Barres d&apos;outils personnalisées</translation>
+    </message>
+    <message>
+        <source>Umbenennen …</source>
+        <translation>Renommer …</translation>
+    </message>
+    <message>
+        <source>Neue Symbolleiste</source>
+        <translation>Nouvelle barre d&apos;outils</translation>
+    </message>
+    <message>
+        <source>Name der Symbolleiste:</source>
+        <translation>Nom de la barre d&apos;outils :</translation>
+    </message>
+    <message>
+        <source>Symbolleiste %1</source>
+        <translation>Barre d&apos;outils %1</translation>
+    </message>
+    <message>
+        <source>Symbolleiste umbenennen</source>
+        <translation>Renommer la barre d&apos;outils</translation>
+    </message>
+    <message>
+        <source>Symbolleiste löschen</source>
+        <translation>Supprimer la barre d&apos;outils</translation>
+    </message>
+    <message>
+        <source>Symbolleiste &apos;%1&apos; löschen?</source>
+        <translation>Supprimer la barre d&apos;outils &apos;%1&apos; ?</translation>
+    </message>
+    <message>
+        <source>Befehle unter &apos;Anpassung &gt; Befehle&apos; auf eine eigene Symbolleiste ziehen. Solange die Optionen offen sind, lassen sich die Schaltflächen in den Leisten verschieben, in eine andere Leiste ziehen oder zum Entfernen herausziehen (sonst mit gedrückter Alt-Taste). Die Leisten selbst sind am Griff frei verschiebbar.</source>
+        <translation>Faites glisser des commandes depuis &apos;Personnalisation &gt; Commandes&apos; sur une barre d&apos;outils personnalisée. Tant que les options sont ouvertes, les boutons des barres peuvent être déplacés, glissés vers une autre barre ou retirés en les faisant glisser hors de la barre (sinon en maintenant la touche Alt enfoncée). Les barres elles-mêmes se déplacent librement par leur poignée.</translation>
     </message>
     <message>
         <source>Bearbeiten …</source>
@@ -12789,6 +13724,10 @@ TANGENTA traite les images en interne avec 16 bits par canal (données brutes d&
         <translation>Utiliser la césure</translation>
     </message>
     <message>
+        <source>Am Grundlinienraster ausrichten</source>
+        <translation>Aligner sur la grille de lignes de base</translation>
+    </message>
+    <message>
         <source>Mengentext umbrechen – folgt mit dem Textwerkzeug</source>
         <translation>Habillage du texte courant – à venir avec l&apos;outil Texte</translation>
     </message>
@@ -13887,6 +14826,17 @@ TANGENTA traite les images en interne avec 16 bits par canal (données brutes d&
     <message>
         <source>Nicht unterstützte Masseinheit.</source>
         <translation>Unité de mesure non prise en charge.</translation>
+    </message>
+</context>
+<context>
+    <name>vek::matting</name>
+    <message>
+        <source>ONNX Runtime %1 ist zu alt (mindestens 1.16 nötig).</source>
+        <translation>ONNX Runtime %1 est trop ancien (1.16 au minimum requis).</translation>
+    </message>
+    <message>
+        <source>ONNX Runtime wurde nicht gefunden. Sie gehört neben das Programm (onnxruntime.dll bzw. libonnxruntime) oder wird als Paket installiert.</source>
+        <translation>ONNX Runtime est introuvable. Il doit se trouver à côté du programme (onnxruntime.dll ou libonnxruntime) ou être installé sous forme de paquet.</translation>
     </message>
 </context>
 </TS>

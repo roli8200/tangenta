@@ -1,5 +1,7 @@
 #include "SnapEngine.h"
 
+#include "BaselineGrid.h"
+
 #include "Canvas.h"
 #include "Options.h"
 
@@ -58,13 +60,12 @@ SnapEngine::SnapEngine(const Canvas& canvas, const QList<NodeId>& exclude)
     // Pixelgitter (96 dpi) ab 800 % Vergrösserung
     if (o.flag(QStringLiteral("doc/grid/pixel/snap")) && canvas.zoomPercent() >= 800.0)
         m_pixel = 25.4 / 96.0;
-    // Basisliniengitter: waagrechte Linien im Zeilenabstand (pt) ab "von oben beginnen"
+    // Grundlinienraster: waagrechte Linien, auch die einzeln verschobenen
     if (o.flag(QStringLiteral("doc/grid/baseline/snap"))) {
-        const double spacing = o.number(QStringLiteral("doc/grid/baseline/spacing")) * 25.4 / 72.0;
-        const double top = o.number(QStringLiteral("doc/grid/baseline/top"));
-        const double height = ed.currentPage().size().height();
-        for (double y = top; spacing > 0.1 && y <= height; y += spacing)
-            m_yLines.append({y, QObject::tr("Basisliniengitter")});
+        for (const double y : BaselineGrid::fromOptions().lines(ed.currentPage().size().height())) {
+            m_yLines.append({y, QObject::tr("Grundlinienraster")});
+            m_baselineGrid.append(y);
+        }
     }
     // Dynamische Hilfslinien: aus Knoten und Mitten der Objekte unter festen Winkeln
     if (o.flag(QStringLiteral("ws/dynguides/enabled"))) {
@@ -297,6 +298,24 @@ SnapResult SnapEngine::snapToDynamicGuides(const QPointF& p) const
             if (m_distanceTip)
                 hint += QStringLiteral(", %1 mm").arg(std::abs(along), 0, 'f', 2);
             best = {q, hint, {QLineF(a - dir * 1000.0, a + dir * 1000.0)}, QColor(0x2b, 0x9a, 0x3c)};
+        }
+    }
+    return best;
+}
+
+std::optional<double> SnapEngine::snapBaselineY(const QList<QPointF>& baselines, const QPointF& delta, SnapResult* result) const
+{
+    std::optional<double> best;
+    double bestDistance = m_threshold;
+    for (const QPointF& s : baselines) {
+        const QPointF q = s + delta;
+        for (const double y : m_baselineGrid) {
+            if (std::abs(y - q.y()) <= bestDistance) {
+                bestDistance = std::abs(y - q.y());
+                best = delta.y() + (y - q.y());
+                if (result)
+                    *result = SnapResult{QPointF(q.x(), y), QObject::tr("Grundlinienraster")};
+            }
         }
     }
     return best;

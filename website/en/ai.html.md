@@ -82,7 +82,7 @@ Set up several accounts and switch between them in the AI window. Keys stay loca
 
 ## You stay in control.
 
-- Without the “darf ändern” (may change) tick it only reads
+- Without the “may edit” switch it only reads
 - One Ctrl+Z undoes everything it changed in one answer
 - Deletes only when you explicitly ask
 - Does not read web pages on your own network (localhost, 10.x, 192.168.x)
@@ -103,13 +103,13 @@ Set up several accounts and switch between them in the AI window. Keys stay loca
 
 ## Ready in five minutes.
 
-1. Open TANGENTA and go to **Extras > Optionen > Global > KI** (Ctrl+J).
-2. For Claude via your subscription: install [Claude Code](https://claude.com/claude-code), then click **Anmelden** (sign in) in the dialog and confirm with your Claude account.
-3. For another provider: **Neu …** (new), choose the provider and enter the API key.
+1. Open TANGENTA and go to **Tools > Options > Global > AI** (Ctrl+J).
+2. For Claude via your subscription: install [Claude Code](https://claude.com/claude-code), then click **Sign In** in the dialog and confirm with your Claude account.
+3. For another provider: click **New …**, choose the provider and enter the API key.
 4. Click **Test** to check that the account responds.
-5. Open **Extras > KI-Assistent** (Ctrl+Alt+K) and start writing.
+5. Open **Tools > AI Assistant** (Ctrl+Alt+K) and start writing.
 
-The program interface is currently in German; you can write to the assistant in any language. For web search, enter your own SearXNG server or a Brave Search key under **Global > Websuche**.
+You can write to the assistant in any language. For web search, enter your own SearXNG server or a Brave Search key under **Global > Web Search**.
 
 ## Start drawing.
 

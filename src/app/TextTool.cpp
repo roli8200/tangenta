@@ -50,10 +50,13 @@ const TextFlow& TextTool::flow() const
 {
     if (!m_flow) {
         QList<QSizeF> sizes;
-        for (const TextFrameGeometry& f : m_frames)
+        QList<QList<double>> grids;
+        for (const TextFrameGeometry& f : m_frames) {
             sizes << f.size;
+            grids << (m_proto->followsBaselineGrid() ? f.grid : QList<double>());
+        }
         const bool paragraph = m_proto->kind() == TextObject::Kind::Paragraph;
-        m_flow = std::make_unique<TextFlow>(*m_doc, paragraph ? sizes : QList<QSizeF>(), paragraph);
+        m_flow = std::make_unique<TextFlow>(*m_doc, paragraph ? sizes : QList<QSizeF>(), paragraph, grids);
     }
     return *m_flow;
 }
@@ -183,6 +186,12 @@ void TextTool::finishEditing()
         ed.deleteSelection();
         return;
     }
+    if (original->followsBaselineGrid() != result->followsBaselineGrid()) {
+        QList<NodeId> members;
+        for (const TextFrameGeometry& f : m_frames)
+            members << f.id;
+        ed.setTextBaselineGrid(members, result->followsBaselineGrid());
+    }
     if (original->paragraphs() != result->paragraphs() || original->hyphenate() != result->hyphenate()) {
         const QList<TextParagraph> paragraphs = result->paragraphs();
         const bool hyphenate = result->hyphenate();
@@ -300,6 +309,14 @@ void TextTool::applyFormat(const std::function<void(CharFormat&)>& fn)
         c.setCharFormat(TextObject::toQtFormat(f));
     }
     m_cursor.endEditBlock();
+    changed();
+}
+
+void TextTool::setFollowsBaselineGrid(bool on)
+{
+    if (!editing())
+        return;
+    m_proto->setFollowsBaselineGrid(on);
     changed();
 }
 
@@ -741,7 +758,7 @@ void TextTool::paintOtherSpelling(QPainter& p) const
                 cache.lines.clear();
                 const QList<SpellChecker::Range> errors = sc.check(text);
                 if (!errors.isEmpty()) {
-                    const TextFlow f(*d, {t->frameSize()}, true);
+                    const TextFlow f(*d, {t->frameSize()}, true, {t->baselineGridLines()});
                     for (const SpellChecker::Range& r : errors)
                         for (const QPolygonF& poly : f.selection(0, r.start, r.start + r.length).toSubpathPolygons()) {
                             const QRectF b = poly.boundingRect();

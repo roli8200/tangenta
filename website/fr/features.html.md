@@ -17,11 +17,12 @@ De la première ligne à la feuille imprimée : tout ce que TANGENTA sait faire,
 - Spirale et papier millimétré
 - Main levée, ligne 2 points, Bézier, plume et B-spline
 - Rectangle, ellipse et courbe à 3 points
-- Médias artistiques et calligraphie
+- Médias artistiques : pinceaux, pulvérisateur, calligraphie
 - Formes parfaites : formes de base, flèches, organigrammes, bannières et étoiles
 - Tableaux avec cellules fusionnées
 - Cotation et cotation d’angle
 - Connecteurs qui suivent les objets
+- Codes QR modifiables à tout moment
 
 ### Formes
 
@@ -33,6 +34,9 @@ De la première ligne à la feuille imprimée : tout ce que TANGENTA sait faire,
 - Convertir le contour en objet
 - Joindre des courbes
 - Fenêtre Formes avec aperçu
+- Remplissage intelligent, même entre lignes ouvertes
+- Outil Forme directement sur rectangles, polygones et étoiles
+- Arrondir les angles dans la fenêtre Angles
 
 ### Remplissage et contour
 
@@ -43,17 +47,20 @@ De la première ligne à la feuille imprimée : tout ce que TANGENTA sait faire,
 - Remplissage interactif sur l’objet
 - Plume de contour avec styles de ligne et pointes de flèche
 - Pipette et copie d’attributs
+- Modes de fusion comme Produit
 
 ### Effets
 
-- Dégradé de formes le long d’un tracé
+- Dégradé de formes le long d’un tracé, avec dégradés de couleur
 - Contour intérieur et extérieur
 - Extrusion
 - Enveloppe avec modèles
 - Perspective
-- Ombre portée et transparence
+- Ombre portée, ombre intérieure et ombre bloc
+- Transparence avec modes de fusion
 - Lentille avec fish-eye et autres types
 - Biseau et flou
+- Rotation 3D des extrusions
 - SuperClip : placer un contenu dans un cadre
 
 ### Texte
@@ -76,9 +83,19 @@ De la première ligne à la feuille imprimée : tout ce que TANGENTA sait faire,
 - SuperTrace : transformer des bitmaps en vecteurs
 - Recherche d’images dans huit banques
 
+### Effets bitmap
+
+- Plus de 60 effets en 13 groupes
+- En direct sur tout objet, en pile modifiable
+- Flou, netteté, effets artistiques, 3D, distorsion
+- Effet de cadre, page enroulée, cylindre
+- Corrections de couleur avec pipette et plages
+- Photomosaïque et pointillisme
+
 ### Document
 
-- Plusieurs pages avec page maître
+- Plusieurs pages avec page maître et fenêtre Pages
+- Affichage multipage, taille de page à la souris
 - Calques et gestionnaire d’objets
 - Symboles et clones
 - Repères, repères dynamiques, grille
@@ -101,7 +118,77 @@ De la première ligne à la feuille imprimée : tout ce que TANGENTA sait faire,
 - Assistant IA avec 18 outils
 - Recherche d’images et recherche web pour l’IA
 
-**01** / Espace de travail
+### Interface
+
+- En sept langues
+- Raccourci personnel pour chaque commande
+- Fenêtres ancrables en onglets ou empilées
+- Champs numériques qui calculent (297/2)
+- Recherche de police par une partie du nom
+
+**01** / En détail
+
+## Ce qui rend TANGENTA unique.
+
+Neuf fonctions à connaître, chacune avec une vidéo qui la montre sur un exemple concret.
+
+### Remplissage intelligent
+
+Cliquez dans une zone délimitée par des lignes et des formes, et TANGENTA en fait un objet à part entière, même entre des lignes ouvertes qui ne font que se croiser. Logos et motifs naissent de quelques lignes d’aide.
+
+[Voir la vidéo (3:05) →](https://www.youtube.com/watch?v=jchlvRJj8hI)
+
+### Dégradé de formes le long d’un tracé
+
+Autant d’étapes que vous voulez entre deux objets, en forme, en couleur et en dégradé. Les étapes peuvent suivre un tracé, une spirale par exemple, aussi dans l’ordre inverse.
+
+[Voir la vidéo (3:42) →](https://www.youtube.com/watch?v=AO6bjf3GnCc)
+
+### Effets bitmap en direct
+
+Plus de 60 effets en 13 groupes, du flou à la peinture à l’huile et à la page enroulée. Ils forment une pile sur l’objet et restent modifiables, désactivables et supprimables à tout moment.
+
+[Voir la vidéo (6:35) →](https://www.youtube.com/watch?v=zhL5F3JGeNI)
+
+### SuperClip
+
+Placer photos, motifs et graphiques dans un cadre : une forme, un cercle ou même du texte. Le contenu reste déplaçable et remplaçable.
+
+[Voir la vidéo (4:23) →](https://www.youtube.com/watch?v=2BEWZDCxU9A)
+
+### Enveloppe
+
+Plier texte et graphiques dans une forme, à partir de modèles ou selon le contour de n’importe quel objet, et l’ajuster à tout moment.
+
+[Voir la vidéo (3:27) →](https://www.youtube.com/watch?v=mULVFW4GiXg)
+
+### Lignes de découpe pour laser et plotter
+
+Le contour d’une image devient un tracé net avec une marge, prêt pour la découpe laser et le plotter de découpe.
+
+[Voir la vidéo (4:53) →](https://www.youtube.com/watch?v=NNYndGIMJc4)
+
+### Plusieurs pages
+
+Ajouter, changer et gérer les pages dans la fenêtre Pages, voir toutes les pages côte à côte et redimensionner une page à la souris.
+
+[Voir la vidéo (4:10) →](https://www.youtube.com/watch?v=snarzYb2rqY)
+
+### Recherche d’images
+
+Trouver des photos et icônes libres dans huit banques et les insérer avec auteur et licence, directement dans le programme.
+
+[Voir la vidéo (4:37) →](https://www.youtube.com/watch?v=gYRQ35fvKL0)
+
+### Assistant IA
+
+Un logo, un texte ou une photo sur demande : l’assistant dessine dans votre document et vérifie lui-même le résultat.
+
+[Voir la vidéo (4:53) →](https://www.youtube.com/watch?v=38FLp_RBsBg)
+
+[Tous les tutoriels →](https://tangenta.ch/fr/tutorials.html)
+
+**02** / Espace de travail
 
 ## Des fenêtres ancrables là où il faut.
 
@@ -114,7 +201,7 @@ Gestionnaire d’objets, propriétés de l’objet, formes, transformations, sym
 
 ![TANGENTA avec le gestionnaire d’objets et les propriétés de l’objet, le titre de l’affiche sélectionné](https://tangenta.ch/img/06-andockfenster.png)
 
-**02** / Réglages
+**03** / Réglages
 
 ## Chaque réglage à sa place habituelle.
 
@@ -122,21 +209,21 @@ La boîte de dialogue Options (Ctrl+J) range Espace de travail, Document et Glob
 
 ![Boîte de dialogue Options avec la page du magnétisme](https://tangenta.ch/img/08-optionen.png)
 
-**03** / Formats de fichier
+**04** / Formats de fichier
 
 ## En entrée et en sortie.
 
 ### Importer
 
-SVG · PDF · EPS · PS · DXF · PNG · JPEG · TIFF · WebP · BMP · GIF · NEF · CR2 · CR3 · ARW · DNG
+CDR · CMX · AI · SVG · PDF · EPS · PS · DXF · PNG · JPEG · TIFF · WebP · BMP · GIF · NEF · CR2 · CR3 · ARW · DNG
 
 ### Exporter
 
 PDF · SVG · EPS · DXF · PNG · JPEG · TIFF · WebP · PSD · HTML
 
-PDF, SVG et EPS sont importés sous forme de courbes et de textes modifiables. Pour EPS et PS, TANGENTA utilise Ghostscript.
+CDR, CMX, AI, PDF, SVG et EPS sont importés sous forme de courbes et de textes modifiables. Pour EPS et PS, TANGENTA utilise Ghostscript.
 
-**04** / Raccourcis
+**05** / Raccourcis
 
 ## Les raccourcis que vous connaissez.
 

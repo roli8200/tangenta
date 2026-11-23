@@ -82,7 +82,7 @@ Configurez plusieurs accès et passez de l’un à l’autre dans la fenêtre IA
 
 ## Vous gardez le contrôle.
 
-- Sans la case « darf ändern » (peut modifier), il ne fait que lire
+- Sans l’option « peut modifier », il ne fait que lire
 - Un Ctrl+Z annule tout ce qu’il a modifié dans une réponse
 - Ne supprime que sur demande expresse
 - Ne lit pas les pages web de votre propre réseau (localhost, 10.x, 192.168.x)
@@ -103,13 +103,13 @@ Configurez plusieurs accès et passez de l’un à l’autre dans la fenêtre IA
 
 ## Prêt en cinq minutes.
 
-1. Ouvrir TANGENTA et choisir **Extras > Optionen > Global > KI** (Ctrl+J).
-2. Pour Claude via votre abonnement : installer [Claude Code](https://claude.com/claude-code), puis cliquer sur **Anmelden** (se connecter) dans la boîte de dialogue et confirmer avec votre compte Claude.
-3. Pour un autre fournisseur : **Neu …** (nouveau), choisir le fournisseur et saisir la clé API.
-4. Vérifier avec **Test** que l’accès répond.
-5. Ouvrir **Extras > KI-Assistent** (Ctrl+Alt+K) et commencer à écrire.
+1. Ouvrir TANGENTA et choisir **Outils > Options > Global > IA** (Ctrl+J).
+2. Pour Claude via votre abonnement : installer [Claude Code](https://claude.com/claude-code), puis cliquer sur **Se connecter** dans la boîte de dialogue et confirmer avec votre compte Claude.
+3. Pour un autre fournisseur : **Nouveau …**, choisir le fournisseur et saisir la clé API.
+4. Vérifier avec **Tester** que l’accès répond.
+5. Ouvrir **Outils > Assistant IA** (Ctrl+Alt+K) et commencer à écrire.
 
-L’interface du programme est aujourd’hui en allemand ; vous pouvez écrire à l’assistant dans n’importe quelle langue. Pour la recherche web, saisissez votre propre serveur SearXNG ou une clé Brave Search sous **Global > Websuche**.
+Vous pouvez écrire à l’assistant dans n’importe quelle langue. Pour la recherche web, saisissez votre propre serveur SearXNG ou une clé Brave Search sous **Global > Recherche web**.
 
 ## À vos crayons.
 

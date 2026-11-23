@@ -295,11 +295,17 @@ const QHash<QString, QVariant>& defaults()
         {QStringLiteral("doc/grid/snap"), false},
         {QStringLiteral("doc/grid/show"), false},
         {QStringLiteral("doc/grid/dots"), 0},
+        // Grundlinienraster (BaselineGrid): oberste Linie, Abstand, unterste Linie (von unten), mm;
+        // verschobene Linien als "Index=Versatz;…". spacing (pt) nur noch zum Lesen älterer Dateien
         {QStringLiteral("doc/grid/baseline/spacing"), 14.0},
-        {QStringLiteral("doc/grid/baseline/color"), QStringLiteral("#e6e6ff")},
+        {QStringLiteral("doc/grid/baseline/step"), 5.0},
+        {QStringLiteral("doc/grid/baseline/bottom"), 15.0},
+        {QStringLiteral("doc/grid/baseline/moved"), QString()},
+        {QStringLiteral("doc/grid/baseline/color"), QStringLiteral("#a8bff0")},
         {QStringLiteral("doc/grid/baseline/top"), 15.0},
         {QStringLiteral("doc/grid/baseline/snap"), false},
         {QStringLiteral("doc/grid/baseline/show"), false},
+        {QStringLiteral("doc/grid/baseline/text"), true},
         {QStringLiteral("doc/grid/pixel/opacity"), 60.0},
         {QStringLiteral("doc/grid/pixel/color"), QStringLiteral("#e6e6ff")},
         {QStringLiteral("doc/grid/pixel/show"), true},
@@ -420,7 +426,14 @@ QVariant Options::value(const QString& key) const
     if (isDocument(key)) {
         if (!m_editor)
             return fallback;
-        const QJsonValue v = m_editor->document().masterPage().options().value(key);
+        const QJsonObject& doc = m_editor->document().masterPage().options();
+        QJsonValue v = doc.value(key);
+        // Ältere Dateien: Abstand des Grundlinienrasters in pt
+        if (v.isUndefined() && key == QLatin1String("doc/grid/baseline/step")
+            && doc.contains(QLatin1String("doc/grid/baseline/spacing")))
+            v = doc.value(QLatin1String("doc/grid/baseline/spacing")).toDouble() * 25.4 / 72.0;
+        if (v.isUndefined() && key == QLatin1String("doc/grid/baseline/text"))
+            return doc.value(QLatin1String("doc/grid/baseline/show")).toBool(false);
         if (v.isUndefined())
             return fallback;
         QVariant result = v.toVariant();
@@ -434,7 +447,7 @@ QVariant Options::value(const QString& key) const
     return result;
 }
 
-void Options::apply(const QVariantMap& values)
+void Options::apply(const QVariantMap& values, const QString& label)
 {
     bool any = false;
     QJsonObject docOptions;
@@ -448,12 +461,20 @@ void Options::apply(const QVariantMap& values)
         if (isDocument(it.key())) {
             if (!m_editor)
                 continue;
-            // Nur Abweichungen von der Vorgabe speichern
-            if (it.value() == defaultValue(it.key()))
+            // Nur Abweichungen von der Vorgabe speichern (Mengentext am Raster immer ausdrücklich)
+            if (it.value() == defaultValue(it.key()) && it.key() != QLatin1String("doc/grid/baseline/text")
+                && !(it.key() == QLatin1String("doc/grid/baseline/step")
+                     && docOptions.contains(QLatin1String("doc/grid/baseline/spacing"))))
                 docOptions.remove(it.key());
             else
                 docOptions.insert(it.key(), QJsonValue::fromVariant(it.value()));
             docChanged = true;
+            // Raster zum ersten Mal eingeblendet: Mengentext richtet sich ab jetzt danach, auch wenn
+            // das Raster später wieder ausgeblendet wird
+            if (it.key() == QLatin1String("doc/grid/baseline/show") && it.value().toBool()
+                && !docOptions.contains(QLatin1String("doc/grid/baseline/text"))
+                && !values.contains(QLatin1String("doc/grid/baseline/text")))
+                docOptions.insert(QLatin1String("doc/grid/baseline/text"), true);
         } else {
             settings.setValue(settingsKey(it.key()), it.value());
             any = true;
@@ -461,7 +482,7 @@ void Options::apply(const QVariantMap& values)
     }
     if (docChanged) {
         // Löst über documentChanged auch changed() aus
-        Transaction tx(m_editor->document(), tr("Optionen"));
+        Transaction tx(m_editor->document(), label.isEmpty() ? tr("Optionen") : label);
         tx.modify<Page>(m_editor->document().masterPage().id(), [&docOptions](Page& p) { p.setOptions(docOptions); });
         tx.commit();
     } else if (any) {

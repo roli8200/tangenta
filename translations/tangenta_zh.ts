@@ -1240,7 +1240,7 @@
         <translation>全屏预览</translation>
     </message>
     <message>
-        <source>Basisliniengitter</source>
+        <source>Grundlinienraster</source>
         <translation>基线网格</translation>
     </message>
     <message>
@@ -1274,6 +1274,10 @@
     <message>
         <source>Dynamische Hilfslinie</source>
         <translation>动态辅助线</translation>
+    </message>
+    <message>
+        <source>Grundlinie zurücksetzen</source>
+        <translation>重置基线</translation>
     </message>
     <message>
         <source>Hierher &amp;verschieben</source>
@@ -1342,6 +1346,26 @@
     <message>
         <source>Schubsen</source>
         <translation>微调</translation>
+    </message>
+    <message>
+        <source>Grundlinienraster verschieben</source>
+        <translation>移动基线网格</translation>
+    </message>
+    <message>
+        <source>Grundlinie verschieben</source>
+        <translation>移动基线</translation>
+    </message>
+    <message>
+        <source>Grundlinienraster dehnen</source>
+        <translation>拉伸基线网格</translation>
+    </message>
+    <message>
+        <source>Linie %1: %2 mm (%3%4 mm)</source>
+        <translation>第 %1 行：%2 mm（%3%4 mm）</translation>
+    </message>
+    <message>
+        <source>Oben %1 mm · Abstand %2 mm · Unten %3 mm</source>
+        <translation>上 %1 mm · 间距 %2 mm · 下 %3 mm</translation>
     </message>
     <message>
         <source>Vergrössern</source>
@@ -1951,6 +1975,98 @@
         <source>Reihenfolge umkehren (Ende zuunterst)</source>
         <translation>反转顺序（终点在最下）</translation>
     </message>
+    <message>
+        <source>Ebene 1</source>
+        <translation>图层 1</translation>
+    </message>
+    <message>
+        <source>CDR-Vorlage fehlt.</source>
+        <translation>缺少 CDR 模板。</translation>
+    </message>
+    <message>
+        <source>CDR-Vorlage ist beschädigt.</source>
+        <translation>CDR 模板已损坏。</translation>
+    </message>
+    <message>
+        <source>ZIP-Container konnte nicht angelegt werden.</source>
+        <translation>无法创建 ZIP 容器。</translation>
+    </message>
+    <message>
+        <source>ZIP-Container konnte nicht geschrieben werden.</source>
+        <translation>无法写入 ZIP 容器。</translation>
+    </message>
+    <message>
+        <source>Die KI hat keine Werte geliefert.</source>
+        <translation>AI 未返回任何数值。</translation>
+    </message>
+    <message>
+        <source>Die Antwort der KI war nicht lesbar: %1</source>
+        <translation>无法读取 AI 的回答：%1</translation>
+    </message>
+    <message>
+        <source>Farbstich entfernen, Weissabgleich</source>
+        <translation>去除偏色，白平衡</translation>
+    </message>
+    <message>
+        <source>Belichtung und Kontrast</source>
+        <translation>曝光与对比度</translation>
+    </message>
+    <message>
+        <source>Natürliche, kräftige Farben</source>
+        <translation>自然、鲜明的色彩</translation>
+    </message>
+    <message>
+        <source>Himmel betonen</source>
+        <translation>突出天空</translation>
+    </message>
+    <message>
+        <source>Schärfen, Details herausarbeiten</source>
+        <translation>锐化，突出细节</translation>
+    </message>
+    <message>
+        <source>Rauschen entfernen</source>
+        <translation>去除杂点</translation>
+    </message>
+    <message>
+        <source>Haut glätten (Porträt)</source>
+        <translation>平滑皮肤（人像）</translation>
+    </message>
+    <message>
+        <source>Altes Foto restaurieren</source>
+        <translation>修复老照片</translation>
+    </message>
+    <message>
+        <source>Schwarzweissfoto kolorieren</source>
+        <translation>为黑白照片上色</translation>
+    </message>
+    <message>
+        <source>Abbruchgrund: %1</source>
+        <translation>中止原因：%1</translation>
+    </message>
+    <message>
+        <source>VEKTORGRAFIK · LAYOUT · BILD</source>
+        <translation>矢量图形 · 版面 · 图像</translation>
+    </message>
+    <message>
+        <source>Version %1</source>
+        <translation>版本 %1</translation>
+    </message>
+    <message>
+        <source>Frei und kostenlos für Windows, Linux und macOS</source>
+        <translation>免费开源，支持 Windows、Linux 和 macOS</translation>
+    </message>
+    <message>
+        <source>© Intersoft Networks · GPLv3</source>
+        <translation>© Intersoft Networks · GPLv3</translation>
+    </message>
+    <message>
+        <source>Über TANGENTA</source>
+        <translation>关于 TANGENTA</translation>
+    </message>
+    <message>
+        <source>&lt;p&gt;&lt;b&gt;TANGENTA %1&lt;/b&gt; – Vektorgrafik, Layout und Bildbearbeitung.&lt;br&gt;Qt %2 · %3&lt;/p&gt;&lt;p&gt;Freie Software unter der GNU General Public License, Version 3.&lt;br&gt;© Intersoft Networks, Frauenfeld&lt;/p&gt;&lt;p&gt;&lt;a href=&quot;https://tangenta.ch&quot;&gt;tangenta.ch&lt;/a&gt; · &lt;a href=&quot;https://github.com/roli8200/tangenta&quot;&gt;Quellcode auf GitHub&lt;/a&gt;&lt;/p&gt;</source>
+        <translation>&lt;p&gt;&lt;b&gt;TANGENTA %1&lt;/b&gt; – 矢量图形、版面设计与图像编辑。&lt;br&gt;Qt %2 · %3&lt;/p&gt;&lt;p&gt;依据 GNU General Public License 第 3 版发布的自由软件。&lt;br&gt;© Intersoft Networks, Frauenfeld&lt;/p&gt;&lt;p&gt;&lt;a href=&quot;https://tangenta.ch&quot;&gt;tangenta.ch&lt;/a&gt; · &lt;a href=&quot;https://github.com/roli8200/tangenta&quot;&gt;GitHub 上的源代码&lt;/a&gt;&lt;/p&gt;</translation>
+    </message>
 </context>
 <context>
     <name>media</name>
@@ -2310,6 +2426,385 @@
     <message>
         <source>Abgebrochen. Was bis hier geändert wurde, bleibt (Strg+Z nimmt es zurück).</source>
         <translation>已取消。到目前为止所做的修改将保留（按 Ctrl+Z 可撤销）。</translation>
+    </message>
+</context>
+<context>
+    <name>vek::AiImageDialog</name>
+    <message>
+        <source>Bild freistellen</source>
+        <translation>图像抠图</translation>
+    </message>
+    <message>
+        <source>Bild mit KI optimieren</source>
+        <translation>用 AI 优化图像</translation>
+    </message>
+    <message>
+        <source>KI bearbeitet das Bild</source>
+        <translation>AI 编辑图像</translation>
+    </message>
+    <message>
+        <source>KI schlägt Reglerwerte vor</source>
+        <translation>AI 建议滑块数值</translation>
+    </message>
+    <message>
+        <source>Ein Bildmodell (OpenAI, Google Gemini) bearbeitet eine Kopie des Bildes nach den gewählten Aufgaben. TANGENTA überträgt das Ergebnis aufs Original.</source>
+        <translation>图像模型（OpenAI、Google Gemini）按所选任务编辑图像副本。TANGENTA 将结果应用到原图。</translation>
+    </message>
+    <message>
+        <source>Die KI sieht eine verkleinerte Kopie und schlägt nur Werte für die Regler vor; gerechnet wird in TANGENTA. Schnell und günstig, aber begrenzt auf diese Regler.</source>
+        <translation>AI 查看缩小的副本，只建议滑块数值；计算在 TANGENTA 中完成。快速且便宜，但仅限于这些滑块。</translation>
+    </message>
+    <message>
+        <source>Verfahren:</source>
+        <translation>方法：</translation>
+    </message>
+    <message>
+        <source>Einrichten …</source>
+        <translation>设置…</translation>
+    </message>
+    <message>
+        <source>Öffnet Extras &gt; Optionen &gt; Global &gt; KI: dort einen Zugang mit API-Schlüssel anlegen</source>
+        <translation>打开「工具 &gt; 选项 &gt; 全局 &gt; AI」：在此创建带 API 密钥的访问</translation>
+    </message>
+    <message>
+        <source>KI-Zugang:</source>
+        <translation>AI 访问：</translation>
+    </message>
+    <message>
+        <source>Bildmodell des Anbieters; eigene Modellnamen lassen sich eintippen</source>
+        <translation>提供商的图像模型；可输入自定义模型名称</translation>
+    </message>
+    <message>
+        <source>Hoch</source>
+        <translation>高</translation>
+    </message>
+    <message>
+        <source>Mittel</source>
+        <translation>中</translation>
+    </message>
+    <message>
+        <source>Niedrig</source>
+        <translation>低</translation>
+    </message>
+    <message>
+        <source>Qualität bei OpenAI: höher ist genauer, dauert länger und kostet mehr</source>
+        <translation>OpenAI 的质量：越高越精确，但耗时更长、费用更高</translation>
+    </message>
+    <message>
+        <source>Bildmodell:</source>
+        <translation>图像模型：</translation>
+    </message>
+    <message>
+        <source>Natürlich und ausgewogen</source>
+        <translation>自然均衡</translation>
+    </message>
+    <message>
+        <source>Lebendig, kräftige Farben</source>
+        <translation>生动，色彩鲜明</translation>
+    </message>
+    <message>
+        <source>Warm</source>
+        <translation>暖色</translation>
+    </message>
+    <message>
+        <source>Kühl</source>
+        <translation>冷色</translation>
+    </message>
+    <message>
+        <source>Hell und freundlich</source>
+        <translation>明亮友好</translation>
+    </message>
+    <message>
+        <source>Stimmungsvoll, dunkler</source>
+        <translation>富有氛围，偏暗</translation>
+    </message>
+    <message>
+        <source>Für den Druck</source>
+        <translation>用于印刷</translation>
+    </message>
+    <message>
+        <source>Ziel:</source>
+        <translation>目标：</translation>
+    </message>
+    <message>
+        <source>Verändert Bildinhalte: wird nur mit „KI-Bild übernehmen“ übertragen</source>
+        <translation>会改变图像内容：仅在“应用 AI 图像”时传输</translation>
+    </message>
+    <message>
+        <source>Verbessern:</source>
+        <translation>改善：</translation>
+    </message>
+    <message>
+        <source>Farbstich (Temperatur, Tönung)</source>
+        <translation>偏色（温度、色调）</translation>
+    </message>
+    <message>
+        <source>Belichtung und Kontrast</source>
+        <translation>曝光与对比度</translation>
+    </message>
+    <message>
+        <source>Sättigung</source>
+        <translation>饱和度</translation>
+    </message>
+    <message>
+        <source>Die KI darf ändern:</source>
+        <translation>AI 可以更改：</translation>
+    </message>
+    <message>
+        <source>z.B. Himmel etwas blauer, Gesichter heller</source>
+        <translation>例如：天空更蓝一些，面部更亮</translation>
+    </message>
+    <message>
+        <source>Wunsch:</source>
+        <translation>要求：</translation>
+    </message>
+    <message>
+        <source>Farbe und Licht aufs Original übertragen</source>
+        <translation>将颜色和光线应用到原图</translation>
+    </message>
+    <message>
+        <source>KI-Bild übernehmen</source>
+        <translation>应用 AI 图像</translation>
+    </message>
+    <message>
+        <source>Das Original bleibt in voller Auflösung, Farbtiefe und Schärfe; übernommen werden Farben, Weissabgleich, Belichtung und grossflächige Korrekturen der KI.</source>
+        <translation>原图保持完整的分辨率、色深和锐度；应用的是 AI 的颜色、白平衡、曝光和大面积校正。</translation>
+    </message>
+    <message>
+        <source>Das Bild der KI ersetzt das Original (höchstens 1536 Pixel, wird hochgerechnet). Nötig für Schärfen, Entrauschen, Retusche, Restaurieren und Kolorieren; Details können sich ändern.</source>
+        <translation>AI 图像替换原图（最大 1536 像素，将放大插值）。锐化、降噪、修饰、修复和上色时需要此方式；细节可能会改变。</translation>
+    </message>
+    <message>
+        <source>Übernehmen:</source>
+        <translation>应用：</translation>
+    </message>
+    <message>
+        <source>Variante:</source>
+        <translation>变体：</translation>
+    </message>
+    <message>
+        <source>Stärke (%):</source>
+        <translation>强度（%）：</translation>
+    </message>
+    <message>
+        <source>Lokal (%):</source>
+        <translation>局部 (%)：</translation>
+    </message>
+    <message>
+        <source>Wie fein grossflächige Korrekturen der KI (Himmel, aufgehellte Bereiche) übernommen werden; 0 = nur eine Farbabbildung fürs ganze Bild</source>
+        <translation>AI 的大面积校正（天空、提亮区域）应用的精细程度；0 = 仅对整个图像做一次颜色映射</translation>
+    </message>
+    <message>
+        <source>Temperatur:</source>
+        <translation>温度：</translation>
+    </message>
+    <message>
+        <source>Tönung:</source>
+        <translation>色调：</translation>
+    </message>
+    <message>
+        <source>Sättigung:</source>
+        <translation>饱和度：</translation>
+    </message>
+    <message>
+        <source>Helligkeit:</source>
+        <translation>亮度：</translation>
+    </message>
+    <message>
+        <source>Kontrast:</source>
+        <translation>对比度：</translation>
+    </message>
+    <message>
+        <source>Glanzlichter:</source>
+        <translation>高光：</translation>
+    </message>
+    <message>
+        <source>Schatten:</source>
+        <translation>阴影：</translation>
+    </message>
+    <message>
+        <source>Mitteltöne:</source>
+        <translation>中间色调：</translation>
+    </message>
+    <message>
+        <source>Tonwerte vorher strecken (wie Automatische Anpassung)</source>
+        <translation>预先拉伸色阶（同自动调整）</translation>
+    </message>
+    <message>
+        <source>Motiv freistellen (Hintergrund entfernen)</source>
+        <translation>主体抠图（去除背景）</translation>
+    </message>
+    <message>
+        <source>Lokal, pixelgenau (offline)</source>
+        <translation>本地，像素级精确（离线）</translation>
+    </message>
+    <message>
+        <source>OpenAI (zeichnet das Motiv neu)</source>
+        <translation>OpenAI（重新绘制主体）</translation>
+    </message>
+    <message>
+        <source>Ein Freistellmodell rechnet auf diesem Rechner eine Maske; das Motiv bleibt Pixel für Pixel das Original. Kein Bild verlässt den Rechner.</source>
+        <translation>抠图模型在本机计算蒙版；主体逐像素保留原图。图像不会离开本机。</translation>
+    </message>
+    <message>
+        <source>Schickt das Bild an OpenAI (gpt-image-1.5). Die KI liefert das Motiv neu gezeichnet auf transparentem Grund: Details, Schrift und Gesichter können sich verändern.</source>
+        <translation>将图像发送到 OpenAI (gpt-image-1.5)。AI 返回在透明背景上重新绘制的主体：细节、文字和面部可能会改变。</translation>
+    </message>
+    <message>
+        <source>Kantenhärte:</source>
+        <translation>边缘硬度：</translation>
+    </message>
+    <message>
+        <source>„%1“ verändert Bildinhalte, deshalb wird das KI-Bild selbst übernommen.</source>
+        <translation>“%1”会改变图像内容，因此将直接应用 AI 图像本身。</translation>
+    </message>
+    <message>
+        <source>Noch kein passender KI-Zugang.</source>
+        <translation>尚无合适的 AI 访问。</translation>
+    </message>
+    <message>
+        <source>Zum Bearbeiten braucht es einen Zugang zu OpenAI oder Google Gemini mit API-Schlüssel: „Einrichten …“. Der Zugang über Claude Code kann keine Bilder übergeben.</source>
+        <translation>编辑需要带 API 密钥的 OpenAI 或 Google Gemini 访问：“设置…”。通过 Claude Code 的访问无法传递图像。</translation>
+    </message>
+    <message>
+        <source>Mit „Einrichten …“ einen Zugang mit API-Schlüssel anlegen (Claude, OpenAI, Gemini, Ollama …). Der Zugang über Claude Code kann hier keine Bilder übergeben.</source>
+        <translation>通过“设置…”创建带 API 密钥的访问（Claude、OpenAI、Gemini、Ollama…）。通过 Claude Code 的访问无法在此传递图像。</translation>
+    </message>
+    <message>
+        <source>KI bearbeiten lassen</source>
+        <translation>让 AI 编辑</translation>
+    </message>
+    <message>
+        <source>Weitere Variante</source>
+        <translation>再生成一个变体</translation>
+    </message>
+    <message>
+        <source>KI fragen</source>
+        <translation>询问 AI</translation>
+    </message>
+    <message>
+        <source>Schickt das Bild (höchstens 1536 Pixel) an den gewählten Anbieter. Abgerechnet wird beim Anbieter nach Verbrauch.</source>
+        <translation>将图像（最大 1536 像素）发送给所选提供商。由提供商按用量计费。</translation>
+    </message>
+    <message>
+        <source>Schickt eine verkleinerte Kopie des Bildes an den gewählten KI-Zugang. Die KI schlägt nur Reglerwerte vor; gerechnet wird in TANGENTA auf dem Original.</source>
+        <translation>将图像的缩小副本发送到所选的 AI 访问。AI 只建议滑块数值；计算在 TANGENTA 中对原图进行。</translation>
+    </message>
+    <message>
+        <source>KI bearbeitet das Bild …</source>
+        <translation>AI 正在编辑图像…</translation>
+    </message>
+    <message>
+        <source>KI denkt nach …</source>
+        <translation>AI 正在思考…</translation>
+    </message>
+    <message>
+        <source>KI erneut fragen</source>
+        <translation>再次询问 AI</translation>
+    </message>
+    <message>
+        <source>Motiv wird erkannt … (einige Sekunden)</source>
+        <translation>正在识别主体…（需要几秒钟）</translation>
+    </message>
+    <message>
+        <source>Freistellen ging nicht: %1</source>
+        <translation>抠图失败：%1</translation>
+    </message>
+    <message>
+        <source>Motiv freigestellt (%1). Kantenhärte nach Wunsch.</source>
+        <translation>主体已抠出 (%1)。可按需调整边缘硬度。</translation>
+    </message>
+    <message>
+        <source>Freistellmodell herunterladen</source>
+        <translation>下载抠图模型</translation>
+    </message>
+    <message>
+        <source>Zum Freistellen braucht TANGENTA einmalig das Modell %1 (%2 MB, Lizenz %3). Es wird von
+%4
+heruntergeladen, geprüft und unter
+%5
+gespeichert. Jetzt herunterladen?</source>
+        <translation>抠图需要 TANGENTA 一次性下载模型 %1（%2 MB，许可证 %3）。它将从
+%4
+下载、校验并保存到
+%5
+现在下载吗？</translation>
+    </message>
+    <message>
+        <source>Kann %1 nicht schreiben.</source>
+        <translation>无法写入 %1。</translation>
+    </message>
+    <message>
+        <source>Modell wird heruntergeladen: %1 von %2 MB</source>
+        <translation>正在下载模型：%1 / %2 MB</translation>
+    </message>
+    <message>
+        <source>Prüfsumme stimmt nicht</source>
+        <translation>校验和不匹配</translation>
+    </message>
+    <message>
+        <source>Download fehlgeschlagen: %1</source>
+        <translation>下载失败：%1</translation>
+    </message>
+    <message>
+        <source>Dafür braucht es einen OpenAI-Zugang mit API-Schlüssel (Optionen &gt; Global &gt; KI).</source>
+        <translation>为此需要带 API 密钥的 OpenAI 访问（「选项 &gt; 全局 &gt; AI」）。</translation>
+    </message>
+    <message>
+        <source>Bild wird an OpenAI geschickt … (bis zu einer Minute)</source>
+        <translation>正在将图像发送到 OpenAI…（最多一分钟）</translation>
+    </message>
+    <message>
+        <source>OpenAI hat kein Bild geliefert.</source>
+        <translation>OpenAI 未返回图像。</translation>
+    </message>
+    <message>
+        <source>Von OpenAI freigestellt. Achtung: Das Motiv ist neu gezeichnet und kann vom Original abweichen.</source>
+        <translation>已由 OpenAI 抠图。注意：主体是重新绘制的，可能与原图有差异。</translation>
+    </message>
+    <message>
+        <source>Vorschlag übernommen.</source>
+        <translation>已应用建议。</translation>
+    </message>
+    <message>
+        <source>Versuch %1: %2</source>
+        <translation>第 %1 次尝试：%2</translation>
+    </message>
+    <message>
+        <source>Bild wird an %1 geschickt …</source>
+        <translation>正在将图像发送到 %1…</translation>
+    </message>
+    <message>
+        <source>Bild wird an OpenAI (%1) geschickt … das dauert meist eine halbe bis zwei Minuten.</source>
+        <translation>正在将图像发送到 OpenAI (%1)…通常需要半分钟到两分钟。</translation>
+    </message>
+    <message>
+        <source>Bild wird an Google Gemini (%1) geschickt … das dauert meist eine halbe Minute.</source>
+        <translation>正在将图像发送到 Google Gemini (%1)…通常需要半分钟。</translation>
+    </message>
+    <message>
+        <source>Gemini hat kein Bild geliefert.</source>
+        <translation>Gemini 未返回图像。</translation>
+    </message>
+    <message>
+        <source>Gemini hat kein Bild geliefert: %1</source>
+        <translation>Gemini 未返回图像：%1</translation>
+    </message>
+    <message>
+        <source>Variante %1</source>
+        <translation>变体 %1</translation>
+    </message>
+    <message>
+        <source>Variante %1 (%2)</source>
+        <translation>变体 %1 (%2)</translation>
+    </message>
+    <message>
+        <source>Variante %1 ist da. Unter „Variante“ lassen sich alle Ergebnisse vergleichen; Stärke und Regler stimmen sie fein ab.</source>
+        <translation>变体 %1 已生成。可在“变体”中比较所有结果；用强度和滑块进行微调。</translation>
+    </message>
+    <message>
+        <source>Die KI hat das Bild verschoben oder neu gezeichnet; übernommen werden deshalb vor allem Farbe und Licht insgesamt.</source>
+        <translation>AI 移动或重新绘制了图像；因此主要应用整体的颜色和光线。</translation>
     </message>
 </context>
 <context>
@@ -3030,6 +3525,228 @@ Linksklick: Füllung, Rechtsklick: Kontur</source>
     </message>
 </context>
 <context>
+    <name>vek::CustomToolBar</name>
+    <message>
+        <source>Befehle hierher ziehen</source>
+        <translation>将命令拖到此处</translation>
+    </message>
+    <message>
+        <source>Trennlinie davor einfügen</source>
+        <translation>在前面插入分隔线</translation>
+    </message>
+    <message>
+        <source>Aus der Leiste entfernen</source>
+        <translation>从工具栏中移除</translation>
+    </message>
+    <message>
+        <source>Trennlinie anfügen</source>
+        <translation>添加分隔线</translation>
+    </message>
+</context>
+<context>
+    <name>vek::CutoutAssistant</name>
+    <message>
+        <source>Freistellungs-Assistent</source>
+        <translation>抠图助手</translation>
+    </message>
+    <message>
+        <source>Vergrössern</source>
+        <translation>放大</translation>
+    </message>
+    <message>
+        <source>Verkleinern</source>
+        <translation>缩小</translation>
+    </message>
+    <message>
+        <source>Hand (Bild verschieben; auch Leertaste oder mittlere Maustaste)</source>
+        <translation>抓手（移动图像；也可用空格键或鼠标中键）</translation>
+    </message>
+    <message>
+        <source>Originalgrösse (1:1)</source>
+        <translation>原始大小 (1:1)</translation>
+    </message>
+    <message>
+        <source>Ganzes Bild</source>
+        <translation>整个图像</translation>
+    </message>
+    <message>
+        <source>Rückgängig (Strg+Z)</source>
+        <translation>撤销 (Ctrl+Z)</translation>
+    </message>
+    <message>
+        <source>Wiederherstellen (Strg+Y)</source>
+        <translation>重做 (Ctrl+Y)</translation>
+    </message>
+    <message>
+        <source>Zurücksetzen</source>
+        <translation>重置</translation>
+    </message>
+    <message>
+        <source>Marker: Band über die Kante des Objekts ziehen</source>
+        <translation>标记：沿对象边缘拖出一条带</translation>
+    </message>
+    <message>
+        <source>Radierer: Markierung und Füllung entfernen</source>
+        <translation>橡皮擦：清除标记和填充</translation>
+    </message>
+    <message>
+        <source>Füllen: innerhalb der Markierung klicken</source>
+        <translation>填充：在标记内部单击</translation>
+    </message>
+    <message>
+        <source>Detail behalten: Bereiche, die zum Objekt gehören</source>
+        <translation>保留细节：属于对象的区域</translation>
+    </message>
+    <message>
+        <source>Detail entfernen: Bereiche, die weg sollen</source>
+        <translation>去除细节：需要去掉的区域</translation>
+    </message>
+    <message>
+        <source>Hilfsmitteloptionen</source>
+        <translation>工具选项</translation>
+    </message>
+    <message>
+        <source> px</source>
+        <translation> px</translation>
+    </message>
+    <message>
+        <source>Spitzengrösse:</source>
+        <translation>笔尖大小：</translation>
+    </message>
+    <message>
+        <source>Vorschau</source>
+        <translation>预览</translation>
+    </message>
+    <message>
+        <source>Markierung anzeigen</source>
+        <translation>显示标记</translation>
+    </message>
+    <message>
+        <source>Füllung anzeigen</source>
+        <translation>显示填充</translation>
+    </message>
+    <message>
+        <source>Originalbild anzeigen</source>
+        <translation>显示原图</translation>
+    </message>
+    <message>
+        <source>Hintergrund:</source>
+        <translation>背景：</translation>
+    </message>
+    <message>
+        <source>Schachbrett</source>
+        <translation>棋盘格</translation>
+    </message>
+    <message>
+        <source>Weiss</source>
+        <translation>白</translation>
+    </message>
+    <message>
+        <source>Schwarz</source>
+        <translation>黑</translation>
+    </message>
+    <message>
+        <source>Grau</source>
+        <translation>灰</translation>
+    </message>
+    <message>
+        <source>Grün</source>
+        <translation>绿</translation>
+    </message>
+    <message>
+        <source>Kanten</source>
+        <translation>边缘</translation>
+    </message>
+    <message>
+        <source>Farbsaum entfernen</source>
+        <translation>去除色边</translation>
+    </message>
+    <message>
+        <source>Halbdurchsichtige Kanten (Haare) bekommen die Farbe des Objekts statt des alten Hintergrunds</source>
+        <translation>半透明边缘（头发）采用对象的颜色，而不是旧背景的颜色</translation>
+    </message>
+    <message>
+        <source>Kante nach innen (−) oder aussen (+) verschieben, in Pixeln</source>
+        <translation>将边缘向内 (−) 或向外 (+) 移动，单位为像素</translation>
+    </message>
+    <message>
+        <source>Kante verschieben:</source>
+        <translation>移动边缘：</translation>
+    </message>
+    <message>
+        <source>Weiche Kante:</source>
+        <translation>柔和边缘：</translation>
+    </message>
+    <message>
+        <source>Kantenhärte:</source>
+        <translation>边缘硬度：</translation>
+    </message>
+    <message>
+        <source>Ergebnis</source>
+        <translation>结果</translation>
+    </message>
+    <message>
+        <source>Ausschnitt</source>
+        <translation>抠图区域</translation>
+    </message>
+    <message>
+        <source>Ausschnitt und Originalbild</source>
+        <translation>抠图区域与原图</translation>
+    </message>
+    <message>
+        <source>Hinweise</source>
+        <translation>提示</translation>
+    </message>
+    <message>
+        <source>Abbrechen</source>
+        <translation>取消</translation>
+    </message>
+    <message>
+        <source>Klicken Sie neben die Markierung, nicht darauf.</source>
+        <translation>请在标记旁边单击，而不是在标记上。</translation>
+    </message>
+    <message>
+        <source>Fast das ganze Bild ist gefüllt: Die Markierung ist vermutlich nicht geschlossen. Rückgängig machen, die Lücke mit dem Marker schliessen und erneut füllen.</source>
+        <translation>几乎整个图像都被填充：标记可能没有闭合。请撤销，用标记工具补上缺口，然后重新填充。</translation>
+    </message>
+    <message>
+        <source>Ziehen Sie mit dem Marker eine geschlossene Linie über die Kante des Objekts: halb auf dem Objekt, halb auf dem Hintergrund. Bei Haaren und Fell breiter malen, sodass alle feinen Strähnen im grünen Band liegen. Der Bildrand schliesst die Linie ab.</source>
+        <translation>用标记工具沿对象边缘画一条闭合的线：一半在对象上，一半在背景上。对于头发和毛发，请画得宽一些，使所有细小发丝都位于绿色带内。图像边缘会闭合这条线。</translation>
+    </message>
+    <message>
+        <source>Radierer: entfernt Markierung, Füllung und Detailpinsel.</source>
+        <translation>橡皮擦：清除标记、填充和细节画笔。</translation>
+    </message>
+    <message>
+        <source>Klicken Sie innerhalb der Markierung, um das Objekt zu füllen. Danach auf «Vorschau».</source>
+        <translation>在标记内部单击以填充对象。然后单击“预览”。</translation>
+    </message>
+    <message>
+        <source>Detail behalten: Malen Sie über Teile des Objekts, die in der Vorschau fehlen.</source>
+        <translation>保留细节：在预览中缺失的对象部分上涂抹。</translation>
+    </message>
+    <message>
+        <source>Detail entfernen: Malen Sie über Reste des Hintergrunds, die in der Vorschau stehen geblieben sind.</source>
+        <translation>去除细节：在预览中残留的背景部分上涂抹。</translation>
+    </message>
+    <message>
+        <source>Ziehen verschiebt das Bild. Mausrad: Zoom.</source>
+        <translation>拖动可移动图像。鼠标滚轮：缩放。</translation>
+    </message>
+    <message>
+        <source>Prüfen Sie die Kanten mit verschiedenen Hintergründen. Mit «Kante verschieben» lassen sich Säume entfernen.</source>
+        <translation>请用不同的背景检查边缘。使用“移动边缘”可去除色边。</translation>
+    </message>
+    <message>
+        <source>Kanten werden berechnet …</source>
+        <translation>正在计算边缘…</translation>
+    </message>
+    <message>
+        <source>KI-Modell schätzt das Objekt …</source>
+        <translation>AI 模型正在估算对象…</translation>
+    </message>
+</context>
+<context>
     <name>vek::CylinderDialog</name>
     <message>
         <source>Zylinder</source>
@@ -3390,6 +4107,10 @@ Linksklick: Füllung, Rechtsklick: Kontur</source>
         <translation>断字</translation>
     </message>
     <message>
+        <source>Am Grundlinienraster ausrichten</source>
+        <translation>贴齐基线网格</translation>
+    </message>
+    <message>
         <source>In Kurven konvertieren</source>
         <translation>转换为曲线</translation>
     </message>
@@ -3706,16 +4427,8 @@ Linksklick: Füllung, Rechtsklick: Kontur</source>
         <translation>字体替换</translation>
     </message>
     <message>
-        <source>Diese Schriften aus dem PDF sind auf diesem Rechner nicht installiert. Wählen Sie je Schrift eine ähnliche installierte Schrift (der Text bleibt bearbeitbar) oder &lt;b&gt;Als Kurven&lt;/b&gt; – dann sieht alles genau wie im PDF aus. Nach dem Installieren einer Schrift: &lt;b&gt;Schriften neu einlesen&lt;/b&gt;.</source>
-        <translation>PDF 中的这些字体未安装在此计算机上。请为每种字体选择一种相似的已安装字体（文本仍可编辑），或选择&lt;b&gt;转为曲线&lt;/b&gt;——这样所有内容看起来都与 PDF 中完全一致。安装字体后：&lt;b&gt;重新加载字体&lt;/b&gt;。</translation>
-    </message>
-    <message>
-        <source>Schrift im PDF</source>
-        <translation>PDF 中的字体</translation>
-    </message>
-    <message>
-        <source>So im PDF</source>
-        <translation>PDF 中的样式</translation>
+        <source>Diese Schriften aus der Datei sind auf diesem Rechner nicht installiert. Wählen Sie je Schrift eine ähnliche installierte Schrift (der Text bleibt bearbeitbar). Sind die Umrisse in der Datei eingebettet, geht auch &lt;b&gt;Als Kurven&lt;/b&gt; – dann sieht alles genau wie in der Datei aus. Nach dem Installieren einer Schrift: &lt;b&gt;Schriften neu einlesen&lt;/b&gt;.</source>
+        <translation>文件中的这些字体未安装在此计算机上。请为每种字体选择一种相似的已安装字体（文本仍可编辑）。如果文件中嵌入了轮廓，也可以选择&lt;b&gt;转为曲线&lt;/b&gt;——这样一切都与文件中完全相同。安装字体后：&lt;b&gt;重新加载字体&lt;/b&gt;。</translation>
     </message>
     <message>
         <source>Ersetzen durch</source>
@@ -3724,6 +4437,14 @@ Linksklick: Füllung, Rechtsklick: Kontur</source>
     <message>
         <source>So nach dem Import</source>
         <translation>导入后的样式</translation>
+    </message>
+    <message>
+        <source>Schrift in der Datei</source>
+        <translation>文件中的字体</translation>
+    </message>
+    <message>
+        <source>So in der Datei</source>
+        <translation>文件中的样子</translation>
     </message>
     <message>
         <source>Importieren</source>
@@ -3790,8 +4511,8 @@ Linksklick: Füllung, Rechtsklick: Kontur</source>
         <translation>%1（已安装）</translation>
     </message>
     <message>
-        <source>Als Kurven – genau wie im PDF</source>
-        <translation>转为曲线 – 与 PDF 中完全一致</translation>
+        <source>Als Kurven – genau wie in der Datei</source>
+        <translation>转为曲线——与文件中完全相同</translation>
     </message>
     <message>
         <source>Andere Schrift …</source>
@@ -4704,6 +5425,14 @@ Doppelklick fügt einen hinzu, Entf löscht ihn</source>
         <translation>剪切(&amp;T)</translation>
     </message>
     <message>
+        <source>S&amp;chliessen</source>
+        <translation>关闭(&amp;C)</translation>
+    </message>
+    <message>
+        <source>A&amp;lle schliessen</source>
+        <translation>全部关闭(&amp;L)</translation>
+    </message>
+    <message>
         <source>Wieder&amp;herstellen</source>
         <translation>重做(&amp;R)</translation>
     </message>
@@ -4714,6 +5443,10 @@ Doppelklick fügt einen hinzu, Entf löscht ihn</source>
     <message>
         <source>&amp;Einfügen</source>
         <translation>粘贴(&amp;P)</translation>
+    </message>
+    <message>
+        <source>&amp;Inhalte einfügen …</source>
+        <translation>选择性粘贴(&amp;S)…</translation>
     </message>
     <message>
         <source>&amp;Duplizieren</source>
@@ -4894,6 +5627,10 @@ Doppelklick fügt einen hinzu, Entf löscht ihn</source>
     <message>
         <source>&amp;Gitter</source>
         <translation>网格(&amp;I)</translation>
+    </message>
+    <message>
+        <source>G&amp;rundlinienraster</source>
+        <translation>基线网格(&amp;R)</translation>
     </message>
     <message>
         <source>A&amp;usrichten an</source>
@@ -6461,10 +7198,6 @@ TANGENTA 在内部以每通道 16 位处理图像（相机原始数据、16 位 
         <translation>新的界面大小将在下次启动时生效。现在重新启动吗？</translation>
     </message>
     <message>
-        <source>%1[*] – TANGENTA</source>
-        <translation>%1[*] – TANGENTA</translation>
-    </message>
-    <message>
         <source>%1 — %2 × %3 mm</source>
         <translation>%1 — %2 × %3 mm</translation>
     </message>
@@ -6487,6 +7220,34 @@ TANGENTA 在内部以每通道 16 位处理图像（相机原始数据、16 位 
     <message>
         <source>Nur auf &amp;dieser Seite</source>
         <translation>仅在此页面(&amp;T)</translation>
+    </message>
+    <message>
+        <source>Grundlinie &amp;zurücksetzen</source>
+        <translation>重置基线(&amp;Z)</translation>
+    </message>
+    <message>
+        <source>Grundlinie zurücksetzen</source>
+        <translation>重置基线</translation>
+    </message>
+    <message>
+        <source>&amp;Alle Grundlinien zurücksetzen</source>
+        <translation>重置所有基线(&amp;A)</translation>
+    </message>
+    <message>
+        <source>Grundlinien zurücksetzen</source>
+        <translation>重置基线</translation>
+    </message>
+    <message>
+        <source>Grundlinienraster &amp;einrichten …</source>
+        <translation>设置基线网格(&amp;E) …</translation>
+    </message>
+    <message>
+        <source>Dokument</source>
+        <translation>文档</translation>
+    </message>
+    <message>
+        <source>/Gitter</source>
+        <translation>/网格</translation>
     </message>
     <message>
         <source>TANGENTA</source>
@@ -6934,6 +7695,70 @@ TANGENTA 在内部以每通道 16 位处理图像（相机原始数据、16 位 
         <translation>样式：</translation>
     </message>
     <message>
+        <source>CDR – Vektorzeichnung (Version 16, X6)</source>
+        <translation>CDR – 矢量绘图（版本 16，X6）</translation>
+    </message>
+    <message>
+        <source>CDR – Vektorzeichnung (Version 13, X3)</source>
+        <translation>CDR – 矢量绘图（版本 13，X3）</translation>
+    </message>
+    <message>
+        <source>TANGENTA-Objekte</source>
+        <translation>TANGENTA 对象</translation>
+    </message>
+    <message>
+        <source>Dateien (Bilder, Vektorgrafik)</source>
+        <translation>文件（图像、矢量图形）</translation>
+    </message>
+    <message>
+        <source>SVG-Vektorgrafik</source>
+        <translation>SVG 矢量图形</translation>
+    </message>
+    <message>
+        <source>Bild (PNG, mit Transparenz)</source>
+        <translation>图像（PNG，带透明度）</translation>
+    </message>
+    <message>
+        <source>Bild (Bitmap)</source>
+        <translation>图像（位图）</translation>
+    </message>
+    <message>
+        <source>Einfügen</source>
+        <translation>粘贴</translation>
+    </message>
+    <message>
+        <source>Die SVG-Grafik liess sich nicht lesen.
+
+%1</source>
+        <translation>无法读取该 SVG 图形。
+
+%1</translation>
+    </message>
+    <message>
+        <source>Inhalte einfügen</source>
+        <translation>选择性粘贴</translation>
+    </message>
+    <message>
+        <source>Als:</source>
+        <translation>格式：</translation>
+    </message>
+    <message>
+        <source>Neue Symbolleiste …</source>
+        <translation>新建工具栏…</translation>
+    </message>
+    <message>
+        <source>Arbeitsbereich/Anpassung/Befehlsleisten</source>
+        <translation>工作区/自定义/命令栏</translation>
+    </message>
+    <message>
+        <source>Anpassen …</source>
+        <translation>自定义…</translation>
+    </message>
+    <message>
+        <source>Arbeitsbereich/Anpassung/Befehle</source>
+        <translation>工作区/自定义/命令</translation>
+    </message>
+    <message>
         <source>QR-Code einfügen</source>
         <translation>插入二维码</translation>
     </message>
@@ -6954,12 +7779,64 @@ TANGENTA 在内部以每通道 16 位处理图像（相机原始数据、16 位 
         <translation>点彩化(&amp;U)…</translation>
     </message>
     <message>
+        <source>Bild mit &amp;KI optimieren …</source>
+        <translation>用 AI 优化图像(&amp;K)…</translation>
+    </message>
+    <message>
+        <source>Bild mit KI optimieren</source>
+        <translation>用 AI 优化图像</translation>
+    </message>
+    <message>
+        <source>Bild &amp;freistellen …</source>
+        <translation>图像抠图(&amp;F)…</translation>
+    </message>
+    <message>
+        <source>Bild freistellen</source>
+        <translation>图像抠图</translation>
+    </message>
+    <message>
+        <source>Freistellungs-&amp;Assistent …</source>
+        <translation>抠图助手(&amp;A)…</translation>
+    </message>
+    <message>
+        <source>Ü&amp;berlappend</source>
+        <translation>层叠(&amp;C)</translation>
+    </message>
+    <message>
+        <source>&amp;Nebeneinander</source>
+        <translation>平铺(&amp;T)</translation>
+    </message>
+    <message>
+        <source>Nä&amp;chstes Fenster</source>
+        <translation>下一个窗口(&amp;X)</translation>
+    </message>
+    <message>
+        <source>&amp;Vorheriges Fenster</source>
+        <translation>上一个窗口(&amp;V)</translation>
+    </message>
+    <message>
+        <source>&amp;Hilfe</source>
+        <translation>帮助(&amp;H)</translation>
+    </message>
+    <message>
+        <source>TANGENTA im &amp;Web (tangenta.ch)</source>
+        <translation>TANGENTA 网站(&amp;W) (tangenta.ch)</translation>
+    </message>
+    <message>
+        <source>Ü&amp;ber TANGENTA …</source>
+        <translation>关于 TANGENTA(&amp;B)…</translation>
+    </message>
+    <message>
         <source>Blockschatten</source>
         <translation>块阴影</translation>
     </message>
     <message>
         <source>Effekte</source>
         <translation>效果</translation>
+    </message>
+    <message>
+        <source>Freistellungs-Assistent</source>
+        <translation>抠图助手</translation>
     </message>
     <message>
         <source>Bis Mitte</source>
@@ -9282,10 +10159,6 @@ TANGENTA 在内部以每通道 16 位处理图像（相机原始数据、16 位 
         <translation>菜单栏/%1</translation>
     </message>
     <message>
-        <source>Zum Ändern des Tastaturbefehls rechts unter &apos;Tastaturbefehle&apos;</source>
-        <translation>要更改快捷键，请使用右侧的「快捷键」</translation>
-    </message>
-    <message>
         <source>Dokument</source>
         <translation>文档</translation>
     </message>
@@ -9685,16 +10558,8 @@ TANGENTA 在内部以每通道 16 位处理图像（相机原始数据、16 位 
         <translation>显示为点</translation>
     </message>
     <message>
-        <source>Basisliniengitter</source>
-        <translation>基线网格</translation>
-    </message>
-    <message>
-        <source>Abstand:</source>
-        <translation>间距：</translation>
-    </message>
-    <message>
-        <source>Von oben beginnen:</source>
-        <translation>从顶部开始：</translation>
+        <source>Mengentext am Gitter ausrichten</source>
+        <translation>段落文本贴齐网格</translation>
     </message>
     <message>
         <source>Pixelgitter</source>
@@ -10129,6 +10994,30 @@ TANGENTA 在内部以每通道 16 位处理图像（相机原始数据、16 位 
         <translation>在 macOS 上，应用程序包会关联文件类型；如需使用其他程序，请在访达中选择“显示简介 &gt; 打开方式”。</translation>
     </message>
     <message>
+        <source>Grundlinienraster</source>
+        <translation>基线网格</translation>
+    </message>
+    <message>
+        <source>Oberste Linie (von oben):</source>
+        <translation>最上方线（距顶部）：</translation>
+    </message>
+    <message>
+        <source>Linienabstand:</source>
+        <translation>线间距：</translation>
+    </message>
+    <message>
+        <source>Unterste Linie (von unten):</source>
+        <translation>最下方线（距底部）：</translation>
+    </message>
+    <message>
+        <source>Verschobene Linien zurücksetzen (%1)</source>
+        <translation>重置已移动的线（%1）</translation>
+    </message>
+    <message>
+        <source>Mit dem Auswahlwerkzeug an den Griffen neben der Seite ziehen: erste oder letzte Linie dehnt das Raster, jede andere Linie verschiebt nur sich selbst. Strg verschiebt nur die gezogene Linie, Umschalt das ganze Raster. Doppelklick auf den Griff setzt eine verschobene Linie zurück.</source>
+        <translation>使用选择工具拖动页面旁的手柄：拖动第一条或最后一条线会拉伸网格，拖动其他线只移动该线本身。按住 Ctrl 只移动所拖动的线，按住 Shift 移动整个网格。双击手柄可重置已移动的线。</translation>
+    </message>
+    <message>
         <source>VEK-Dateien öffnen sich danach per Doppelklick in TANGENTA. Die übrigen Typen erscheinen im Explorer unter &apos;Öffnen mit&apos;, ohne das bisherige Standardprogramm zu ersetzen.</source>
         <translation>之后双击 VEK 文件即可在 TANGENTA 中打开。其他类型会出现在资源管理器的「打开方式」中，不会替换原有的默认程序。</translation>
     </message>
@@ -10203,6 +11092,52 @@ TANGENTA 在内部以每通道 16 位处理图像（相机原始数据、16 位 
     <message>
         <source>Neu …</source>
         <translation>新建…</translation>
+    </message>
+    <message>
+        <source>Symbolleiste &apos;%1&apos;</source>
+        <translation>工具栏“%1”</translation>
+    </message>
+    <message>
+        <source>Ziehen Sie dieses Element auf eine eigene Symbolleiste, um es hinzuzufügen.
+Tastaturbefehl ändern: rechts unter &apos;Tastaturbefehle&apos;</source>
+        <translation>将此元素拖到自定义工具栏上即可添加。
+更改快捷键：右侧的“快捷键”下</translation>
+    </message>
+    <message>
+        <source>Eigene Symbolleisten</source>
+        <translation>自定义工具栏</translation>
+    </message>
+    <message>
+        <source>Umbenennen …</source>
+        <translation>重命名…</translation>
+    </message>
+    <message>
+        <source>Neue Symbolleiste</source>
+        <translation>新建工具栏</translation>
+    </message>
+    <message>
+        <source>Name der Symbolleiste:</source>
+        <translation>工具栏名称：</translation>
+    </message>
+    <message>
+        <source>Symbolleiste %1</source>
+        <translation>工具栏 %1</translation>
+    </message>
+    <message>
+        <source>Symbolleiste umbenennen</source>
+        <translation>重命名工具栏</translation>
+    </message>
+    <message>
+        <source>Symbolleiste löschen</source>
+        <translation>删除工具栏</translation>
+    </message>
+    <message>
+        <source>Symbolleiste &apos;%1&apos; löschen?</source>
+        <translation>删除工具栏“%1”？</translation>
+    </message>
+    <message>
+        <source>Befehle unter &apos;Anpassung &gt; Befehle&apos; auf eine eigene Symbolleiste ziehen. Solange die Optionen offen sind, lassen sich die Schaltflächen in den Leisten verschieben, in eine andere Leiste ziehen oder zum Entfernen herausziehen (sonst mit gedrückter Alt-Taste). Die Leisten selbst sind am Griff frei verschiebbar.</source>
+        <translation>将「自定义 &gt; 命令」下的命令拖到自定义工具栏上。选项窗口打开期间，可以移动工具栏中的按钮、将其拖到另一个工具栏，或拖出以删除（其他时候按住 Alt 键操作）。工具栏本身可通过手柄自由移动。</translation>
     </message>
     <message>
         <source>Bearbeiten …</source>
@@ -12771,6 +13706,10 @@ TANGENTA 在内部以每通道 16 位处理图像（相机原始数据、16 位 
         <translation>使用断字</translation>
     </message>
     <message>
+        <source>Am Grundlinienraster ausrichten</source>
+        <translation>贴齐基线网格</translation>
+    </message>
+    <message>
         <source>Mengentext umbrechen – folgt mit dem Textwerkzeug</source>
         <translation>环绕段落文本 – 将随文本工具提供</translation>
     </message>
@@ -13869,6 +14808,17 @@ TANGENTA 在内部以每通道 16 位处理图像（相机原始数据、16 位 
     <message>
         <source>Nicht unterstützte Masseinheit.</source>
         <translation>不支持的度量单位。</translation>
+    </message>
+</context>
+<context>
+    <name>vek::matting</name>
+    <message>
+        <source>ONNX Runtime %1 ist zu alt (mindestens 1.16 nötig).</source>
+        <translation>ONNX Runtime %1 版本过旧（至少需要 1.16）。</translation>
+    </message>
+    <message>
+        <source>ONNX Runtime wurde nicht gefunden. Sie gehört neben das Programm (onnxruntime.dll bzw. libonnxruntime) oder wird als Paket installiert.</source>
+        <translation>找不到 ONNX Runtime。它应位于程序旁边（onnxruntime.dll 或 libonnxruntime），或作为软件包安装。</translation>
     </message>
 </context>
 </TS>

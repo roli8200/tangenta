@@ -12,7 +12,9 @@
 #include "Vectorizer.h"
 
 #include <QList>
+#include <QMimeData>
 #include <QObject>
+#include <QVariant>
 
 #include <functional>
 #include <memory>
@@ -67,6 +69,21 @@ public:
     void setDocument(std::unique_ptr<Document> doc, const QString& filePath);
     QString filePath() const { return m_filePath; }
     void setFilePath(const QString& path) { m_filePath = path; }
+
+    // --- Mehrere offene Dokumente ---------------------------------------------------------
+    // Genau eines ist aktiv (document()); die übrigen ruhen mit Seite und Auswahl.
+    // setDocument() ersetzt das aktive, addDocument() legt ein weiteres an und aktiviert es.
+    int documentCount() const { return int(m_slots.size()); }
+    int activeDocumentIndex() const { return m_active; }
+    Document& documentAt(int index) { return index == m_active ? *m_doc : *m_slots[std::size_t(index)].doc; }
+    QString documentFilePath(int index) const { return index == m_active ? m_filePath : m_slots[std::size_t(index)].filePath; }
+    void addDocument(std::unique_ptr<Document> doc, const QString& filePath);
+    void activateDocument(int index);
+    // Schliesst das aktive Dokument und aktiviert das in der Liste davor
+    void closeActiveDocument();
+    // Ansicht (Zoom, Lage) des aktiven Dokuments, vom Fenster gemerkt
+    QVariant viewState() const { return m_slots[std::size_t(m_active)].view; }
+    void setViewState(const QVariant& view) { m_slots[std::size_t(m_active)].view = view; }
 
     int currentPageIndex() const { return m_currentPage; }
     const Page& currentPage() const { return m_doc->page(m_currentPage); }
@@ -150,10 +167,14 @@ public:
     // Lage, Pfeile, Kalligrafie, hinter Füllung, mit Objekt skalieren); ohne Auswahl die Vorgabe
     void setSelectionOutlinePen(const Style& pen);
     void setObjectProperty(const QString& id, const QVariant& value, const QString& label);
-    // Zwischenablage
+    // Zwischenablage. Eigenes Format; Bild, SVG und Text ergänzt MainWindow::copyToClipboard,
+    // fremde Formate liest MainWindow::pasteFromClipboard
+    static const QString& clipboardMime();
+    QMimeData* selectionMimeData() const; // nullptr ohne Auswahl
     void copySelection();
     void cutSelection();
     void paste();
+    // Etwas Einfügbares in der Zwischenablage (eigene Objekte, Bild, SVG, Dateien, Text)
     static bool canPaste();
     void deleteSelection();
     void duplicateSelection();
@@ -323,6 +344,9 @@ public:
     void setTextBullets(bool on);
     void setTextDropCap(int lines);
     void setTextHyphenation(bool on);
+    // Mengentext am Grundlinienraster ausrichten (ganze Ketten der gewählten bzw. dieser Rahmen)
+    void setTextBaselineGrid(bool on);
+    void setTextBaselineGrid(const QList<NodeId>& frames, bool on);
     // Ausgewählter Text; Folgerahmen einer Kette stehen für deren ersten Rahmen (der den Text hält)
     QList<const TextObject*> selectedTexts() const;
     // Mengentextrahmen verketten: Text, der in from keinen Platz hat, fliesst
@@ -452,6 +476,17 @@ private:
     void copyProperties(const DrawObject& source, const QList<NodeId>& targets, int what);
 
     std::unique_ptr<Document> m_doc;
+    struct DocumentSlot {
+        std::unique_ptr<Document> doc; // leer beim aktiven Dokument (liegt in m_doc)
+        QString filePath;
+        int page = 0;
+        QList<NodeId> selection;
+        QVariant view;
+    };
+    std::vector<DocumentSlot> m_slots;
+    int m_active = 0;
+    void parkActive();
+    void install(std::unique_ptr<Document> doc, const QString& filePath);
     NodeId m_clipEdit = InvalidNodeId;
     QString m_filePath;
     int m_currentPage = 0;

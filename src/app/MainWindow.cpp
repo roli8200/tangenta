@@ -1,6 +1,10 @@
 #include "MainWindow.h"
+#include "Splash.h"
+#include "TangentaStyle.h"
 
 #include "Canvas.h"
+#include "CustomToolbars.h"
+#include "CutoutAssistant.h"
 #include "ColorDialog.h"
 #include "ColorPalette.h"
 #include "DocumentIO.h"
@@ -44,6 +48,8 @@
 #include "Output.h"
 #include "SpellChecker.h"
 #include "SpellDialog.h"
+#include "AiImageDialog.h"
+#include "MenuIcons.h"
 #include "AiPanel.h"
 #include "ScriptDocker.h"
 #include "AlignDialog.h"
@@ -70,6 +76,7 @@
 #include <QRadioButton>
 #include "MosaicDialogs.h"
 #include <QInputDialog>
+#include <QBuffer>
 #include <QUrl>
 #include <QDesktopServices>
 #include <QCheckBox>
@@ -94,6 +101,8 @@
 #include <QLabel>
 #include <QLineEdit>
 #include <QMenu>
+#include <QMdiArea>
+#include <QMdiSubWindow>
 #include <QProcess>
 #include <QMenuBar>
 #include <QMessageBox>
@@ -187,6 +196,51 @@ QString number(double v, int decimals = 3)
 
 } // namespace
 
+// Dokumentfenster im MDI-Arbeitsbereich. Aktiv enthält es die Zeichenfläche, sonst zeigt es
+// das Standbild der letzten Ansicht. Schliessen fragt das Hauptfenster (Speichern?).
+class DocumentWindow final : public QMdiSubWindow {
+public:
+    DocumentWindow(std::function<bool(DocumentWindow*)> onClose) : m_onClose(std::move(onClose))
+    {
+        setAttribute(Qt::WA_DeleteOnClose, false);
+        auto* view = new SnapshotView;
+        auto* layout = new QVBoxLayout(view);
+        layout->setContentsMargins(0, 0, 0, 0);
+        setWidget(view);
+        QIcon icon(QStringLiteral(":/brand/tangenta-16.png"));
+        icon.addFile(QStringLiteral(":/brand/tangenta-32.png"));
+        setWindowIcon(TangentaStyle::documentIcon(icon));
+    }
+    void setSnapshot(const QPixmap& pixmap)
+    {
+        static_cast<SnapshotView*>(widget())->snapshot = pixmap;
+        widget()->update();
+    }
+
+protected:
+    void closeEvent(QCloseEvent* e) override
+    {
+        // Das Hauptfenster entfernt das Fenster selbst, wenn es geschlossen werden darf
+        e->ignore();
+        if (m_onClose)
+            m_onClose(this);
+    }
+
+private:
+    struct SnapshotView final : QWidget {
+        QPixmap snapshot;
+        void paintEvent(QPaintEvent*) override
+        {
+            if (!layout() || layout()->count() > 0)
+                return;
+            QPainter p(this);
+            p.fillRect(rect(), palette().color(QPalette::Mid));
+            p.drawPixmap(0, 0, snapshot);
+        }
+    };
+    std::function<bool(DocumentWindow*)> m_onClose;
+};
+
 MainWindow::MainWindow(QWidget* parent)
     : QMainWindow(parent)
 {
@@ -241,10 +295,23 @@ MainWindow::MainWindow(QWidget* parent)
         QMenu#flyout::indicator { width: 0px; }
         QMenu#flyout::icon:checked { background: #d3e0f0; border: 1px solid #91afd6; border-radius: 2px; }
     )"));
-    setCentralWidget(createCanvasArea());
+    m_canvasArea = createCanvasArea();
+    m_mdi = new QMdiArea(this);
+    m_mdi->setHorizontalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    m_mdi->setVerticalScrollBarPolicy(Qt::ScrollBarAsNeeded);
+    setCentralWidget(m_mdi);
+    {
+        auto* first = new DocumentWindow([this](DocumentWindow* w) { return closeDocumentWindow(w); });
+        m_windows.append(first);
+        m_mdi->addSubWindow(first);
+        attachCanvas(first);
+        first->showMaximized();
+    }
+    connect(m_mdi, &QMdiArea::subWindowActivated, this, &MainWindow::onSubWindowActivated);
     createMenusAndToolbars();
     createToolbox();
     createDockers();
+    assignMenuIcons(menuBar());
 
     // Farbpalette ganz rechts, ausserhalb der Andockfenster: als feste Leiste im
     // rechten Leistenbereich, der immer rechts vom Andockbereich liegt. Andockfenster bilden davor
@@ -259,6 +326,9 @@ MainWindow::MainWindow(QWidget* parent)
     paletteBar->setStyleSheet(QStringLiteral("QToolBar#palette { padding: 0px; spacing: 0px; border: none; }"));
     paletteBar->addWidget(colors);
     addToolBar(Qt::RightToolBarArea, paletteBar);
+    // Eigene Symbolleisten (Optionen > Anpassung): vor restoreState, damit ihre Lage zurückkommt
+    m_customBars = new CustomToolbars(this);
+    m_customBars->load();
     // Erst dem Werkzeug anbieten (z.B. Farbstopp der interaktiven Füllung), sonst auf die Auswahl
     connect(colors, &ColorPalette::fillChosen, this, [this](std::optional<Color> c) {
         if (!m_canvas->offerPaletteColor(c, true))
@@ -288,6 +358,7 @@ MainWindow::MainWindow(QWidget* parent)
     connect(m_canvas, &Canvas::viewChanged, this, &MainWindow::updateZoomCombo);
     connect(m_canvas, &Canvas::contextMenuRequested, this, &MainWindow::showObjectContextMenu);
     connect(m_canvas, &Canvas::guideContextMenuRequested, this, &MainWindow::showGuideContextMenu);
+    connect(m_canvas, &Canvas::baselineContextMenuRequested, this, &MainWindow::showBaselineContextMenu);
     connect(m_canvas, &Canvas::pageContextMenuRequested, this, &MainWindow::showPageContextMenu);
     connect(m_canvas, &Canvas::objectEditRequested, this, &MainWindow::editQrCode);
     connect(&m_editor, &Editor::documentChanged, this, [this] {
@@ -341,6 +412,11 @@ MainWindow::~MainWindow()
     // in m_editor. Das muss jetzt geschehen: Beim Schliessen in ~QWidget gibt es m_editor nicht mehr.
     if (QWidget* f = QApplication::focusWidget(); f && isAncestorOf(f))
         f->clearFocus();
+    // Der Arbeitsbereich meldet beim Abbau noch Fensterwechsel; dann gibt es MainWindow nicht mehr
+    m_mdi->disconnect(this);
+    // Eigene Leisten vor den Menüaktionen abbauen (sonst melden sie jede gelöschte Aktion)
+    if (m_customBars)
+        m_customBars->shutdown();
 }
 
 QWidget* MainWindow::createCanvasArea()
@@ -479,6 +555,11 @@ void MainWindow::createMenusAndToolbars()
         ImpositionDialog dialog(*m_canvas, m_editor.filePath().isEmpty() ? tr("Unbenannt") : QFileInfo(m_editor.filePath()).completeBaseName(), this);
         dialog.exec();
     });
+    QAction* closeDoc = action(QString(), tr("S&chliessen"), QKeySequence(Qt::CTRL | Qt::Key_F4), [this] {
+        if (!m_windows.isEmpty())
+            closeDocumentWindow(m_windows.value(m_editor.activeDocumentIndex()));
+    });
+    QAction* closeAll = action(QString(), tr("A&lle schliessen"), QKeySequence(), [this] { closeAllDocuments(); });
     // Alt+F4 statt Strg+Q: Strg+Q ist "In Kurven umwandeln"
     QAction* quit = action(QString(), tr("&Beenden"), QKeySequence(Qt::ALT | Qt::Key_F4), [this] { close(); });
 
@@ -488,10 +569,11 @@ void MainWindow::createMenusAndToolbars()
     m_redo = action(QStringLiteral("edit-redo"), tr("Wieder&herstellen"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_Z),
                     [this] { m_editor.document().redo(); });
     QAction* cut = action(QStringLiteral("edit-cut"), tr("&Ausschneiden"), QKeySequence::Cut,
-                          [this] { m_editor.cutSelection(); });
+                          [this] { copyToClipboard(true); });
     QAction* copy = action(QStringLiteral("edit-copy"), tr("&Kopieren"), QKeySequence::Copy,
-                           [this] { m_editor.copySelection(); });
-    m_paste = action(QStringLiteral("edit-paste"), tr("&Einfügen"), QKeySequence::Paste, [this] { m_editor.paste(); });
+                           [this] { copyToClipboard(false); });
+    m_paste = action(QStringLiteral("edit-paste"), tr("&Einfügen"), QKeySequence::Paste, [this] { pasteFromClipboard(); });
+    m_pasteSpecial = action(QString(), tr("&Inhalte einfügen …"), QKeySequence(), [this] { pasteSpecial(); });
     QAction* duplicate = action(QString(), tr("&Duplizieren"), QKeySequence(Qt::CTRL | Qt::Key_D),
                                 [this] { m_editor.duplicateSelection(); });
     // Ziffernblock +: Kopie ohne Versatz
@@ -508,7 +590,7 @@ void MainWindow::createMenusAndToolbars()
 
     // --- Menüs ---
     QMenu* file = menuBar()->addMenu(tr("&Datei"));
-    file->addActions({newDoc, openDoc, saveDoc, saveDocAs});
+    file->addActions({newDoc, openDoc, closeDoc, closeAll, saveDoc, saveDocAs});
     file->addSeparator();
     file->addActions({importDoc, imageSearch, exportDoc, html, pdf});
     file->addSeparator();
@@ -526,7 +608,7 @@ void MainWindow::createMenusAndToolbars()
         repeat->setText(m_editor.canRepeat() ? tr("W&iederholen: %1").arg(m_editor.repeatLabel()) : tr("W&iederholen"));
     });
     edit->addSeparator();
-    edit->addActions({cut, copy, m_paste, del});
+    edit->addActions({cut, copy, m_paste, m_pasteSpecial, del});
     QMenu* symbolMenu = edit->addMenu(icon(QStringLiteral("symbol")), tr("S&ymbol"));
     m_selectionActions << symbolMenu->addAction(tr("&Neues Symbol …"), this, [this] {
         bool ok = false;
@@ -643,6 +725,7 @@ void MainWindow::createMenusAndToolbars()
     m_rulersAction = optionToggle(view, tr("&Lineale"), QStringLiteral("ws/custom/bar/rulers"));
     m_guidesAction = optionToggle(view, tr("&Hilfslinien"), QStringLiteral("doc/guides/show"));
     m_snapActions << optionToggle(view, tr("&Gitter"), QStringLiteral("doc/grid/show"));
+    QAction* baselineGrid = optionToggle(view, tr("G&rundlinienraster"), QStringLiteral("doc/grid/baseline/show"));
 
     // "Ausrichten an"
     auto* snapMenu = new QMenu(tr("A&usrichten an"), this);
@@ -655,7 +738,8 @@ void MainWindow::createMenusAndToolbars()
     dyn->setShortcut(QKeySequence(Qt::ALT | Qt::SHIFT | Qt::Key_D));
     QAction* alignGuides = optionToggle(snapMenu, tr("Aus&richtungshilfslinien"), QStringLiteral("ws/alignguides/enabled"));
     alignGuides->setShortcut(QKeySequence(Qt::ALT | Qt::SHIFT | Qt::Key_A));
-    m_snapActions << dyn << alignGuides;
+    QAction* baselineSnap = optionToggle(snapMenu, tr("G&rundlinienraster"), QStringLiteral("doc/grid/baseline/snap"));
+    m_snapActions << dyn << alignGuides << baselineGrid << baselineSnap;
     m_snapActions[2]->setShortcut(QKeySequence(Qt::ALT | Qt::Key_Z)); // An Objekten ausrichten
     m_snapActions[4]->setShortcut(QKeySequence(Qt::CTRL | Qt::Key_Y)); // Am Gitter ausrichten
     snapMenu->addSeparator();
@@ -691,7 +775,7 @@ void MainWindow::createMenusAndToolbars()
     QMenu* sizeMenu = view->addMenu(tr("&Oberflächengrösse"));
     const InterfaceScale current = interfaceScale();
     QAction* fit = sizeMenu->addAction(
-        tr("An &Bildschirmgrösse anpassen (jetzt %1 %)").arg(qRound(devicePixelRatioF() * 100)));
+        icon(QStringLiteral("view-ui-fit")), tr("An &Bildschirmgrösse anpassen (jetzt %1 %)").arg(qRound(devicePixelRatioF() * 100)));
     fit->setCheckable(true);
     fit->setChecked(current.fitScreen);
     fit->setToolTip(tr("Symbole, Leisten und Farbpalette sind auf jedem Bildschirm gleich gross"));
@@ -705,6 +789,7 @@ void MainWindow::createMenusAndToolbars()
     auto* steps = new QActionGroup(sizeMenu);
     for (double step : interfaceScaleSteps()) {
         QAction* a = sizeMenu->addAction(tr("%1 %").arg(qRound(step * 100)));
+        a->setProperty("dynamicEntry", true); // Auswahlliste: ohne Symbol
         a->setCheckable(true);
         a->setChecked(std::abs(step - current.factor) < 1e-6);
         steps->addAction(a);
@@ -722,6 +807,7 @@ void MainWindow::createMenusAndToolbars()
     QMenu* languageMenu = view->addMenu(activeLanguage() == QLatin1String("en")
                                             ? languageTitle
                                             : languageTitle + QStringLiteral(" (Language)"));
+    languageMenu->setIcon(icon(QStringLiteral("view-language")));
     auto* languageGroup = new QActionGroup(languageMenu);
     QAction* systemLanguage = languageMenu->addAction(tr("Wie das &System"));
     systemLanguage->setData(QString());
@@ -733,6 +819,7 @@ void MainWindow::createMenusAndToolbars()
     for (QAction* a : languageMenu->actions()) {
         if (a->isSeparator())
             continue;
+        a->setProperty("dynamicEntry", true); // Auswahlliste: ohne Symbol
         a->setCheckable(true);
         a->setChecked(a->data().toString() == languageSetting());
         languageGroup->addAction(a);
@@ -1098,6 +1185,34 @@ void MainWindow::createMenusAndToolbars()
     bitmaps->addAction(imageSearch);
     bitmaps->addSeparator();
     addBitmapEffectAction(bitmaps, QStringLiteral("adjust.auto"));
+    m_bitmapActions << bitmaps->addAction(icon(QStringLiteral("bitmap-ai")), tr("Bild mit &KI optimieren …"), this, [this] {
+        if (const ImageObject* image = m_editor.selectedImage()) {
+            AiImageDialog dialog(image->image(), this);
+            connect(&dialog, &AiImageDialog::accountSetupRequested, this, [this, &dialog] {
+                OptionsDialog options(m_editor, this, &dialog);
+                options.selectPage(tr("Global/KI"));
+                options.exec();
+                dialog.reloadAccounts();
+                m_aiPanel->reloadAccounts();
+            });
+            runImageDialog(tr("Bild mit KI optimieren"), dialog);
+        }
+    });
+    m_bitmapActions << bitmaps->addAction(icon(QStringLiteral("bitmap-cutout")), tr("Bild &freistellen …"), this, [this] {
+        if (const ImageObject* image = m_editor.selectedImage()) {
+            AiImageDialog dialog(image->image(), this, true);
+            connect(&dialog, &AiImageDialog::accountSetupRequested, this, [this, &dialog] {
+                OptionsDialog options(m_editor, this, &dialog);
+                options.selectPage(tr("Global/KI"));
+                options.exec();
+                dialog.reloadAccounts();
+                m_aiPanel->reloadAccounts();
+            });
+            runImageDialog(tr("Bild freistellen"), dialog);
+        }
+    });
+    m_bitmapActions << bitmaps->addAction(icon(QStringLiteral("bitmap-cutout-lab")), tr("Freistellungs-&Assistent …"), this,
+                                          [this] { runCutoutAssistant(); });
     addBitmapEffectAction(bitmaps, QStringLiteral("adjust.lab"))->setIcon(icon(QStringLiteral("bitmap-edit")));
     m_bitmapActions << bitmaps->addAction(tr("Bild &geraderichten …"), this, [this] {
         if (const ImageObject* image = m_editor.selectedImage()) {
@@ -1111,9 +1226,11 @@ void MainWindow::createMenusAndToolbars()
     m_bitmapActions << bitmaps->addAction(icon(QStringLiteral("bitmap-trace")), tr("&Blitzvektorisierung"), this,
                                           [this] { traceImage(-1, true); });
     QMenu* outlineTrace = bitmaps->addMenu(tr("&Umrissvektorisierung"));
+    static const char* const traceIcons[] = {"trace-lineart", "trace-logo", "trace-logo-detail", "trace-clipart",
+                                             "trace-photo-low", "trace-photo-high"};
     for (trace::Preset p : trace::presets())
-        m_bitmapActions << outlineTrace->addAction(trace::presetName(p) + QStringLiteral(" …"), this,
-                                                   [this, p] { traceImage(int(p), false); });
+        m_bitmapActions << outlineTrace->addAction(icon(QString::fromLatin1(traceIcons[int(p)])), trace::presetName(p) + QStringLiteral(" …"),
+                                                   this, [this, p] { traceImage(int(p), false); });
     addBitmapCommands(bitmaps);
 
     // Text: Mengentextrahmen verketten
@@ -1189,11 +1306,11 @@ void MainWindow::createMenusAndToolbars()
     QMenu* scriptMenu = extras->addMenu(tr("&Skripte"));
     connect(scriptMenu, &QMenu::aboutToShow, this, [this, scriptMenu] {
         scriptMenu->clear();
-        scriptMenu->addAction(tr("Skript-&Editor"), this, [this] {
+        scriptMenu->addAction(icon(QStringLiteral("script-editor")), tr("Skript-&Editor"), this, [this] {
             m_scriptDock->show();
             m_scriptDock->raise();
         });
-        scriptMenu->addAction(tr("Skript &ausführen …"), this, [this] {
+        scriptMenu->addAction(icon(QStringLiteral("script-run")), tr("Skript &ausführen …"), this, [this] {
             const QString path = QFileDialog::getOpenFileName(this, tr("Skript ausführen"), ScriptDocker::scriptFolder(),
                                                               tr("JavaScript (*.js)"));
             if (path.isEmpty())
@@ -1207,14 +1324,14 @@ void MainWindow::createMenusAndToolbars()
         if (!scripts.isEmpty())
             scriptMenu->addSeparator();
         for (const QString& path : scripts)
-            scriptMenu->addAction(QFileInfo(path).completeBaseName(), this, [this, path] {
+            scriptMenu->addAction(icon(QStringLiteral("script-run")), QFileInfo(path).completeBaseName(), this, [this, path] {
                 if (!m_scriptDocker->runFile(path)) {
                     m_scriptDock->show();
                     m_scriptDock->raise();
                 }
             });
         scriptMenu->addSeparator();
-        scriptMenu->addAction(tr("Skript&ordner öffnen"), this, [] {
+        scriptMenu->addAction(icon(QStringLiteral("script-folder")), tr("Skript&ordner öffnen"), this, [] {
             QDir().mkpath(ScriptDocker::scriptFolder());
             QDesktopServices::openUrl(QUrl::fromLocalFile(ScriptDocker::scriptFolder()));
         });
@@ -1222,7 +1339,34 @@ void MainWindow::createMenusAndToolbars()
     scriptMenu->addAction(tr("Skript-&Editor")); // Platzhalter, damit das Menü aufklappbar ist
 
     QMenu* window = menuBar()->addMenu(tr("&Fenster"));
-    m_dockerMenu = window->addMenu(tr("&Andockfenster"));
+    m_windowMenu = window;
+    m_dockerMenu = new QMenu(tr("&Andockfenster"), window);
+    connect(window, &QMenu::aboutToShow, this, &MainWindow::fillWindowMenu);
+    // Fensterbefehle; das Menü wird beim Aufklappen mit der Fensterliste neu gefüllt
+    m_windowCommands = {
+        action(QString(), tr("Ü&berlappend"), QKeySequence(), [this] { m_mdi->cascadeSubWindows(); }),
+        action(QString(), tr("&Nebeneinander"), QKeySequence(), [this] { m_mdi->tileSubWindows(); }),
+        nullptr,
+        action(QString(), tr("Nä&chstes Fenster"), QKeySequence(Qt::CTRL | Qt::Key_F6), [this] { m_mdi->activateNextSubWindow(); }),
+        action(QString(), tr("&Vorheriges Fenster"), QKeySequence(Qt::CTRL | Qt::SHIFT | Qt::Key_F6),
+               [this] { m_mdi->activatePreviousSubWindow(); }),
+        nullptr,
+        closeDoc,
+        closeAll,
+    };
+    // Kürzel gelten auch, solange das Menü noch nie aufgeklappt war
+    for (QAction* a : std::as_const(m_windowCommands))
+        if (a)
+            addAction(a);
+    fillWindowMenu();
+
+    QMenu* help = menuBar()->addMenu(tr("&Hilfe"));
+    help->addAction(icon(QStringLiteral("help-web")), tr("TANGENTA im &Web (tangenta.ch)"), this,
+                    [] { QDesktopServices::openUrl(QUrl(QStringLiteral("https://tangenta.ch"))); });
+    help->addSeparator();
+    QAction* about = help->addAction(icon(QStringLiteral("help-about")), tr("Ü&ber TANGENTA …"), this, [this] { showAbout(this); });
+    about->setObjectName(QStringLiteral("about"));
+    about->setMenuRole(QAction::AboutRole);
 
     // --- Standardleiste ---
     QToolBar* standard = addToolBar(tr("Standard"));
@@ -1589,6 +1733,7 @@ void MainWindow::updateActions()
     m_undo->setText(doc.canUndo() ? tr("&Rückgängig: %1").arg(doc.undoText()) : tr("&Rückgängig"));
     m_redo->setText(doc.canRedo() ? tr("&Wiederholen: %1").arg(doc.redoText()) : tr("&Wiederholen"));
     m_paste->setEnabled(Editor::canPaste());
+    m_pasteSpecial->setEnabled(Editor::canPaste());
     const bool hasSelection = !m_editor.selection().isEmpty();
     for (QAction* a : std::as_const(m_selectionActions))
         a->setEnabled(hasSelection);
@@ -1680,6 +1825,27 @@ void MainWindow::runImageDialog(const QString& label, ImagePreviewDialog& dialog
     m_editor.setImagePixels(id, result, label);
 }
 
+void MainWindow::runCutoutAssistant()
+{
+    const ImageObject* image = m_editor.selectedImage();
+    if (!image)
+        return;
+    NodeId id = image->id();
+    CutoutAssistant dialog(image->image(), this);
+    if (dialog.exec() != QDialog::Accepted)
+        return;
+    QApplication::setOverrideCursor(Qt::WaitCursor);
+    const QImage result = dialog.result();
+    QApplication::restoreOverrideCursor();
+    if (dialog.keepOriginal()) {
+        // Ausschnitt und Originalbild: Kopie an Ort und Stelle bekommt den Ausschnitt, das Original bleibt darunter
+        m_editor.duplicateInPlace();
+        if (const ImageObject* copy = m_editor.selectedImage())
+            id = copy->id();
+    }
+    m_editor.setImagePixels(id, result, tr("Freistellungs-Assistent"));
+}
+
 void MainWindow::offerRestart(const QString& title, const QString& question)
 {
     const auto answer = QMessageBox::question(
@@ -1717,8 +1883,12 @@ void MainWindow::showObjectContextMenu(const QPoint& globalPos)
 void MainWindow::updateTitle()
 {
     const QString name = m_editor.filePath().isEmpty() ? tr("Unbenannt") : QFileInfo(m_editor.filePath()).fileName();
-    setWindowTitle(tr("%1[*] – TANGENTA").arg(name));
-    setWindowModified(m_editor.document().isModified());
+    // Maximiert hängt Qt den Fenstertitel des Dokuments an: "TANGENTA - [Name]"
+    setWindowTitle(QStringLiteral("TANGENTA"));
+    if (QMdiSubWindow* window = m_windows.value(m_editor.activeDocumentIndex())) {
+        window->setWindowTitle(name + QStringLiteral("[*]"));
+        window->setWindowModified(m_editor.document().isModified());
+    }
 }
 
 void MainWindow::updateStatus()
@@ -1908,16 +2078,22 @@ void MainWindow::applyOptions()
 
 void MainWindow::autosave()
 {
-    if (!m_editor.document().isModified())
+    for (int i = 0; i < m_editor.documentCount(); ++i)
+        autosaveDocument(m_editor.documentAt(i), m_editor.documentFilePath(i));
+}
+
+void MainWindow::autosaveDocument(Document& document, const QString& filePath)
+{
+    if (!document.isModified())
         return;
     const Options& o = Options::instance();
     QString folder = o.integer(QStringLiteral("ws/save/folderMode")) == 1 ? o.text(QStringLiteral("ws/save/folder")) : QString();
     if (folder.isEmpty() || !QDir(folder).exists())
         folder = QStandardPaths::writableLocation(QStandardPaths::TempLocation);
-    const QString name = m_editor.filePath().isEmpty() ? tr("Unbenannt") : QFileInfo(m_editor.filePath()).completeBaseName();
+    const QString name = filePath.isEmpty() ? tr("Unbenannt") : QFileInfo(filePath).completeBaseName();
     const QString path = QDir(folder).filePath(QStringLiteral("AutoBackup_of_%1.%2").arg(name, QLatin1String(io::FileSuffix)));
     QString error;
-    if (io::save(m_editor.document(), path, &error))
+    if (io::save(document, path, &error))
         statusBar()->showMessage(tr("Automatische Sicherung: %1").arg(path), 3000);
 }
 
@@ -1930,6 +2106,29 @@ void MainWindow::showGuideContextMenu(int index, const QPoint& globalPos)
     connect(local, &QAction::toggled, this, [this, index](bool on) { m_editor.setGuidePageSpecific(index, on); });
     menu.addSeparator();
     menu.addAction(icon(QStringLiteral("edit-delete")), tr("&Löschen"), this, [this] { deleteSelectionOrGuide(); });
+    menu.exec(globalPos);
+}
+
+void MainWindow::showBaselineContextMenu(int index, const QPoint& globalPos)
+{
+    const BaselineGrid grid = BaselineGrid::fromOptions();
+    QMenu menu(this);
+    QAction* reset = menu.addAction(tr("Grundlinie &zurücksetzen"), this, [grid, index] {
+        Options::instance().apply(grid.withLineAt(index, grid.regular(index)).toOptions(), tr("Grundlinie zurücksetzen"));
+    });
+    reset->setEnabled(grid.moved.contains(index));
+    QAction* resetAll = menu.addAction(tr("&Alle Grundlinien zurücksetzen"), this, [grid] {
+        BaselineGrid g = grid;
+        g.moved.clear();
+        Options::instance().apply(g.toOptions(), tr("Grundlinien zurücksetzen"));
+    });
+    resetAll->setEnabled(!grid.moved.isEmpty());
+    menu.addSeparator();
+    menu.addAction(tr("Grundlinienraster &einrichten …"), this, [this] {
+        OptionsDialog dialog(m_editor, this, this);
+        dialog.selectPage(tr("Dokument") + tr("/Gitter"));
+        dialog.exec();
+    });
     menu.exec(globalPos);
 }
 
@@ -1994,8 +2193,6 @@ bool MainWindow::saveAs()
 
 void MainWindow::newDocument()
 {
-    if (!maybeSave())
-        return;
     Options& o = Options::instance();
     if (!o.flag(QStringLiteral("ws/general/newDocDialog"))) {
         createDocument(Page::A4, 1);
@@ -2077,9 +2274,9 @@ void MainWindow::createDocument(const QSizeF& pageSize, int pages, bool multiPag
         attachDetachedChild(*root, std::move(master));
         for (int i = 0; i < std::max(1, pages); ++i)
             attachDetachedChild(*root, createPage(pageSize, QCoreApplication::translate("vek::Document", "Ebene 1")));
-        m_editor.setDocument(Document::fromTree(std::move(root)), QString());
+        showDocument(Document::fromTree(std::move(root)), QString());
     } else {
-        m_editor.setDocument(std::make_unique<Document>(pageSize), QString());
+        showDocument(std::make_unique<Document>(pageSize), QString());
         for (int i = 1; i < pages; ++i)
             m_editor.insertPage(i);
     }
@@ -2178,9 +2375,6 @@ void MainWindow::open()
     if (path.isEmpty())
         return;
     settings.setValue(QStringLiteral("files/lastDir"), QFileInfo(path).absolutePath());
-    // Fremdformate und Bilder fragen in openFile() selbst nach dem Speichern
-    if (QFileInfo(path).suffix().toLower() == QLatin1String(io::FileSuffix) && !maybeSave())
-        return;
     openFile(path);
 }
 
@@ -2299,6 +2493,11 @@ void MainWindow::importFiles()
     if (paths.isEmpty())
         return;
     settings.setValue(QStringLiteral("files/importDir"), QFileInfo(paths.first()).absolutePath());
+    importPaths(paths);
+}
+
+void MainWindow::importPaths(const QStringList& paths)
+{
     for (const QString& path : paths) {
         if (vectorImportSuffixes().contains(QFileInfo(path).suffix().toLower())) {
             importVectorFile(path, false);
@@ -2544,6 +2743,7 @@ void MainWindow::addBitmapCommands(QMenu* bitmaps)
                                                     {tr("&Schärfe"), QStringLiteral("sharpen")}};
     for (const auto& [groupName, key] : groups) {
         QMenu* group = bitmaps->addMenu(groupName);
+        group->setIcon(icon(QStringLiteral("bitmap-") + key)); // Kategoriesymbol (tools/menu_icons.py)
         m_fxActions << group->menuAction();
         for (const fx::Definition& def : fx::definitions())
             if (def.group == key)
@@ -2560,6 +2760,8 @@ QAction* MainWindow::addBitmapEffectAction(QMenu* menu, const QString& id)
     if (def->dialog != fx::Dialog::None && !text.endsWith(QStringLiteral("…")))
         text += QStringLiteral(" …");
     QAction* a = menu->addAction(text, this, [this, id] { runBitmapEffect(id); });
+    // Symbol nach der Effekt-ID: fx-<id mit - statt .> (tools/menu_icons.py)
+    a->setIcon(icon(QStringLiteral("fx-") + QString(id).replace(QLatin1Char('.'), QLatin1Char('-'))));
     if (!def->shortcut.isEmpty())
         a->setShortcut(def->shortcut);
     m_fxActions << a;
@@ -2664,13 +2866,13 @@ void MainWindow::createTableMenu()
     menu->addSeparator();
 
     using T = TableObject;
-    QMenu* insert = menu->addMenu(tr("&Einfügen", "Tabelle: Zeilen oder Spalten einfügen"));
-    insert->addAction(tr("Zeile &oben"), this, [this] { tableCommand(tr("Zeile einfügen"), [](T& t, const TableRange& r) { t.insertRow(r.row0); }); });
-    insert->addAction(tr("Zeile &unten"), this, [this] { tableCommand(tr("Zeile einfügen"), [](T& t, const TableRange& r) { t.insertRow(r.row1 + 1); }); });
-    insert->addAction(tr("Spalte &links"), this, [this] { tableCommand(tr("Spalte einfügen"), [](T& t, const TableRange& r) { t.insertColumn(r.col0); }); });
-    insert->addAction(tr("Spalte &rechts"), this, [this] { tableCommand(tr("Spalte einfügen"), [](T& t, const TableRange& r) { t.insertColumn(r.col1 + 1); }); });
+    QMenu* insert = menu->addMenu(icon(QStringLiteral("table-insert")), tr("&Einfügen", "Tabelle: Zeilen oder Spalten einfügen"));
+    insert->addAction(icon(QStringLiteral("table-insert-row-above")), tr("Zeile &oben"), this, [this] { tableCommand(tr("Zeile einfügen"), [](T& t, const TableRange& r) { t.insertRow(r.row0); }); });
+    insert->addAction(icon(QStringLiteral("table-insert-row-below")), tr("Zeile &unten"), this, [this] { tableCommand(tr("Zeile einfügen"), [](T& t, const TableRange& r) { t.insertRow(r.row1 + 1); }); });
+    insert->addAction(icon(QStringLiteral("table-insert-col-left")), tr("Spalte &links"), this, [this] { tableCommand(tr("Spalte einfügen"), [](T& t, const TableRange& r) { t.insertColumn(r.col0); }); });
+    insert->addAction(icon(QStringLiteral("table-insert-col-right")), tr("Spalte &rechts"), this, [this] { tableCommand(tr("Spalte einfügen"), [](T& t, const TableRange& r) { t.insertColumn(r.col1 + 1); }); });
     insert->addSeparator();
-    insert->addAction(tr("&Zeilen einfügen …"), this, [this] {
+    insert->addAction(icon(QStringLiteral("table-insert-rows")), tr("&Zeilen einfügen …"), this, [this] {
         bool ok = false;
         const int n = QInputDialog::getInt(this, tr("Zeilen einfügen"), tr("Anzahl Zeilen (unterhalb):"), 1, 1, 100, 1, &ok);
         if (ok)
@@ -2679,7 +2881,7 @@ void MainWindow::createTableMenu()
                     t.insertRow(r.row1 + 1);
             });
     });
-    insert->addAction(tr("&Spalten einfügen …"), this, [this] {
+    insert->addAction(icon(QStringLiteral("table-insert-cols")), tr("&Spalten einfügen …"), this, [this] {
         bool ok = false;
         const int n = QInputDialog::getInt(this, tr("Spalten einfügen"), tr("Anzahl Spalten (rechts):"), 1, 1, 100, 1, &ok);
         if (ok)
@@ -3006,6 +3208,8 @@ void MainWindow::exportFile()
         {tr("AI – Adobe Illustrator"), {QStringLiteral("ai")}},
         {tr("EPS – Encapsulated PostScript"), {QStringLiteral("eps")}},
         {tr("DXF – AutoCAD"), {QStringLiteral("dxf")}},
+        {tr("CDR – Vektorzeichnung (Version 16, X6)"), {QStringLiteral("cdr")}},
+        {tr("CDR – Vektorzeichnung (Version 13, X3)"), {QStringLiteral("cdr")}},
         {tr("TTF – TrueType-Schrift (Auswahl als Zeichen)"), {QStringLiteral("ttf")}},
         {tr("PNG – Portable Network Graphics"), {QStringLiteral("png")}},
         {tr("JPEG – Bitmaps"), {QStringLiteral("jpg"), QStringLiteral("jpeg")}},
@@ -3064,7 +3268,8 @@ void MainWindow::exportFile()
         const ExportDialog::Kind kind = suffix == QLatin1String("pdf") ? ExportDialog::Kind::Pdf
                                         : bitmap                         ? ExportDialog::Kind::Bitmap
                                                                          : ExportDialog::Kind::Vector;
-        const QStringList vectorExports{QStringLiteral("svg"), QStringLiteral("eps"), QStringLiteral("ai"), QStringLiteral("dxf")};
+        const QStringList vectorExports{QStringLiteral("svg"), QStringLiteral("eps"), QStringLiteral("ai"), QStringLiteral("dxf"),
+                                        QStringLiteral("cdr")};
         if (!bitmap && suffix != QLatin1String("pdf") && !vectorExports.contains(suffix)) {
             QMessageBox::warning(this, tr("Exportieren"), tr("Das Format .%1 kann TANGENTA nicht schreiben.").arg(suffix));
             return;
@@ -3084,6 +3289,9 @@ void MainWindow::exportFile()
             ok = output::exportAi(*m_canvas, path, options, &error);
         else if (suffix == QLatin1String("dxf"))
             ok = output::exportDxf(*m_canvas, path, options, &error);
+        else if (suffix == QLatin1String("cdr"))
+            ok = output::exportCdr(*m_canvas, path, options, &error,
+                                   formatIndex >= 0 && formats[formatIndex].first == tr("CDR – Vektorzeichnung (Version 13, X3)"));
         else
             ok = output::exportSvg(*m_canvas, path, options, &error);
     }
@@ -3271,14 +3479,24 @@ void MainWindow::printPreview()
 
 bool MainWindow::openFile(const QString& path)
 {
+    // Schon offen: nur sein Fenster nach vorne holen
+    for (int i = 0; i < m_editor.documentCount(); ++i) {
+        if (!m_editor.documentFilePath(i).isEmpty()
+            && QFileInfo(m_editor.documentFilePath(i)) == QFileInfo(path)) {
+            if (m_windows[i]->isMinimized())
+                m_windows[i]->showNormal();
+            m_mdi->setActiveSubWindow(m_windows[i]);
+            return true;
+        }
+    }
     // Bilder (auch Kamera-Rohdaten) öffnen sich als neues Dokument
     const QString suffix = QFileInfo(path).suffix().toLower();
     // Vektorgrafik öffnet sich als neues Dokument in ihrer Grösse
     if (vectorImportSuffixes().contains(suffix))
-        return maybeSave() && importVectorFile(path, true);
+        return importVectorFile(path, true);
     if (suffix != QLatin1String(io::FileSuffix) && imagepool::importSuffixes().contains(suffix)) {
         QFile file(path);
-        if (!maybeSave() || !file.open(QIODevice::ReadOnly))
+        if (!file.open(QIODevice::ReadOnly))
             return false;
         createDocument(Page::A4, 1);
         if (m_editor.importImage(file.readAll()) == InvalidNodeId) {
@@ -3293,9 +3511,310 @@ bool MainWindow::openFile(const QString& path)
         QMessageBox::critical(this, tr("Öffnen fehlgeschlagen"), tr("%1\n\n%2").arg(path, error));
         return false;
     }
-    m_editor.setDocument(std::move(doc), path);
+    showDocument(std::move(doc), path);
     rememberLastFile(path);
     return true;
+}
+
+namespace {
+
+// Formate der Zwischenablage in der Reihenfolge, in der Einfügen sie bevorzugt
+struct ClipFormat {
+    QString mime;
+    const char* label;
+};
+const QList<ClipFormat>& clipFormats()
+{
+    static const QList<ClipFormat> formats{
+        {Editor::clipboardMime(), QT_TRANSLATE_NOOP("vek::MainWindow", "TANGENTA-Objekte")},
+        {QStringLiteral("text/uri-list"), QT_TRANSLATE_NOOP("vek::MainWindow", "Dateien (Bilder, Vektorgrafik)")},
+        {QStringLiteral("image/svg+xml"), QT_TRANSLATE_NOOP("vek::MainWindow", "SVG-Vektorgrafik")},
+        {QStringLiteral("image/png"), QT_TRANSLATE_NOOP("vek::MainWindow", "Bild (PNG, mit Transparenz)")},
+        {QStringLiteral("application/x-qt-image"), QT_TRANSLATE_NOOP("vek::MainWindow", "Bild (Bitmap)")},
+        {QStringLiteral("text/plain"), QT_TRANSLATE_NOOP("vek::MainWindow", "Text")},
+    };
+    return formats;
+}
+
+bool clipHas(const QMimeData* mime, const QString& format)
+{
+    if (format == QLatin1String("application/x-qt-image"))
+        return mime->hasImage();
+    if (format == QLatin1String("text/uri-list")) {
+        for (const QUrl& url : mime->urls())
+            if (url.isLocalFile())
+                return true;
+        return false;
+    }
+    if (format == QLatin1String("text/plain"))
+        return !mime->text().trimmed().isEmpty();
+    return mime->hasFormat(format);
+}
+
+} // namespace
+
+void MainWindow::copyToClipboard(bool cut)
+{
+    QMimeData* mime = m_editor.selectionMimeData();
+    if (!mime)
+        return;
+    // Für andere Programme: SVG (Vektor), PNG mit Transparenz und Bitmap, Text der Textobjekte
+    output::ExportOptions options;
+    options.page = m_editor.currentPageIndex();
+    options.only = m_editor.selection();
+    options.transparent = true;
+    const QRectF area = output::exportArea(*m_canvas, options);
+    if (area.isValid() && !area.isEmpty()) {
+        // höchstens 300 dpi und 4000 Bildpunkte an der langen Seite
+        const double longSide = std::max(area.width(), area.height()) / 25.4;
+        options.dpi = std::clamp(4000.0 / longSide, 24.0, 300.0);
+        const QByteArray svgData = output::areaSvg(*m_canvas, options);
+        if (!svgData.isEmpty())
+            mime->setData(QStringLiteral("image/svg+xml"), svgData);
+        const QImage image = output::renderImage(*m_canvas, options);
+        if (!image.isNull()) {
+            QByteArray png;
+            QBuffer buffer(&png);
+            buffer.open(QIODevice::WriteOnly);
+            image.save(&buffer, "PNG");
+            mime->setData(QStringLiteral("image/png"), png);
+            mime->setImageData(image);
+        }
+    }
+    QStringList texts;
+    for (const DrawObject* o : m_editor.selectedObjects())
+        if (const auto* t = node_cast<TextObject>(o); t && !t->isEmpty())
+            texts << t->plainText();
+    if (!texts.isEmpty())
+        mime->setText(texts.join(QLatin1Char('\n')));
+    QApplication::clipboard()->setMimeData(mime);
+    if (cut)
+        m_editor.deleteSelection();
+}
+
+bool MainWindow::pasteFromClipboard(const QString& format)
+{
+    const QMimeData* mime = QApplication::clipboard()->mimeData();
+    if (!mime)
+        return false;
+    QString use = format;
+    if (use.isEmpty()) {
+        for (const ClipFormat& f : clipFormats()) {
+            if (clipHas(mime, f.mime)) {
+                use = f.mime;
+                break;
+            }
+        }
+    }
+    if (use.isEmpty() || !clipHas(mime, use))
+        return false;
+    const std::size_t mark = m_editor.document().undoMark();
+    const int before = m_editor.document().undoCount();
+    // Grosse Bildschirmfotos (ohne Auflösung = 96 dpi) auf die Seite verkleinern
+    auto fitToPage = [this](NodeId id) {
+        if (id == InvalidNodeId)
+            return;
+        const auto* o = m_editor.document().findAs<DrawObject>(id);
+        const QSizeF page = m_editor.currentPage().size();
+        const QRectF b = o ? o->boundingRect() : QRectF();
+        const double scale = b.isEmpty() ? 1.0 : std::min(page.width() / b.width(), page.height() / b.height());
+        m_editor.setSelection({id});
+        if (scale < 1.0) {
+            const QPointF c = b.center();
+            m_editor.transformSelection(QTransform::fromTranslate(c.x(), c.y()).scale(scale, scale).translate(-c.x(), -c.y()),
+                                        tr("Einfügen"));
+        }
+    };
+    if (use == Editor::clipboardMime()) {
+        m_editor.paste();
+    } else if (use == QLatin1String("text/uri-list")) {
+        QStringList paths;
+        for (const QUrl& url : mime->urls())
+            if (url.isLocalFile())
+                paths << url.toLocalFile();
+        importPaths(paths);
+    } else if (use == QLatin1String("image/svg+xml")) {
+        QString error;
+        svg::Import imported = svg::read(mime->data(use), &error);
+        if (!imported.group || imported.group->childCount() == 0) {
+            QMessageBox::warning(this, tr("Einfügen"), tr("Die SVG-Grafik liess sich nicht lesen.\n\n%1").arg(error));
+            return false;
+        }
+        m_editor.importGroup(std::move(imported.group), true, tr("Einfügen"));
+    } else if (use == QLatin1String("image/png")) {
+        fitToPage(m_editor.importImage(mime->data(use)));
+    } else if (use == QLatin1String("application/x-qt-image")) {
+        fitToPage(m_editor.importImage(qvariant_cast<QImage>(mime->imageData())));
+    } else if (use == QLatin1String("text/plain")) {
+        // Text als Grafiktext in der Seitenmitte, Zeilenumbrüche bleiben
+        QString text = mime->text();
+        text.replace(QLatin1String("\r\n"), QLatin1String("\n"));
+        auto t = std::make_unique<TextObject>(TextObject::Kind::Artistic);
+        t->setPlainText(text.trimmed(), m_editor.shapeDefaults().artisticText);
+        Style style;
+        style.fill = Fill::solid(Color(0, 0, 0));
+        style.stroke.reset();
+        t->setStyle(style);
+        const QRectF b = t->boundingRect();
+        const QPointF c = QRectF(QPointF(0, 0), m_editor.currentPage().size()).center();
+        t->setTransform(QTransform::fromTranslate(c.x() - b.center().x(), c.y() - b.center().y()));
+        m_editor.setSelection({m_editor.addObject(std::move(t), tr("Einfügen"))});
+    }
+    // Einfügen und Verkleinern sind ein Rückgängig-Schritt
+    m_editor.document().mergeUndo(mark, tr("Einfügen"));
+    return m_editor.document().undoCount() > before;
+}
+
+void MainWindow::pasteSpecial()
+{
+    const QMimeData* mime = QApplication::clipboard()->mimeData();
+    if (!mime)
+        return;
+    QStringList labels, formats;
+    for (const ClipFormat& f : clipFormats()) {
+        if (clipHas(mime, f.mime)) {
+            labels << tr(f.label);
+            formats << f.mime;
+        }
+    }
+    if (formats.isEmpty())
+        return;
+    bool ok = false;
+    const QString choice = QInputDialog::getItem(this, tr("Inhalte einfügen"), tr("Als:"), labels, 0, false, &ok);
+    if (ok)
+        pasteFromClipboard(formats.value(labels.indexOf(choice)));
+}
+
+void MainWindow::fillWindowMenu()
+{
+    m_windowMenu->clear();
+    for (QAction* a : std::as_const(m_windowCommands)) {
+        if (a)
+            m_windowMenu->addAction(a);
+        else
+            m_windowMenu->addSeparator();
+    }
+    m_windowMenu->addSeparator();
+    m_windowMenu->addMenu(m_dockerMenu);
+    m_windowMenu->addSeparator();
+    // Offene Dokumente wie gewohnt nummeriert, das aktive mit Häkchen
+    for (int i = 0; i < m_windows.size(); ++i) {
+        const QString path = m_editor.documentFilePath(i);
+        const QString name = path.isEmpty() ? tr("Unbenannt") : QDir::toNativeSeparators(path);
+        QAction* a = m_windowMenu->addAction(QStringLiteral("&%1 %2").arg(i + 1).arg(name));
+        a->setProperty("dynamicEntry", true); // Fensterliste: ohne Symbol
+        a->setCheckable(true);
+        a->setChecked(i == m_editor.activeDocumentIndex());
+        DocumentWindow* w = m_windows[i];
+        connect(a, &QAction::triggered, this, [this, w] {
+            if (w->isMinimized())
+                w->showNormal();
+            m_mdi->setActiveSubWindow(w);
+        });
+    }
+    assignMenuIcons(m_windowMenu);
+}
+
+void MainWindow::attachCanvas(DocumentWindow* window)
+{
+    window->widget()->layout()->addWidget(m_canvasArea);
+    m_canvasArea->show();
+    window->widget()->update();
+}
+
+void MainWindow::onSubWindowActivated(QMdiSubWindow* sub)
+{
+    auto* window = static_cast<DocumentWindow*>(sub);
+    const int index = m_windows.indexOf(window);
+    if (m_switching || index < 0 || index == m_editor.activeDocumentIndex())
+        return;
+    if (DocumentWindow* old = m_windows.value(m_editor.activeDocumentIndex())) {
+        m_editor.setViewState(m_canvas->viewState());
+        old->setSnapshot(m_canvasArea->grab());
+    }
+    m_editor.activateDocument(index);
+    attachCanvas(window);
+    m_canvas->setViewState(m_editor.viewState());
+    updateTitle();
+}
+
+void MainWindow::showDocument(std::unique_ptr<Document> doc, const QString& path)
+{
+    // Ein unberührtes, leeres Dokument wird ersetzt statt ein weiteres Fenster zu öffnen
+    auto untouched = [](const Document& d) {
+        for (int i = -1; i < d.pageCount(); ++i) {
+            const Page& page = i < 0 ? d.masterPage() : d.page(i);
+            for (int l = 0; l < page.childCount(); ++l)
+                if (page.child(l)->childCount() > 0)
+                    return false;
+        }
+        return !d.isModified();
+    };
+    if (m_editor.filePath().isEmpty() && untouched(m_editor.document())) {
+        m_editor.setDocument(std::move(doc), path);
+        return;
+    }
+    DocumentWindow* old = m_windows.value(m_editor.activeDocumentIndex());
+    const bool maximized = !old || old->isMaximized();
+    if (old) {
+        m_editor.setViewState(m_canvas->viewState());
+        old->setSnapshot(m_canvasArea->grab());
+    }
+    m_switching = true;
+    m_editor.addDocument(std::move(doc), path);
+    auto* window = new DocumentWindow([this](DocumentWindow* w) { return closeDocumentWindow(w); });
+    m_windows.append(window);
+    m_mdi->addSubWindow(window);
+    attachCanvas(window);
+    if (maximized) {
+        window->showMaximized();
+    } else {
+        window->resize(old->size());
+        window->show();
+    }
+    m_mdi->setActiveSubWindow(window);
+    m_switching = false;
+    updateTitle();
+}
+
+bool MainWindow::closeDocumentWindow(DocumentWindow* window)
+{
+    if (!window)
+        return false;
+    if (m_mdi->activeSubWindow() != window)
+        m_mdi->setActiveSubWindow(window);
+    if (!maybeSave())
+        return false;
+    if (m_windows.size() == 1) {
+        // Das letzte Fenster bleibt mit einem leeren Dokument offen
+        m_editor.closeActiveDocument();
+        updateTitle();
+        return true;
+    }
+    const bool maximized = window->isMaximized();
+    m_switching = true;
+    const int index = m_windows.indexOf(window);
+    m_editor.closeActiveDocument();
+    m_windows.removeAt(index);
+    DocumentWindow* next = m_windows[m_editor.activeDocumentIndex()];
+    attachCanvas(next);
+    m_mdi->removeSubWindow(window);
+    window->deleteLater();
+    if (maximized)
+        next->showMaximized();
+    m_mdi->setActiveSubWindow(next);
+    m_canvas->setViewState(m_editor.viewState());
+    m_switching = false;
+    updateTitle();
+    return true;
+}
+
+bool MainWindow::closeAllDocuments()
+{
+    while (m_windows.size() > 1)
+        if (!closeDocumentWindow(m_windows.value(m_editor.activeDocumentIndex())))
+            return false;
+    return closeDocumentWindow(m_windows.first());
 }
 
 void MainWindow::showEvent(QShowEvent* e)
@@ -3319,11 +3838,46 @@ void MainWindow::showEvent(QShowEvent* e)
         move(x, y);
 }
 
+QMenu* MainWindow::createPopupMenu()
+{
+    QMenu* menu = QMainWindow::createPopupMenu();
+    if (!menu)
+        menu = new QMenu(this);
+    menu->addSeparator();
+    menu->addAction(icon(QStringLiteral("toolbar-new")), tr("Neue Symbolleiste …"), this, [this] {
+        OptionsDialog dialog(m_editor, this, this);
+        dialog.selectPage(tr("Arbeitsbereich/Anpassung/Befehlsleisten"));
+        QTimer::singleShot(0, &dialog, [&dialog] {
+            if (auto* add = dialog.findChild<QPushButton*>(QStringLiteral("customBarNew")))
+                add->click();
+        });
+        dialog.exec();
+    });
+    menu->addAction(icon(QStringLiteral("toolbar-customize")), tr("Anpassen …"), this, [this] {
+        OptionsDialog dialog(m_editor, this, this);
+        dialog.selectPage(tr("Arbeitsbereich/Anpassung/Befehle"));
+        dialog.exec();
+    });
+    return menu;
+}
+
 void MainWindow::closeEvent(QCloseEvent* e)
 {
-    if (!maybeSave()) {
+    // Optionen offen (nicht modal, Hauptfenster gesperrt): erst die Optionen schliessen
+    if (m_customBars && m_customBars->customizing()) {
         e->ignore();
         return;
+    }
+    // Jedes geänderte Dokument nach vorne holen und fragen
+    for (DocumentWindow* window : std::as_const(m_windows)) {
+        const int index = m_windows.indexOf(window);
+        if (!m_editor.documentAt(index).isModified())
+            continue;
+        m_mdi->setActiveSubWindow(window);
+        if (!maybeSave()) {
+            e->ignore();
+            return;
+        }
     }
     QSettings settings;
     settings.setValue(QStringLiteral("window/geometry"), saveGeometry());

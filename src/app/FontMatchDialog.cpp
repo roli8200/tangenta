@@ -44,10 +44,10 @@ FontMatchDialog::FontMatchDialog(std::vector<ImportedFont>& fonts, QWidget* pare
 {
     setWindowTitle(tr("Schriftersetzung"));
     auto* main = new QVBoxLayout(this);
-    auto* intro = new QLabel(tr("Diese Schriften aus dem PDF sind auf diesem Rechner nicht installiert. Wählen Sie je Schrift "
-                                "eine ähnliche installierte Schrift (der Text bleibt bearbeitbar) oder <b>Als Kurven</b> – "
-                                "dann sieht alles genau wie im PDF aus. Nach dem Installieren einer Schrift: "
-                                "<b>Schriften neu einlesen</b>."),
+    auto* intro = new QLabel(tr("Diese Schriften aus der Datei sind auf diesem Rechner nicht installiert. Wählen Sie je Schrift "
+                                "eine ähnliche installierte Schrift (der Text bleibt bearbeitbar). Sind die Umrisse in der Datei "
+                                "eingebettet, geht auch <b>Als Kurven</b> – dann sieht alles genau wie in der Datei aus. "
+                                "Nach dem Installieren einer Schrift: <b>Schriften neu einlesen</b>."),
                              this);
     intro->setWordWrap(true);
     main->addWidget(intro);
@@ -58,7 +58,7 @@ FontMatchDialog::FontMatchDialog(std::vector<ImportedFont>& fonts, QWidget* pare
     m_grid->setColumnStretch(1, 1);
     m_grid->setColumnStretch(3, 1);
     int col = 0;
-    for (const QString& head : {tr("Schrift im PDF"), tr("So im PDF"), tr("Ersetzen durch"), tr("So nach dem Import"), QString()}) {
+    for (const QString& head : {tr("Schrift in der Datei"), tr("So in der Datei"), tr("Ersetzen durch"), tr("So nach dem Import"), QString()}) {
         auto* l = new QLabel(QStringLiteral("<b>%1</b>").arg(head), inner);
         m_grid->addWidget(l, 0, col++);
     }
@@ -165,7 +165,7 @@ void FontMatchDialog::fillChoices(Row& row)
     if (!f.installed.isEmpty())
         row.choice->addItem(tr("%1 (installiert)").arg(f.installed), f.installed);
     if (f.embedded)
-        row.choice->addItem(tr("Als Kurven – genau wie im PDF"), kCurves);
+        row.choice->addItem(tr("Als Kurven – genau wie in der Datei"), kCurves);
     for (const fontmatch::Candidate& c : std::as_const(row.candidates))
         row.choice->addItem(QStringLiteral("%1 – %2 %").arg(c.family).arg(int(std::lround(c.score * 100))), c.family);
     row.choice->addItem(tr("Andere Schrift …"), kOther);
